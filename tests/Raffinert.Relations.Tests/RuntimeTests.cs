@@ -511,6 +511,29 @@ public sealed class RuntimeTests
         Assert.Equal([first], runtime.RelatedFromRight(relation, target));
     }
 
+    [Fact]
+    public void Runtime_diagnostics_report_local_predicate_work_and_affected_sources()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count + 1);
+        var runtime = model.Build().CreateRuntime();
+        runtime.Add(sources, new CodeHolder { Id = Guid.NewGuid(), Code = "A" });
+        runtime.Add(sources, new CodeHolder { Id = Guid.NewGuid(), Code = "B" });
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(items, item);
+        runtime.ResetDiagnostics();
+
+        item.Code = "B";
+        runtime.Apply(Change.Property(items, item, value => value.Code, "A", "B"));
+
+        Assert.Equal(1, runtime.Diagnostics.PredicateEvaluations);
+        Assert.Equal(2, runtime.Diagnostics.AffectedSources);
+    }
+
     private static RelationModelBuilder CreateLineModel(
         out ObjectSet<InvoiceLine> invoices,
         out ObjectSet<PurchaseOrderLine> poLines,

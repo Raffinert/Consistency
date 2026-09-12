@@ -118,6 +118,21 @@ public sealed class RelationRuntime
     internal IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts { get; private set; } =
         new Dictionary<IRelationDefinition, RelationImpact>();
 
+    /// <summary>Returns diagnostic counters accumulated since creation or the last reset.</summary>
+    public RuntimeDiagnostics Diagnostics => new(
+        _relations.Values.Sum(relation => relation.PredicateEvaluationCount),
+        LastRelationImpacts.Values
+            .SelectMany(impact => impact.AffectedLefts)
+            .Distinct(ReferenceEqualityComparer.Instance)
+            .Count());
+
+    /// <summary>Resets diagnostic counters without changing relation or dependency state.</summary>
+    public void ResetDiagnostics()
+    {
+        foreach (var relation in _relations.Values)
+            relation.ResetDiagnostics();
+    }
+
     internal RelationRuntime(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
@@ -589,6 +604,8 @@ internal interface IRelationRuntimeState
     IObjectSetDefinition RightSet { get; }
     bool HasExactPropagation { get; }
     int MaterializedPairCount { get; }
+    long PredicateEvaluationCount { get; }
+    void ResetDiagnostics();
     void EnableExactPropagation();
     RelationDelta AddLeft(object instance);
     RelationDelta RemoveLeft(object instance);
@@ -613,6 +630,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     private readonly Dictionary<TLeft, HashSet<TRight>> _rightsByLeft = new(ReferenceEqualityComparer<TLeft>.Instance);
     private readonly Dictionary<TRight, HashSet<TLeft>> _leftsByRight = new(ReferenceEqualityComparer<TRight>.Instance);
     private bool _hasExactPropagation;
+    private long _predicateEvaluationCount;
 
     public RelationRuntimeState(
         RelationDefinition<TLeft, TRight> definition,
@@ -628,6 +646,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public IObjectSetDefinition RightSet => _definition.Right;
     public bool HasExactPropagation => _hasExactPropagation;
     public int MaterializedPairCount => _rightsByLeft.Sum(pair => pair.Value.Count);
+    public long PredicateEvaluationCount => _predicateEvaluationCount;
+
+    public void ResetDiagnostics() => _predicateEvaluationCount = 0;
 
     public void EnableExactPropagation() => _hasExactPropagation = true;
 
@@ -695,7 +716,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             HashJoinAccessPlan hashPlan => ReadHashCandidates(hashPlan, left),
             _ => throw new NotSupportedException($"Unsupported access plan '{_definition.AccessPlan.GetType().Name}'.")
         };
-        return candidates.Where(right => _definition.Predicate(left, right)).ToArray();
+        return candidates.Where(right => Evaluate(left, right)).ToArray();
     }
 
     public IReadOnlyList<TLeft> RelatedFromRight(TRight right) => RelatedFromRightCore(right);
@@ -852,7 +873,13 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             _ => throw new NotSupportedException(
                 $"Unsupported reverse access plan '{_definition.ReverseAccessPlan.GetType().Name}'.")
         };
-        return candidates.Where(left => _definition.Predicate(left, right)).ToArray();
+        return candidates.Where(left => Evaluate(left, right)).ToArray();
+    }
+
+    private bool Evaluate(TLeft left, TRight right)
+    {
+        _predicateEvaluationCount++;
+        return _definition.Predicate(left, right);
     }
 
     private IEnumerable<TLeft> ReadReverseHashCandidates(HashJoinAccessPlan plan, TRight right)

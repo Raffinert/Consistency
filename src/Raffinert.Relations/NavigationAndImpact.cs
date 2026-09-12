@@ -456,6 +456,9 @@ public sealed record SemanticImpact(int AffectedRelations, int AffectedRoots);
 /// <summary>Summarizes both access-index and semantic effects of an applied change.</summary>
 public sealed record ChangeImpact(AccessImpact Access, SemanticImpact Semantic);
 
+/// <summary>Counts propagation work to make precision regressions observable.</summary>
+public sealed record RuntimeDiagnostics(long PredicateEvaluations, int AffectedSources);
+
 internal sealed class ImpactResolver(
     IReadOnlyList<IRelationDefinition> relations,
     IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> runtimeRelations,

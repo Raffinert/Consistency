@@ -890,6 +890,12 @@ This can become one of the library's strongest correctness assets.
 
 # 16. P2 — Benchmark propagation precision
 
+**Status:** Implemented.
+
+Runtime diagnostics now expose predicate-evaluation and affected-source counts. A 10k/100k
+BenchmarkDotNet suite measures 1/10/100-change batches through deep nested leaves with two derived states
+sharing one exact-propagation relation; `MemoryDiagnoser` records allocations alongside runtime.
+
 Extend benchmarks beyond relation lookup.
 
 Important scenarios:
