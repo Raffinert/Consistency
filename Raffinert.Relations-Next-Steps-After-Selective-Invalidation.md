@@ -403,6 +403,10 @@ Derived and invariant propagation consume a source-scoped relation impact direct
 
 # 6. P1 — Separate runtime commit from external policy side effects
 
+**Status:** Implemented.
+
+Core mutation now produces an internal `RuntimeApplyResult` and deferred policy-action batch. All invariant states are committed first, immediate evaluations run next, and data-based repair requests dispatch last. Requests are deduplicated by invariant/source. Callback failures do not roll back already committed runtime state.
+
 `ScheduleRepairWith(Action<TSource>)` allows arbitrary application code to execute during runtime propagation.
 
 Potential failure sequence:

@@ -768,6 +768,106 @@ public sealed class DerivedStateTests
         Assert.Equal([source], scheduled);
     }
 
+    [Fact]
+    public void Throwing_repair_callback_observes_committed_state_without_rollback()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Count);
+        RelationRuntime? runtime = null;
+        Invariant<CodeHolder, CodeHolder, int>? invariant = null;
+        var observedRelatedCount = -1;
+        var observedDerivedState = DerivedValueState.Fresh;
+        var observedInvariantState = InvariantEvaluationState.Unknown;
+        invariant = model.Invariant(sources).Using(count)
+            .Must((source, value) => value <= 1)
+            .ScheduleRepairWith(source =>
+            {
+                observedRelatedCount = runtime!.Related(relation, source).Count;
+                observedDerivedState = runtime.GetState(count, source);
+                observedInvariantState = runtime.GetState(invariant!, source);
+                throw new RepairCallbackException();
+            });
+        runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(0, runtime.Get(count, source));
+        Assert.True(runtime.Evaluate(invariant, source));
+
+        item.Code = "A";
+        Assert.Throws<RepairCallbackException>(() =>
+            runtime.Apply(Change.Property(items, item, x => x.Code, "B", "A")));
+
+        Assert.Equal(1, observedRelatedCount);
+        Assert.Equal(DerivedValueState.Dirty, observedDerivedState);
+        Assert.Equal(InvariantEvaluationState.Invalid, observedInvariantState);
+        Assert.Equal([item], runtime.Related(relation, source));
+        Assert.Equal(1, runtime.Get(count, source));
+    }
+
+    [Fact]
+    public void Immediate_evaluations_finish_before_repair_callbacks_dispatch()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Count);
+        var immediate = model.Invariant(sources).Using(count)
+            .Must((source, value) => value == 0)
+            .ReactWith(InvariantReaction.EvaluateImmediately);
+        RelationRuntime? runtime = null;
+        var observedImmediateState = InvariantEvaluationState.Unknown;
+        model.Invariant(sources).Using(count)
+            .Must((source, value) => value <= 1)
+            .ScheduleRepairWith(source =>
+                observedImmediateState = runtime!.GetState(immediate, source));
+        runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(sources, source);
+        Assert.True(runtime.Evaluate(immediate, source));
+
+        runtime.Add(items, new CodeHolder { Id = Guid.NewGuid(), Code = "A" });
+
+        Assert.Equal(InvariantEvaluationState.Violated, observedImmediateState);
+    }
+
+    [Fact]
+    public void Repair_requests_are_deduplicated_for_each_invariant_and_source()
+    {
+        var repairCount = 0;
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var invariant = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= source.Adjustment)
+            .ScheduleRepairWith(_ => repairCount++);
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        var item = Item("B", quantity: 1m);
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.True(runtime.Evaluate(invariant, source));
+
+        source.Code = "B";
+        source.Adjustment = 1m;
+        runtime.Apply(ChangeSet.Create(
+            Change.Property(sources, source, x => x.Code, "A", "B"),
+            Change.Property(sources, source, x => x.Adjustment, 0m, 1m)));
+
+        Assert.Equal(1, repairCount);
+    }
+
     private static RelationModelBuilder CreateQuantityModel(
         out ObjectSetBuilder<DerivedSourceRecord> sources,
         out ObjectSetBuilder<DerivedItemRecord> items,
@@ -839,6 +939,10 @@ public sealed class DerivedStateTests
     {
         public DependencyImpactKind Classify(RelationMembershipDependencyImpact impact) =>
             DependencyImpactKind.Invalid;
+    }
+
+    private sealed class RepairCallbackException : Exception
+    {
     }
 
     private static class PredicateProbe

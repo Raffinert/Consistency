@@ -267,6 +267,7 @@ internal interface IInvariantDefinition
     InvariantReaction Reaction { get; }
     ExpressionDependencyAnalysis Analysis { get; }
     IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState);
+    void DispatchRepair(object source);
 }
 
 internal sealed class InvariantDefinition<TSource, TItem, TValue>(
@@ -289,13 +290,19 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
         new InvariantRuntimeState<TSource, TItem, TValue>(
             this,
             (DerivedRuntimeState<TSource, TItem, TValue>)derivedState);
+
+    public void DispatchRepair(object source) => RepairScheduler!((TSource)source);
 }
 
 internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
 {
     IInvariantDefinition Definition { get; }
     int SourceStateEntryCount { get; }
-    void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
+    void ApplyImpact(
+        IEnumerable<object> sources,
+        DependencyImpactKind impact,
+        RuntimePolicyActions policyActions);
+    void EvaluatePolicy(object source);
 }
 
 internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
@@ -320,14 +327,18 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
     public InvariantEvaluationState GetState(TSource source) =>
         _states.TryGetValue(source, out var state) ? state : InvariantEvaluationState.Unknown;
 
-    public void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact)
+    public void ApplyImpact(
+        IEnumerable<object> sources,
+        DependencyImpactKind impact,
+        RuntimePolicyActions policyActions)
     {
         var typedSources = sources.Cast<TSource>().Distinct(ReferenceEqualityComparer<TSource>.Instance).ToArray();
         switch (definition.Reaction)
         {
             case InvariantReaction.EvaluateImmediately:
+                Mark(typedSources, impact);
                 foreach (var source in typedSources)
-                    Evaluate(source);
+                    policyActions.AddImmediateEvaluation(this, source);
                 break;
             case InvariantReaction.MarkInvalid:
                 Mark(typedSources, DependencyImpactKind.Invalid);
@@ -335,13 +346,18 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
             case InvariantReaction.ScheduleRepair:
                 Mark(typedSources, DependencyImpactKind.Invalid);
                 foreach (var source in typedSources)
-                    definition.RepairScheduler!(source);
+                    policyActions.AddRepairRequest(
+                        definition,
+                        source,
+                        DependencyImpactKind.Invalid);
                 break;
             default:
                 Mark(typedSources, impact);
                 break;
         }
     }
+
+    public void EvaluatePolicy(object source) => Evaluate((TSource)source);
 
     public void OnSourceAdded(object source) => _states.Remove((TSource)source);
 

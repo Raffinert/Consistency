@@ -56,6 +56,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
+- Post-commit immediate evaluation and deduplicated repair-request dispatch
 - A separate EF Core change-tracker adapter package
 - A BenchmarkDotNet benchmark project
 - Human-readable compiled model diagnostics through `DebugView`
@@ -64,9 +65,12 @@ remove and re-add the object when its identity genuinely needs to change.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- Separation of runtime commits from external repair-policy side effects
+- Stricter `ChangeSet` validation and documented atomicity
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.
 
 `RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
+
+Immediate invariant evaluations and repair callbacks run only after runtime-owned state has committed.
+If a callback throws, the operation surfaces that exception but does not roll back the committed runtime state.

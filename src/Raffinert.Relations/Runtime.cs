@@ -169,9 +169,12 @@ public sealed class RelationRuntime
             deltas[relation.Key] = relation.Value.AddRight(instance);
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
+        var policyActions = new RuntimePolicyActions();
         ApplyRelationImpacts(
             deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
-            []);
+            [],
+            policyActions);
+        policyActions.Dispatch();
     }
 
     public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -205,9 +208,12 @@ public sealed class RelationRuntime
         _navigation.RemoveRoot(definition, instance);
         NotifySourceRemoved(definition, instance);
         var removed = state.Remove(instance);
+        var policyActions = new RuntimePolicyActions();
         ApplyRelationImpacts(
             deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
-            []);
+            [],
+            policyActions);
+        policyActions.Dispatch();
         return removed;
     }
 
@@ -293,6 +299,13 @@ public sealed class RelationRuntime
     {
         ArgumentNullException.ThrowIfNull(changeSet);
         var changes = changeSet.Changes.Select(ValidateChange).ToArray();
+        var result = CommitChanges(changes);
+        result.PolicyActions.Dispatch();
+        return result.Impact;
+    }
+
+    private RuntimeApplyResult CommitChanges(IReadOnlyList<PropertyChange> changes)
+    {
         var impact = new ResolvedChangeImpact();
         foreach (var change in changes)
             impact.MergeFrom(_impactResolver.Resolve(change));
@@ -307,8 +320,9 @@ public sealed class RelationRuntime
                 pair.Key.ReindexLeft(root);
         var relationDeltas = ResolveRelationDeltas(impact);
         var relationImpacts = impact.CreateRelationImpacts(_relations, relationDeltas);
-        ApplyDerivedAndInvariantImpact(relationImpacts, changes);
-        return impact.ToPublic();
+        var policyActions = new RuntimePolicyActions();
+        ApplyDerivedAndInvariantImpact(relationImpacts, changes, policyActions);
+        return new RuntimeApplyResult(impact.ToPublic(), policyActions);
     }
 
     private IReadOnlyDictionary<IRelationDefinition, RelationDelta> ResolveRelationDeltas(
@@ -365,7 +379,8 @@ public sealed class RelationRuntime
 
     private void ApplyDerivedAndInvariantImpact(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
-        IReadOnlyList<PropertyChange> changes)
+        IReadOnlyList<PropertyChange> changes,
+        RuntimePolicyActions policyActions)
     {
         var affectedDerived = new Dictionary<IDerivedDefinition, (HashSet<object> Invalid, HashSet<object> Dirty)>();
         foreach (var pair in _derivedStates)
@@ -413,9 +428,15 @@ public sealed class RelationRuntime
             if (affectedDerived.TryGetValue(pair.Key.Derived, out var inherited))
             {
                 if (inherited.Invalid.Count > 0)
-                    pair.Value.ApplyImpact(inherited.Invalid, DependencyImpactKind.Invalid);
+                    pair.Value.ApplyImpact(
+                        inherited.Invalid,
+                        DependencyImpactKind.Invalid,
+                        policyActions);
                 if (inherited.Dirty.Count > 0)
-                    pair.Value.ApplyImpact(inherited.Dirty, DependencyImpactKind.Dirty);
+                    pair.Value.ApplyImpact(
+                        inherited.Dirty,
+                        DependencyImpactKind.Dirty,
+                        policyActions);
             }
 
             var invariantRoots = ResolveDependencyRoots(
@@ -423,7 +444,10 @@ public sealed class RelationRuntime
                 pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
                 changes);
             if (invariantRoots.Count > 0)
-                pair.Value.ApplyImpact(invariantRoots, DependencyImpactKind.Dirty);
+                pair.Value.ApplyImpact(
+                    invariantRoots,
+                    DependencyImpactKind.Dirty,
+                    policyActions);
         }
     }
 
@@ -441,7 +465,8 @@ public sealed class RelationRuntime
 
     private void ApplyRelationImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
-        IReadOnlyList<PropertyChange> changes)
+        IReadOnlyList<PropertyChange> changes,
+        RuntimePolicyActions policyActions)
     {
         var affectedDerived = _derivedStates
             .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
@@ -469,7 +494,7 @@ public sealed class RelationRuntime
         {
             if (affectedDerived.TryGetValue(pair.Key.Derived, out var impact))
             {
-                pair.Value.ApplyImpact(impact.Sources, impact.Severity);
+                pair.Value.ApplyImpact(impact.Sources, impact.Severity, policyActions);
             }
         }
     }
