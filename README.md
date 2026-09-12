@@ -56,6 +56,7 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 - Incremental add, remove, and scalar-property index maintenance
 - Explicit collection add/remove/reset with incremental owner/item navigation
 - Shared arbitrary-depth reverse navigation for nested paths
+- Compiled null-safe member-path and cached single-member readers
 - Access-impact and semantic-impact reporting
 - Deterministic, atomically validated property `ChangeSet` application
 - Bidirectional relation queries

@@ -733,6 +733,12 @@ This will make the public API easier to reason about and evolve.
 
 # 12. P2 — Compile null-safe path readers
 
+**Status:** Implemented.
+
+`MemberPath` now compiles a null-propagating object reader once. Navigation and strict-change validation
+share cached compiled single-member readers, while hash-key extraction automatically uses compiled paths.
+A BenchmarkDotNet reflection-versus-compiled-path benchmark records the performance tradeoff.
+
 `MemberPath.Read(...)` is correct but reflection-heavy.
 
 Compile once per path:

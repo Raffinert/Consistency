@@ -1,36 +1,52 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Collections.Concurrent;
 
 namespace Raffinert.Relations.Expressions;
 
 internal sealed class MemberPath
 {
+    private readonly Func<object, object?> _reader;
+
     public MemberPath(Type rootType, IReadOnlyList<MemberInfo> members)
     {
         RootType = rootType;
         Members = members;
+        _reader = CompileReader(rootType, members);
     }
 
     public Type RootType { get; }
     public IReadOnlyList<MemberInfo> Members { get; }
     public string DisplayName => $"{RootType.Name}.{string.Join('.', Members.Select(member => member.Name))}";
 
-    public object? Read(object root)
+    public object? Read(object root) => _reader(root);
+
+    private static Func<object, object?> CompileReader(Type rootType, IReadOnlyList<MemberInfo> members)
     {
-        object? current = root;
-        foreach (var member in Members)
+        var root = Expression.Parameter(typeof(object), "root");
+        Expression current = Expression.Convert(root, rootType);
+        foreach (var member in members)
         {
-            if (current is null)
-                return null;
-            current = member switch
+            var access = member switch
             {
-                PropertyInfo property => property.GetValue(current),
-                FieldInfo field => field.GetValue(current),
+                PropertyInfo property => (Expression)Expression.Property(current, property),
+                FieldInfo field => Expression.Field(current, field),
                 _ => throw new NotSupportedException($"Member '{member.Name}' is not a property or field.")
             };
+            current = CanBeNull(current.Type)
+                ? Expression.Condition(
+                    Expression.Equal(current, Expression.Constant(null, current.Type)),
+                    Expression.Default(access.Type),
+                    access)
+                : access;
         }
-        return current;
+        return Expression.Lambda<Func<object, object?>>(
+            Expression.Convert(current, typeof(object)),
+            root).Compile();
     }
+
+    private static bool CanBeNull(Type type) =>
+        !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
 
     internal static bool TryCreate(Expression expression, ParameterExpression root, out MemberPath path)
     {
@@ -57,6 +73,31 @@ internal sealed class MemberPath
         while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
             expression = convert.Operand;
         return expression;
+    }
+}
+
+internal static class MemberReader
+{
+    private static readonly ConcurrentDictionary<MemberInfo, Func<object, object?>> Readers = [];
+
+    public static object? Read(MemberInfo member, object instance) =>
+        Readers.GetOrAdd(member, Compile)(instance);
+
+    private static Func<object, object?> Compile(MemberInfo member)
+    {
+        var instance = Expression.Parameter(typeof(object), "instance");
+        var declaringType = member.DeclaringType ?? throw new InvalidOperationException(
+            $"Member '{member.Name}' has no declaring type.");
+        var converted = Expression.Convert(instance, declaringType);
+        var access = member switch
+        {
+            PropertyInfo property => (Expression)Expression.Property(converted, property),
+            FieldInfo field => Expression.Field(converted, field),
+            _ => throw new NotSupportedException($"Member '{member.Name}' is not a property or field.")
+        };
+        return Expression.Lambda<Func<object, object?>>(
+            Expression.Convert(access, typeof(object)),
+            instance).Compile();
     }
 }
 

@@ -303,12 +303,8 @@ internal sealed class NavigationIndexRegistry
         return type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
     }
 
-    internal static object? ReadMember(MemberInfo member, object instance) => member switch
-    {
-        PropertyInfo property => property.GetValue(instance),
-        FieldInfo field => field.GetValue(instance),
-        _ => throw new NotSupportedException($"Member '{member.Name}' is not a property or field.")
-    };
+    internal static object? ReadMember(MemberInfo member, object instance) =>
+        MemberReader.Read(member, instance);
 
     private sealed record NavigationMembership(INavigationIndex Index, object Owner);
 

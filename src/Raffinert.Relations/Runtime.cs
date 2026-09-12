@@ -445,12 +445,7 @@ public sealed class RelationRuntime
             change.Member,
             null,
             null));
-        var value = change.Member switch
-        {
-            PropertyInfo property => property.GetValue(change.Owner),
-            FieldInfo field => field.GetValue(change.Owner),
-            _ => null
-        };
+        var value = MemberReader.Read(change.Member, change.Owner);
         if (value is not IEnumerable collection)
             throw new InvalidOperationException($"Member '{change.Member.Name}' is not a collection.");
         if (change.Kind != CollectionChangeKind.Reset)
@@ -497,12 +492,7 @@ public sealed class RelationRuntime
     {
         foreach (var change in changes)
         {
-            var actual = change.Member switch
-            {
-                PropertyInfo property => property.GetValue(change.Instance),
-                FieldInfo field => field.GetValue(change.Instance),
-                _ => throw new InvalidOperationException("A property or field member is required.")
-            };
+            var actual = MemberReader.Read(change.Member, change.Instance);
             if (!Equals(actual, change.NewValue))
                 throw new InvalidOperationException(
                     $"The current value of '{change.Member.Name}' does not equal the reported new value.");
