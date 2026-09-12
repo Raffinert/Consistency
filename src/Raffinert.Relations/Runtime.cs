@@ -169,7 +169,9 @@ public sealed class RelationRuntime
             deltas[relation.Key] = relation.Value.AddRight(instance);
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
-        InvalidateForRelationMutations(deltas, []);
+        ApplyRelationImpacts(
+            deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
+            []);
     }
 
     public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -203,7 +205,9 @@ public sealed class RelationRuntime
         _navigation.RemoveRoot(definition, instance);
         NotifySourceRemoved(definition, instance);
         var removed = state.Remove(instance);
-        InvalidateForRelationMutations(deltas, []);
+        ApplyRelationImpacts(
+            deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
+            []);
         return removed;
     }
 
@@ -302,7 +306,8 @@ public sealed class RelationRuntime
             foreach (var root in pair.Value)
                 pair.Key.ReindexLeft(root);
         var relationDeltas = ResolveRelationDeltas(impact);
-        ApplyDerivedAndInvariantImpact(impact, relationDeltas, changes);
+        var relationImpacts = impact.CreateRelationImpacts(_relations, relationDeltas);
+        ApplyDerivedAndInvariantImpact(relationImpacts, changes);
         return impact.ToPublic();
     }
 
@@ -359,16 +364,15 @@ public sealed class RelationRuntime
     }
 
     private void ApplyDerivedAndInvariantImpact(
-        ResolvedChangeImpact impact,
-        IReadOnlyDictionary<IRelationDefinition, RelationDelta> relationDeltas,
+        IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes)
     {
         var affectedDerived = new Dictionary<IDerivedDefinition, (HashSet<object> Invalid, HashSet<object> Dirty)>();
         foreach (var pair in _derivedStates)
         {
-            relationDeltas.TryGetValue(pair.Key.Relation, out var relationDelta);
+            relationImpacts.TryGetValue(pair.Key.Relation, out var relationImpact);
             var membershipRoots = pair.Key.Analysis.HasRelationMembershipDependency
-                ? relationDelta?.AffectedLefts ?? []
+                ? relationImpact?.AffectedLefts ?? []
                 : [];
             var sourceRoots = ResolveDependencyRoots(
                 pair.Key.SourceSet,
@@ -382,9 +386,8 @@ public sealed class RelationRuntime
             var itemSources = relationState.GetLeftsForRights(itemRoots);
             var membershipIsInvalid = membershipRoots.Count > 0 &&
                 _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    pair.Key.Relation,
+                    relationImpact!,
                     pair.Key,
-                    relationDelta!,
                     changes)) ==
                 DependencyImpactKind.Invalid;
             var invalidSources = membershipIsInvalid
@@ -436,16 +439,17 @@ public sealed class RelationRuntime
         return roots;
     }
 
-    private void InvalidateForRelationMutations(
-        IReadOnlyDictionary<IRelationDefinition, RelationDelta> deltas,
+    private void ApplyRelationImpacts(
+        IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes)
     {
         var affectedDerived = _derivedStates
             .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
-                deltas.TryGetValue(pair.Key.Relation, out var delta) && delta.AffectedLefts.Count > 0)
+                relationImpacts.TryGetValue(pair.Key.Relation, out var relationImpact) &&
+                relationImpact.AffectedLefts.Count > 0)
             .Select(pair =>
             {
-                var sources = deltas[pair.Key.Relation].AffectedLefts
+                var sources = relationImpacts[pair.Key.Relation].AffectedLefts
                     .Where(_sets[pair.Key.SourceSet].Contains)
                     .ToHashSet(ReferenceEqualityComparer.Instance);
                 return (Definition: pair.Key, Sources: sources);
@@ -455,9 +459,8 @@ public sealed class RelationRuntime
                 impact => impact.Definition,
                 impact => (
                     Severity: _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
-                        impact.Definition.Relation,
+                        relationImpacts[impact.Definition.Relation],
                         impact.Definition,
-                        deltas[impact.Definition.Relation],
                         changes)),
                     impact.Sources));
         foreach (var pair in affectedDerived)
@@ -599,38 +602,6 @@ internal interface IRelationRuntimeState
     void ReindexLeft(object instance);
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
-}
-
-internal sealed record RelationPair(object Left, object Right);
-
-internal sealed class RelationDelta
-{
-    private readonly List<RelationPair> _addedPairs = [];
-    private readonly List<RelationPair> _removedPairs = [];
-    private readonly HashSet<object> _affectedLefts = new(ReferenceEqualityComparer.Instance);
-
-    public IReadOnlyList<RelationPair> AddedPairs => _addedPairs;
-    public IReadOnlyList<RelationPair> RemovedPairs => _removedPairs;
-    public IReadOnlyCollection<object> AffectedLefts => _affectedLefts;
-
-    public void Add(object left, object right)
-    {
-        _addedPairs.Add(new RelationPair(left, right));
-        _affectedLefts.Add(left);
-    }
-
-    public void Remove(object left, object right)
-    {
-        _removedPairs.Add(new RelationPair(left, right));
-        _affectedLefts.Add(left);
-    }
-
-    public void MergeFrom(RelationDelta other)
-    {
-        _addedPairs.AddRange(other._addedPairs);
-        _removedPairs.AddRange(other._removedPairs);
-        _affectedLefts.UnionWith(other._affectedLefts);
-    }
 }
 
 internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState

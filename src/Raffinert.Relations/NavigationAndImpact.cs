@@ -247,6 +247,34 @@ internal sealed class ResolvedChangeImpact
             ? roots
             : [];
 
+    public IReadOnlyDictionary<IRelationDefinition, RelationImpact> CreateRelationImpacts(
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> runtimeRelations,
+        IReadOnlyDictionary<IRelationDefinition, RelationDelta> deltas)
+    {
+        var impacts = new Dictionary<IRelationDefinition, RelationImpact>();
+        foreach (var pair in runtimeRelations)
+        {
+            var relation = pair.Key;
+            var state = pair.Value;
+            deltas.TryGetValue(relation, out var delta);
+            var semanticLefts = GetAffectedRoots(relation, relation.LeftSet);
+            var semanticRights = GetAffectedRoots(relation, relation.RightSet);
+            var reindexedLefts = _reindexLeftRoots.TryGetValue(state, out var lefts) ? lefts : [];
+            var reindexedRights = _reindexRoots.TryGetValue(state, out var rights) ? rights : [];
+            if (delta is null && semanticLefts.Count == 0 && semanticRights.Count == 0 &&
+                reindexedLefts.Count == 0 && reindexedRights.Count == 0)
+                continue;
+            impacts.Add(relation, new RelationImpact(
+                relation,
+                delta ?? new RelationDelta(),
+                semanticLefts,
+                semanticRights,
+                reindexedLefts,
+                reindexedRights));
+        }
+        return impacts;
+    }
+
     public void AddSemantic(IRelationDefinition relation, IObjectSetDefinition set, IEnumerable<object> roots)
     {
         var materialized = roots.ToArray();

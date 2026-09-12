@@ -352,6 +352,10 @@ State transitions are deliberate and tested rather than incidental consequences 
 
 # 5. P1 — Make source-scoped relation impact a first-class runtime object
 
+**Status:** Implemented.
+
+Post-commit propagation now uses an immutable `RelationImpact` snapshot that unifies added/removed pairs, affected left and right roots, semantic roots, and directional reindex roots. Dependency severity, derived invalidation, and inherited invariant impact consume this bridge directly; pre-commit change routing remains separate.
+
 The runtime now has enough data to know:
 
 ```text

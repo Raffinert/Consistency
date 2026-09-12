@@ -7,9 +7,8 @@ internal enum DependencyImpactKind
 }
 
 internal sealed record RelationMembershipDependencyImpact(
-    IRelationDefinition Relation,
+    RelationImpact RelationImpact,
     IDerivedDefinition Dependent,
-    RelationDelta Delta,
     IReadOnlyList<PropertyChange> Changes);
 
 internal interface IDependencyImpactPolicy

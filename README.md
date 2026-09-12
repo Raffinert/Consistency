@@ -51,6 +51,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
 - Policy-driven dependency severity, independent of scan/hash access planning
 - Exact source-scoped derived invalidation backed by bidirectional relation membership
+- Unified relation-impact snapshots for delta, semantic, and access propagation
 - Source lifecycle cleanup for derived, invariant, and materialized relation state
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
@@ -63,7 +64,7 @@ remove and re-add the object when its identity genuinely needs to change.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- First-class source-scoped relation impact objects
+- Separation of runtime commits from external repair-policy side effects
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.
