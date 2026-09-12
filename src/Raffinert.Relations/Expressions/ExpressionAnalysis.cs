@@ -31,6 +31,33 @@ internal sealed class MemberPath
         }
         return current;
     }
+
+    internal static bool TryCreate(Expression expression, ParameterExpression root, out MemberPath path)
+    {
+        expression = StripConvert(expression);
+        var members = new Stack<MemberInfo>();
+        while (expression is MemberExpression member)
+        {
+            members.Push(member.Member);
+            expression = StripConvert(member.Expression!);
+        }
+
+        if (expression == root && members.Count > 0)
+        {
+            path = new MemberPath(root.Type, members.ToArray());
+            return true;
+        }
+
+        path = null!;
+        return false;
+    }
+
+    internal static Expression StripConvert(Expression expression)
+    {
+        while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
+            expression = convert.Operand;
+        return expression;
+    }
 }
 
 internal sealed record JoinKeyPart(
@@ -154,9 +181,7 @@ internal static class RelationExpressionAnalyzer
 {
     public static RelationAnalysis Analyze(LambdaExpression predicate)
     {
-        var dependencies = new List<DependencyPath>();
-        var dependencyAnalysis = DependencyAnalysisFlags.Complete;
-        CollectDependencies(predicate.Body, predicate.Parameters, dependencies, ref dependencyAnalysis);
+        var dependencyResult = ExpressionDependencyAnalyzer.AnalyzeRelation(predicate);
 
         var joins = new List<JoinKeyPart>();
         var recognizedResiduals = new List<string>();
@@ -174,9 +199,9 @@ internal static class RelationExpressionAnalyzer
         }
 
         return new RelationAnalysis(
-            dependencies.Distinct(DependencyPathComparer.Instance).ToArray(),
+            dependencyResult.Dependencies.Select(dependency => dependency.Path).ToArray(),
             joins,
-            dependencyAnalysis,
+            dependencyResult.Flags,
             hasResidual,
             recognizedResiduals);
     }
@@ -274,15 +299,15 @@ internal static class RelationExpressionAnalyzer
         if (!HasSafeIndexEquality(equal))
             return false;
 
-        if (TryGetPath(equal.Left, leftParameter, out var left) &&
-            TryGetPath(equal.Right, rightParameter, out var right))
+        if (MemberPath.TryCreate(equal.Left, leftParameter, out var left) &&
+            MemberPath.TryCreate(equal.Right, rightParameter, out var right))
         {
             join = new JoinKeyPart(left, right, DefaultObjectEqualityComparer.Instance, "Default equality");
             return true;
         }
 
-        if (TryGetPath(equal.Right, leftParameter, out left) &&
-            TryGetPath(equal.Left, rightParameter, out right))
+        if (MemberPath.TryCreate(equal.Right, leftParameter, out left) &&
+            MemberPath.TryCreate(equal.Left, rightParameter, out right))
         {
             join = new JoinKeyPart(left, right, DefaultObjectEqualityComparer.Instance, "Default equality");
             return true;
@@ -322,9 +347,11 @@ internal static class RelationExpressionAnalyzer
         out MemberPath left,
         out MemberPath right)
     {
-        if (TryGetPath(first, leftParameter, out left) && TryGetPath(second, rightParameter, out right))
+        if (MemberPath.TryCreate(first, leftParameter, out left) &&
+            MemberPath.TryCreate(second, rightParameter, out right))
             return true;
-        if (TryGetPath(second, leftParameter, out left) && TryGetPath(first, rightParameter, out right))
+        if (MemberPath.TryCreate(second, leftParameter, out left) &&
+            MemberPath.TryCreate(first, rightParameter, out right))
             return true;
         left = null!;
         right = null!;
@@ -333,8 +360,8 @@ internal static class RelationExpressionAnalyzer
 
     private static bool HasSafeIndexEquality(BinaryExpression equality)
     {
-        var leftType = StripConvert(equality.Left).Type;
-        var rightType = StripConvert(equality.Right).Type;
+        var leftType = MemberPath.StripConvert(equality.Left).Type;
+        var rightType = MemberPath.StripConvert(equality.Right).Type;
         if (leftType != rightType)
             return false;
 
@@ -345,59 +372,6 @@ internal static class RelationExpressionAnalyzer
         return equality.Method is null && (type.IsValueType || type.IsEnum);
     }
 
-    private static void CollectDependencies(
-        Expression expression,
-        IReadOnlyList<ParameterExpression> parameters,
-        List<DependencyPath> paths,
-        ref DependencyAnalysisFlags dependencyAnalysis)
-    {
-        if (TryGetDependencyPath(expression, parameters, out var dependencyPath))
-        {
-            paths.Add(dependencyPath);
-            return;
-        }
-
-        switch (expression)
-        {
-            case BinaryExpression binary:
-                CollectDependencies(binary.Left, parameters, paths, ref dependencyAnalysis);
-                CollectDependencies(binary.Right, parameters, paths, ref dependencyAnalysis);
-                break;
-            case UnaryExpression unary:
-                CollectDependencies(unary.Operand, parameters, paths, ref dependencyAnalysis);
-                break;
-            case MethodCallExpression call:
-                if (!IsRecognizedStringEquality(call))
-                    dependencyAnalysis |= DependencyAnalysisFlags.ContainsOpaqueCode;
-                if (call.Object is not null) CollectDependencies(call.Object, parameters, paths, ref dependencyAnalysis);
-                foreach (var argument in call.Arguments) CollectDependencies(argument, parameters, paths, ref dependencyAnalysis);
-                break;
-            case ConditionalExpression conditional:
-                CollectDependencies(conditional.Test, parameters, paths, ref dependencyAnalysis);
-                CollectDependencies(conditional.IfTrue, parameters, paths, ref dependencyAnalysis);
-                CollectDependencies(conditional.IfFalse, parameters, paths, ref dependencyAnalysis);
-                break;
-            case MemberExpression member:
-                if (member.Expression is null || IsExternalMemberAccess(member, parameters))
-                    dependencyAnalysis |= DependencyAnalysisFlags.ContainsExternalState;
-                if (member.Expression is not null)
-                    CollectDependencies(member.Expression, parameters, paths, ref dependencyAnalysis);
-                break;
-            case ConstantExpression or ParameterExpression:
-                break;
-            default:
-                dependencyAnalysis |= DependencyAnalysisFlags.ContainsOpaqueCode;
-                break;
-        }
-    }
-
-    private static bool IsRecognizedStringEquality(MethodCallExpression call) =>
-        call.Method.DeclaringType == typeof(string) &&
-        call.Method.Name == nameof(string.Equals) &&
-        call.Object is null &&
-        call.Arguments.Count == 3 &&
-        call.Arguments[2] is ConstantExpression { Value: StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase };
-
     private static bool TryGetDependencyPath(
         Expression expression,
         IReadOnlyList<ParameterExpression> parameters,
@@ -405,7 +379,7 @@ internal static class RelationExpressionAnalyzer
     {
         for (var index = 0; index < parameters.Count; index++)
         {
-            if (!TryGetPath(expression, parameters[index], out var memberPath))
+            if (!MemberPath.TryCreate(expression, parameters[index], out var memberPath))
                 continue;
             path = new DependencyPath(index, memberPath.RootType, memberPath.Members);
             return true;
@@ -415,62 +389,4 @@ internal static class RelationExpressionAnalyzer
         return false;
     }
 
-    private static bool IsExternalMemberAccess(MemberExpression member, IReadOnlyList<ParameterExpression> parameters)
-    {
-        Expression? root = member.Expression;
-        while (root is MemberExpression nested)
-            root = nested.Expression;
-        while (root is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
-            root = unary.Operand;
-        return root is ConstantExpression || (root is ParameterExpression parameter && !parameters.Contains(parameter));
-    }
-
-    internal static bool TryGetPath(Expression expression, ParameterExpression root, out MemberPath path)
-    {
-        expression = StripConvert(expression);
-        var members = new Stack<MemberInfo>();
-        while (expression is MemberExpression member)
-        {
-            members.Push(member.Member);
-            expression = StripConvert(member.Expression!);
-        }
-
-        if (expression == root && members.Count > 0)
-        {
-            path = new MemberPath(root.Type, members.ToArray());
-            return true;
-        }
-
-        path = null!;
-        return false;
-    }
-
-    private static Expression StripConvert(Expression expression)
-    {
-        while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
-            expression = convert.Operand;
-        return expression;
-    }
-
-    private sealed class DependencyPathComparer : IEqualityComparer<DependencyPath>
-    {
-        public static DependencyPathComparer Instance { get; } = new();
-
-        public bool Equals(DependencyPath? x, DependencyPath? y) =>
-            ReferenceEquals(x, y) ||
-            (x is not null && y is not null &&
-             x.RootParameterIndex == y.RootParameterIndex &&
-             x.RootType == y.RootType &&
-             x.Segments.Select(segment => segment.Member).SequenceEqual(y.Segments.Select(segment => segment.Member)));
-
-        public int GetHashCode(DependencyPath obj)
-        {
-            var hash = new HashCode();
-            hash.Add(obj.RootParameterIndex);
-            hash.Add(obj.RootType);
-            foreach (var segment in obj.Segments)
-                hash.Add(segment.Member);
-            return hash.ToHashCode();
-        }
-    }
 }

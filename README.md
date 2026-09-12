@@ -47,6 +47,8 @@ remove and re-add the object when its identity genuinely needs to change.
 - Atomic property `ChangeSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
+- Role-aware dependency analysis for derived computations and invariant predicates
+- LINQ dependency extraction for common aggregate, filter, and projection operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
 - A separate EF Core change-tracker adapter package
 - A BenchmarkDotNet benchmark project

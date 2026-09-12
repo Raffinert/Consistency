@@ -66,7 +66,20 @@ public sealed class CompiledRelationModel
             }
         }
         foreach (var derived in _derivedStates)
+        {
             lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using {derived.Relation.RightSet.ObjectType.Name}: {derived.ComputationExpression.Body}");
+            lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(derived.Analysis.Flags)}");
+            lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
+            foreach (var dependency in derived.Analysis.Dependencies)
+                lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
+        }
+        foreach (var invariant in _invariants)
+        {
+            lines.Add($"Invariant {invariant.Derived.SourceSet.ObjectType.Name}");
+            lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(invariant.Analysis.Flags)}");
+            foreach (var dependency in invariant.Analysis.Dependencies)
+                lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
+        }
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -104,7 +117,7 @@ public sealed class RelationRuntime
     {
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
-        _navigation = new NavigationIndexRegistry(sets, relations, _sets);
+        _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
         _derivedStates = derivedStates.ToDictionary(
             definition => definition,
@@ -256,7 +269,7 @@ public sealed class RelationRuntime
         foreach (var change in changes)
             impact.MergeFrom(_impactResolver.Resolve(change));
 
-        foreach (var (rootSet, root) in impact.AffectedRoots)
+        foreach (var (rootSet, root) in ResolveNavigationRoots(impact, changes))
             _navigation.RefreshRoot(rootSet, root);
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
@@ -265,30 +278,103 @@ public sealed class RelationRuntime
         return impact.ToPublic();
     }
 
+    private IEnumerable<(IObjectSetDefinition Set, object Root)> ResolveNavigationRoots(
+        ResolvedChangeImpact impact,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        var rootsBySet = _sets.Keys.ToDictionary(
+            set => set,
+            _ => new HashSet<object>(ReferenceEqualityComparer.Instance));
+        foreach (var (set, root) in impact.AffectedRoots)
+            rootsBySet[set].Add(root);
+
+        foreach (var derived in _derivedStates.Keys)
+        {
+            AddRoots(
+                derived.SourceSet,
+                derived.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource));
+            AddRoots(
+                derived.Relation.RightSet,
+                derived.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.RelationItem));
+        }
+        foreach (var invariant in _invariants.Keys)
+            AddRoots(
+                invariant.Derived.SourceSet,
+                invariant.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource));
+
+        return rootsBySet.SelectMany(pair => pair.Value.Select(root => (pair.Key, root))).ToArray();
+
+        void AddRoots(IObjectSetDefinition rootSet, IEnumerable<TrackedExpressionDependency> dependencies)
+        {
+            foreach (var dependency in dependencies)
+                foreach (var change in changes)
+                    rootsBySet[rootSet].UnionWith(
+                        _navigation.ResolveRoots(rootSet, dependency.Path, change.Instance, change.Member));
+        }
+    }
+
     private void ApplyDerivedAndInvariantImpact(
         ResolvedChangeImpact impact,
         IReadOnlyList<PropertyChange> changes)
     {
-        var affectedDerived = new Dictionary<IDerivedDefinition, bool>();
+        var affectedDerived = new Dictionary<IDerivedDefinition, (bool Invalid, IReadOnlyCollection<object>? Sources)>();
         foreach (var pair in _derivedStates)
         {
-            var relationAffected = impact.AffectedRelations.Contains(pair.Key.Relation);
-            var sourceAffected = changes.Any(change => ReferenceEquals(change.Set, pair.Key.SourceSet));
-            if (!relationAffected && !sourceAffected)
-                continue;
+            var relationAffected = pair.Key.Analysis.HasRelationMembershipDependency &&
+                impact.AffectedRelations.Contains(pair.Key.Relation);
+            var sourceRoots = ResolveDependencyRoots(
+                pair.Key.SourceSet,
+                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource),
+                changes);
+            var itemRoots = ResolveDependencyRoots(
+                pair.Key.Relation.RightSet,
+                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.RelationItem),
+                changes);
             var relationState = _relations[pair.Key.Relation];
             var invalid = relationAffected &&
                 impact.ReindexRoots.TryGetValue(relationState, out var roots) && roots.Count > 0;
-            pair.Value.Invalidate(invalid);
-            affectedDerived[pair.Key] = invalid;
+            if (relationAffected || itemRoots.Count > 0)
+            {
+                pair.Value.Invalidate(invalid);
+                affectedDerived[pair.Key] = (invalid, null);
+            }
+            else if (sourceRoots.Count > 0)
+            {
+                pair.Value.Invalidate(sourceRoots, invalid: false);
+                affectedDerived[pair.Key] = (false, sourceRoots);
+            }
         }
 
         foreach (var pair in _invariants)
         {
-            if (!affectedDerived.TryGetValue(pair.Key.Derived, out var invalid))
-                continue;
-            pair.Value.OnDependencyChanged(invalid);
+            if (affectedDerived.TryGetValue(pair.Key.Derived, out var inherited))
+            {
+                if (inherited.Sources is null)
+                    pair.Value.OnDependencyChanged(inherited.Invalid);
+                else
+                    pair.Value.OnDependencyChanged(inherited.Sources, inherited.Invalid);
+            }
+
+            var invariantRoots = ResolveDependencyRoots(
+                pair.Key.Derived.SourceSet,
+                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
+                changes);
+            if (invariantRoots.Count > 0 &&
+                (!affectedDerived.TryGetValue(pair.Key.Derived, out inherited) || inherited.Sources is not null))
+                pair.Value.OnDependencyChanged(invariantRoots, invalid: false);
         }
+    }
+
+    private HashSet<object> ResolveDependencyRoots(
+        IObjectSetDefinition rootSet,
+        IEnumerable<TrackedExpressionDependency> dependencies,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        var roots = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var dependency in dependencies)
+            foreach (var change in changes)
+                roots.UnionWith(_navigation.ResolveRoots(rootSet, dependency.Path, change.Instance, change.Member));
+        return roots;
     }
 
     private void InvalidateForRelationMutations(IEnumerable<IRelationDefinition> relations)

@@ -64,6 +64,8 @@ internal sealed class NavigationIndexRegistry
     public NavigationIndexRegistry(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
+        IReadOnlyList<IDerivedDefinition> derivedStates,
+        IReadOnlyList<IInvariantDefinition> invariants,
         IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> runtimeSets)
     {
         _sets = runtimeSets;
@@ -79,6 +81,31 @@ internal sealed class NavigationIndexRegistry
                 var rootSet = path.RootParameterIndex == 0 ? relation.LeftSet : relation.RightSet;
                 paths[rootSet].Add(path);
                 EnsurePathIndexes(path);
+            }
+        }
+        foreach (var derived in derivedStates)
+        {
+            foreach (var dependency in derived.Analysis.Dependencies)
+            {
+                var rootSet = dependency.Role switch
+                {
+                    ExpressionParameterRole.DerivedSource => derived.SourceSet,
+                    ExpressionParameterRole.RelationItem => derived.Relation.RightSet,
+                    _ => null
+                };
+                if (rootSet is null)
+                    continue;
+                paths[rootSet].Add(dependency.Path);
+                EnsurePathIndexes(dependency.Path);
+            }
+        }
+        foreach (var invariant in invariants)
+        {
+            foreach (var dependency in invariant.Analysis.Dependencies
+                         .Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource))
+            {
+                paths[invariant.Derived.SourceSet].Add(dependency.Path);
+                EnsurePathIndexes(dependency.Path);
             }
         }
         _pathsBySet = paths.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<DependencyPath>)pair.Value);

@@ -910,6 +910,8 @@ Execute the next work in this order:
 
 # 20. Next Codex task — do only this first
 
+Status: implemented. Derived computations and invariant predicates now use shared role-aware dependency analysis, including nested navigation registration and common LINQ operators. Selective relation-source propagation remains intentionally deferred to the second task.
+
 Do **not** ask Codex to implement this whole document in one run.
 
 The next task should be:

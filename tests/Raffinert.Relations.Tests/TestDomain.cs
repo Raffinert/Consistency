@@ -54,3 +54,29 @@ internal sealed class DateRangeHolder
     public DateTime ValidTo { get; set; }
     public bool Enabled { get; set; }
 }
+
+internal sealed class DerivedSourceRecord
+{
+    public Guid Id { get; init; }
+    public string Code { get; set; } = "";
+    public decimal Adjustment { get; set; }
+    public ReceiptPolicy? Policy { get; set; }
+}
+
+internal sealed class DerivedItemRecord
+{
+    public Guid Id { get; init; }
+    public string Code { get; set; } = "";
+    public decimal Quantity { get; set; }
+    public DerivedItemDetails? Details { get; set; }
+}
+
+internal sealed class DerivedItemDetails
+{
+    public decimal Quantity { get; set; }
+}
+
+internal sealed class ReceiptPolicy
+{
+    public decimal Maximum { get; set; }
+}
