@@ -34,4 +34,7 @@ internal static class RelationPlanner
             ? ScanAccessPlan.Instance
             : new HashJoinAccessPlan(analysis.JoinKeyParts);
     }
+
+    public static RelationAccessPlan PlanReverse(RelationAnalysis analysis, bool forceScan = false) =>
+        Plan(analysis, forceScan);
 }

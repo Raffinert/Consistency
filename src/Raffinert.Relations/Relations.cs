@@ -52,6 +52,8 @@ internal interface IRelationDefinition
     LambdaExpression PredicateExpression { get; }
     Expressions.RelationAnalysis Analysis { get; }
     Expressions.RelationAccessPlan AccessPlan { get; }
+    Expressions.RelationAccessPlan? ReverseAccessPlan { get; }
+    void RequireExactPropagation();
     IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets);
 }
 
@@ -72,7 +74,10 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
         PredicateExpression = predicate;
         Analysis = analysis;
         AccessPlan = Expressions.RelationPlanner.Plan(analysis, model.ForceScanPlansForTesting);
+        _forceScanPlans = model.ForceScanPlansForTesting;
     }
+
+    private readonly bool _forceScanPlans;
 
     public ObjectSetDefinition<TLeft> Left { get; }
     public ObjectSetDefinition<TRight> Right { get; }
@@ -82,6 +87,10 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
     public LambdaExpression PredicateExpression { get; }
     public Expressions.RelationAnalysis Analysis { get; }
     public Expressions.RelationAccessPlan AccessPlan { get; }
+    public Expressions.RelationAccessPlan? ReverseAccessPlan { get; private set; }
+
+    public void RequireExactPropagation() =>
+        ReverseAccessPlan ??= Expressions.RelationPlanner.PlanReverse(Analysis, _forceScanPlans);
 
     public IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets) =>
         new RelationRuntimeState<TLeft, TRight>(this, sets[Left], sets[Right]);

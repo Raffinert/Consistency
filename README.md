@@ -39,6 +39,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Dependency and nested member-path analysis
 - Automatic single and composite hash indexes for safe equality joins
 - Explicit scan and hash-join access planning
+- Reverse hash access for exact derived-state propagation
 - Ordinal and ordinal-ignore-case comparer-aware string joins
 - Correct scan fallback for opaque or unsupported predicates
 - Incremental add, remove, and scalar-property index maintenance

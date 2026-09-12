@@ -114,6 +114,10 @@ Changing only the access plan must never change the propagated `Dirty`/`Invalid`
 
 # 2. P0 — Add reverse/bidirectional access plans for exact propagation
 
+**Status:** Implemented.
+
+Relations consumed by derived state now receive a reverse scan/hash plan and maintain a left-side hash index when safe. Right additions and mutations use reverse candidates, while removals use materialized membership directly. Composite and comparer-aware keys are supported in both directions, with scan/hash parity tests and 10k/100k propagation benchmarks.
+
 Exact source-scoped propagation currently materializes bidirectional membership, which is good, but discovering new left/source matches from a changed or added right object can still scan all left objects.
 
 Typical hot path today is conceptually:

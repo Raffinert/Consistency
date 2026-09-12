@@ -68,6 +68,8 @@ public sealed class RelationModelBuilder
             if (!set.HasKey)
                 throw new InvalidOperationException($"Object set '{set.ObjectType.Name}' has no key. Call Key(...) before Build().");
         }
+        foreach (var relation in _derivedStates.Select(derived => derived.Relation).Distinct())
+            relation.RequireExactPropagation();
 
         _built = true;
         return new CompiledRelationModel(

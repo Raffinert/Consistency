@@ -50,6 +50,7 @@ public sealed class CompiledRelationModel
             foreach (var key in relation.Analysis.JoinKeyParts)
                 lines.Add($"    {key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})");
             lines.Add($"  Access plan: {relation.AccessPlan.DisplayName}");
+            lines.Add($"  Reverse access plan: {relation.ReverseAccessPlan?.DisplayName ?? "Disabled"}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
             lines.Add($"  Residual predicate: {(relation.Analysis.HasResidualPredicate ? "Yes" : "No")}");
             foreach (var residual in relation.Analysis.RecognizedResiduals)
@@ -293,6 +294,9 @@ public sealed class RelationRuntime
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
                 pair.Key.ReindexRight(root);
+        foreach (var pair in impact.ReindexLeftRoots)
+            foreach (var root in pair.Value)
+                pair.Key.ReindexLeft(root);
         var relationDeltas = ResolveRelationDeltas(impact);
         ApplyDerivedAndInvariantImpact(impact, relationDeltas, changes);
         return impact.ToPublic();
@@ -559,6 +563,7 @@ internal interface IRelationRuntimeState
     RelationDelta AddRight(object instance);
     RelationDelta RemoveRight(object instance);
     void ReindexRight(object instance);
+    void ReindexLeft(object instance);
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
 }
@@ -603,6 +608,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     private readonly ObjectSetRuntime _rightObjects;
     private readonly Dictionary<CompositeKey, HashSet<TRight>> _index = [];
     private readonly Dictionary<TRight, CompositeKey> _keys = new(ReferenceEqualityComparer<TRight>.Instance);
+    private readonly Dictionary<CompositeKey, HashSet<TLeft>> _leftIndex = [];
+    private readonly Dictionary<TLeft, CompositeKey> _leftKeys = new(ReferenceEqualityComparer<TLeft>.Instance);
     private readonly Dictionary<TLeft, HashSet<TRight>> _rightsByLeft = new(ReferenceEqualityComparer<TLeft>.Instance);
     private readonly Dictionary<TRight, HashSet<TLeft>> _leftsByRight = new(ReferenceEqualityComparer<TRight>.Instance);
     private bool _hasExactPropagation;
@@ -629,6 +636,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         if (!_hasExactPropagation)
             return delta;
         var left = (TLeft)instance;
+        AddLeftToIndex(left);
         foreach (var right in Related(left))
             AddPair(left, right, delta);
         return delta;
@@ -640,6 +648,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         if (!_hasExactPropagation)
             return delta;
         var left = (TLeft)instance;
+        RemoveLeftFromIndex(left);
         if (!_rightsByLeft.Remove(left, out var rights))
             return delta;
         foreach (var right in rights)
@@ -656,7 +665,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var right = (TRight)instance;
         AddToIndex(right);
         if (_hasExactPropagation)
-            foreach (var left in _leftObjects.Instances.Cast<TLeft>().Where(left => _definition.Predicate(left, right)))
+            foreach (var left in RelatedFromRightCore(right))
                 AddPair(left, right, delta);
         return delta;
     }
@@ -688,10 +697,18 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         return candidates.Where(right => _definition.Predicate(left, right)).ToArray();
     }
 
-    public IReadOnlyList<TLeft> RelatedFromRight(TRight right) =>
-        _leftObjects.Instances.Cast<TLeft>().Where(left => _definition.Predicate(left, right)).ToArray();
+    public IReadOnlyList<TLeft> RelatedFromRight(TRight right) => RelatedFromRightCore(right);
 
     public void ReindexRight(object instance) => Reindex((TRight)instance);
+
+    public void ReindexLeft(object instance)
+    {
+        if (!_hasExactPropagation)
+            return;
+        var left = (TLeft)instance;
+        RemoveLeftFromIndex(left);
+        AddLeftToIndex(left);
+    }
 
     public RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights)
     {
@@ -718,8 +735,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             var oldLefts = _leftsByRight.TryGetValue(right, out var existing)
                 ? existing.ToHashSet(ReferenceEqualityComparer<TLeft>.Instance)
                 : new HashSet<TLeft>(ReferenceEqualityComparer<TLeft>.Instance);
-            var newLefts = _leftObjects.Instances.Cast<TLeft>()
-                .Where(left => _definition.Predicate(left, right))
+            var newLefts = RelatedFromRightCore(right)
                 .ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
             foreach (var left in oldLefts.Except(newLefts, ReferenceEqualityComparer<TLeft>.Instance).ToArray())
                 RemovePair(left, right, delta);
@@ -755,6 +771,28 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             _index.Add(key, bucket = new HashSet<TRight>(ReferenceEqualityComparer<TRight>.Instance));
         bucket.Add(right);
         _keys[right] = key;
+    }
+
+    private void AddLeftToIndex(TLeft left)
+    {
+        if (_definition.ReverseAccessPlan is not HashJoinAccessPlan hashPlan)
+            return;
+        var key = ReadLeftKey(hashPlan, left);
+        if (!_leftIndex.TryGetValue(key, out var bucket))
+            _leftIndex.Add(key, bucket = new HashSet<TLeft>(ReferenceEqualityComparer<TLeft>.Instance));
+        bucket.Add(left);
+        _leftKeys[left] = key;
+    }
+
+    private void RemoveLeftFromIndex(TLeft left)
+    {
+        if (!_leftKeys.Remove(left, out var key))
+            return;
+        if (!_leftIndex.TryGetValue(key, out var bucket))
+            return;
+        bucket.Remove(left);
+        if (bucket.Count == 0)
+            _leftIndex.Remove(key);
     }
 
     private void RemoveFromIndex(TRight right)
@@ -803,6 +841,27 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var key = CreateKey(plan.JoinKeyParts.Select(part => part.Left.Read(left)), plan);
         return _index.TryGetValue(key, out var bucket) ? bucket : [];
     }
+
+    private IReadOnlyList<TLeft> RelatedFromRightCore(TRight right)
+    {
+        IEnumerable<TLeft> candidates = _definition.ReverseAccessPlan switch
+        {
+            null or ScanAccessPlan => _leftObjects.Instances.Cast<TLeft>(),
+            HashJoinAccessPlan hashPlan => ReadReverseHashCandidates(hashPlan, right),
+            _ => throw new NotSupportedException(
+                $"Unsupported reverse access plan '{_definition.ReverseAccessPlan.GetType().Name}'.")
+        };
+        return candidates.Where(left => _definition.Predicate(left, right)).ToArray();
+    }
+
+    private IEnumerable<TLeft> ReadReverseHashCandidates(HashJoinAccessPlan plan, TRight right)
+    {
+        var key = ReadRightKey(plan, right);
+        return _leftIndex.TryGetValue(key, out var bucket) ? bucket : [];
+    }
+
+    private static CompositeKey ReadLeftKey(HashJoinAccessPlan plan, TLeft left) =>
+        CreateKey(plan.JoinKeyParts.Select(part => part.Left.Read(left)), plan);
 
     private static CompositeKey ReadRightKey(HashJoinAccessPlan plan, TRight right) =>
         CreateKey(plan.JoinKeyParts.Select(part => part.Right.Read(right)), plan);

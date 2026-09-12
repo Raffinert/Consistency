@@ -389,6 +389,147 @@ public sealed class DerivedStateTests
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Reverse_plan_limits_right_mutations_to_candidate_lefts(bool forceScan)
+    {
+        const int unrelatedCount = 10_000;
+        var model = new RelationModelBuilder();
+        if (forceScan)
+            model.UseScanPlansForTesting();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            PredicateProbe.Observe() && source.Code == item.Code);
+        var quantity = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var compiled = model.Build();
+        Assert.Contains(
+            $"Reverse access plan: {(forceScan ? "Scan" : "HashJoin")}",
+            compiled.DebugView);
+        var runtime = compiled.CreateRuntime();
+        var losing = Source("A");
+        var gaining = Source("B");
+        runtime.Add(sources, losing);
+        runtime.Add(sources, gaining);
+        for (var index = 0; index < unrelatedCount; index++)
+            runtime.Add(sources, Source($"U-{index}"));
+        runtime.Get(quantity, losing);
+        runtime.Get(quantity, gaining);
+        var item = Item("A", quantity: 1m);
+
+        PredicateProbe.Reset();
+        runtime.Add(items, item);
+        Assert.Equal(forceScan ? unrelatedCount + 2 : 1, PredicateProbe.Evaluations);
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, gaining));
+        runtime.Get(quantity, losing);
+
+        PredicateProbe.Reset();
+        item.Code = "B";
+        runtime.Apply(Change.Property(items, item, x => x.Code, "A", "B"));
+        Assert.Equal(forceScan ? unrelatedCount + 2 : 1, PredicateProbe.Evaluations);
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
+        runtime.Get(quantity, gaining);
+
+        PredicateProbe.Reset();
+        runtime.Remove(items, item);
+        Assert.Equal(0, PredicateProbe.Evaluations);
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
+    }
+
+    [Fact]
+    public void Reverse_hash_plan_supports_composite_keys()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var items = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.PurchaseOrderNumber == item.PurchaseOrderNumber &&
+            source.ItemNumber == item.ItemNumber);
+        var count = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Count);
+        var compiled = model.Build();
+        Assert.Contains("Reverse access plan: HashJoin", compiled.DebugView);
+        var runtime = compiled.CreateRuntime();
+        var matching = new InvoiceLine
+        {
+            Id = Guid.NewGuid(),
+            PurchaseOrderNumber = "PO",
+            ItemNumber = "A"
+        };
+        var partial = new InvoiceLine
+        {
+            Id = Guid.NewGuid(),
+            PurchaseOrderNumber = "PO",
+            ItemNumber = "B"
+        };
+        runtime.Add(sources, matching);
+        runtime.Add(sources, partial);
+        runtime.Get(count, matching);
+        runtime.Get(count, partial);
+
+        runtime.Add(items, new PurchaseOrderLine
+        {
+            Id = Guid.NewGuid(),
+            PurchaseOrderNumber = "PO",
+            ItemNumber = "A"
+        });
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, matching));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, partial));
+    }
+
+    [Fact]
+    public void Reverse_hash_plan_preserves_string_comparer_semantics()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            string.Equals(source.Code, item.Code, StringComparison.OrdinalIgnoreCase));
+        var count = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Count);
+        var runtime = model.Build().CreateRuntime();
+        var matching = new CodeHolder { Id = Guid.NewGuid(), Code = "ABC" };
+        var unrelated = new CodeHolder { Id = Guid.NewGuid(), Code = "XYZ" };
+        runtime.Add(sources, matching);
+        runtime.Add(sources, unrelated);
+        runtime.Get(count, matching);
+        runtime.Get(count, unrelated);
+
+        runtime.Add(items, new CodeHolder { Id = Guid.NewGuid(), Code = "abc" });
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, matching));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, unrelated));
+    }
+
+    [Fact]
+    public void Left_join_key_change_reindexes_reverse_candidates()
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        runtime.Add(sources, source);
+        runtime.Add(items, Item("A", quantity: 1m));
+        Assert.Equal(1m, runtime.Get(quantity, source));
+
+        source.Code = "B";
+        runtime.Apply(Change.Property(sources, source, x => x.Code, "A", "B"));
+        Assert.Equal(0m, runtime.Get(quantity, source));
+
+        runtime.Add(items, Item("B", quantity: 2m));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
+        Assert.Equal(2m, runtime.Get(quantity, source));
+    }
+
     [Fact]
     public void Item_addition_and_removal_dirty_only_matching_sources()
     {
@@ -591,5 +732,18 @@ public sealed class DerivedStateTests
     {
         public DependencyImpactKind Classify(RelationMembershipDependencyImpact impact) =>
             DependencyImpactKind.Invalid;
+    }
+
+    private static class PredicateProbe
+    {
+        public static int Evaluations { get; private set; }
+
+        public static bool Observe()
+        {
+            Evaluations++;
+            return true;
+        }
+
+        public static void Reset() => Evaluations = 0;
     }
 }

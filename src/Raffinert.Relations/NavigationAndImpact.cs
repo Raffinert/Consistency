@@ -229,11 +229,13 @@ internal sealed class NavigationIndexRegistry
 internal sealed class ResolvedChangeImpact
 {
     private readonly Dictionary<IRelationRuntimeState, HashSet<object>> _reindexRoots = [];
+    private readonly Dictionary<IRelationRuntimeState, HashSet<object>> _reindexLeftRoots = [];
     private readonly HashSet<IRelationDefinition> _affectedRelations = [];
     private readonly Dictionary<IObjectSetDefinition, HashSet<object>> _affectedRoots = [];
     private readonly Dictionary<IRelationDefinition, Dictionary<IObjectSetDefinition, HashSet<object>>> _relationRoots = [];
 
     public IReadOnlyDictionary<IRelationRuntimeState, HashSet<object>> ReindexRoots => _reindexRoots;
+    public IReadOnlyDictionary<IRelationRuntimeState, HashSet<object>> ReindexLeftRoots => _reindexLeftRoots;
     public IReadOnlyCollection<IRelationDefinition> AffectedRelations => _affectedRelations;
     public IEnumerable<(IObjectSetDefinition Set, object Root)> AffectedRoots =>
         _affectedRoots.SelectMany(pair => pair.Value.Select(root => (pair.Key, root)));
@@ -268,6 +270,13 @@ internal sealed class ResolvedChangeImpact
         affected.UnionWith(roots);
     }
 
+    public void AddLeftAccess(IRelationRuntimeState relation, IEnumerable<object> roots)
+    {
+        if (!_reindexLeftRoots.TryGetValue(relation, out var affected))
+            _reindexLeftRoots.Add(relation, affected = new HashSet<object>(ReferenceEqualityComparer.Instance));
+        affected.UnionWith(roots);
+    }
+
     public void MergeFrom(ResolvedChangeImpact other)
     {
         foreach (var relation in other._affectedRelations)
@@ -295,12 +304,21 @@ internal sealed class ResolvedChangeImpact
                 _reindexRoots.Add(pair.Key, roots = new HashSet<object>(ReferenceEqualityComparer.Instance));
             roots.UnionWith(pair.Value);
         }
+        foreach (var pair in other._reindexLeftRoots)
+        {
+            if (!_reindexLeftRoots.TryGetValue(pair.Key, out var roots))
+                _reindexLeftRoots.Add(pair.Key, roots = new HashSet<object>(ReferenceEqualityComparer.Instance));
+            roots.UnionWith(pair.Value);
+        }
     }
 
     public ChangeImpact ToPublic() => new(
         new AccessImpact(
-            _reindexRoots.Count(pair => pair.Value.Count > 0),
-            _reindexRoots.Sum(pair => pair.Value.Count)),
+            _reindexRoots.Where(pair => pair.Value.Count > 0).Select(pair => pair.Key)
+                .Concat(_reindexLeftRoots.Where(pair => pair.Value.Count > 0).Select(pair => pair.Key))
+                .Distinct()
+                .Count(),
+            _reindexRoots.Sum(pair => pair.Value.Count) + _reindexLeftRoots.Sum(pair => pair.Value.Count)),
         new SemanticImpact(
             _affectedRelations.Count,
             _affectedRoots.Sum(pair => pair.Value.Count)));
@@ -332,14 +350,23 @@ internal sealed class ImpactResolver(
                 impact.AddSemantic(relation, rootSet, roots);
             }
 
-            if (relation.AccessPlan is not HashJoinAccessPlan hashPlan)
+            if (relation.AccessPlan is HashJoinAccessPlan hashPlan)
+                foreach (var keyPart in hashPlan.JoinKeyParts)
+                {
+                    var path = new DependencyPath(1, relation.RightSet.ObjectType, keyPart.Right.Members);
+                    impact.AddAccess(
+                        runtimeRelations[relation],
+                        navigation.ResolveRoots(relation.RightSet, path, change.Instance, change.Member));
+                }
+
+            if (relation.ReverseAccessPlan is not HashJoinAccessPlan reverseHashPlan)
                 continue;
-            foreach (var keyPart in hashPlan.JoinKeyParts)
+            foreach (var keyPart in reverseHashPlan.JoinKeyParts)
             {
-                var path = new DependencyPath(1, relation.RightSet.ObjectType, keyPart.Right.Members);
-                impact.AddAccess(
+                var path = new DependencyPath(0, relation.LeftSet.ObjectType, keyPart.Left.Members);
+                impact.AddLeftAccess(
                     runtimeRelations[relation],
-                    navigation.ResolveRoots(relation.RightSet, path, change.Instance, change.Member));
+                    navigation.ResolveRoots(relation.LeftSet, path, change.Instance, change.Member));
             }
         }
         return impact;
