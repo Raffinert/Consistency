@@ -90,13 +90,13 @@ internal sealed class DependencyPath
     {
         RootParameterIndex = rootParameterIndex;
         RootType = rootType;
-        var declaringType = rootType;
-        Segments = members.Select(member =>
+        Segments = members.Select((member, index) =>
         {
-            var valueType = GetMemberType(member);
-            var segment = new DependencyPathSegment(declaringType, member, valueType);
-            declaringType = valueType;
-            return segment;
+            var memberType = GetMemberType(member);
+            var valueType = index < members.Count - 1 && TryGetEnumerableElementType(memberType, out var elementType)
+                ? elementType
+                : memberType;
+            return new DependencyPathSegment(member.DeclaringType ?? rootType, member, valueType);
         }).ToArray();
     }
 
@@ -112,6 +112,21 @@ internal sealed class DependencyPath
         FieldInfo field => field.FieldType,
         _ => throw new NotSupportedException($"Member '{member.Name}' is not a property or field.")
     };
+
+    private static bool TryGetEnumerableElementType(Type type, out Type elementType)
+    {
+        if (type.IsArray)
+        {
+            elementType = type.GetElementType()!;
+            return true;
+        }
+        var enumerable = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+            ? type
+            : type.GetInterfaces().FirstOrDefault(candidate =>
+                candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        elementType = enumerable?.GetGenericArguments()[0]!;
+        return enumerable is not null;
+    }
 }
 
 [Flags]

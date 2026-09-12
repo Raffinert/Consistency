@@ -45,7 +45,47 @@ public static class Change
         return new PropertyChange(null, instance, GetDirectMember(property), oldValue, newValue);
     }
 
-    private static MemberInfo GetDirectMember(LambdaExpression property)
+    public static CollectionChange CollectionAdd<TOwner, TItem>(
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection,
+        TItem item) where TOwner : class where TItem : class =>
+        CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Add, item);
+
+    public static CollectionChange CollectionAdd<TOwner, TItem>(
+        ObjectSetBuilder<TOwner> set,
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection,
+        TItem item) where TOwner : class where TItem : class =>
+        CollectionChange.Create(set?.Definition ?? throw new ArgumentNullException(nameof(set)), owner,
+            GetDirectMember(collection), CollectionChangeKind.Add, item);
+
+    public static CollectionChange CollectionRemove<TOwner, TItem>(
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection,
+        TItem item) where TOwner : class where TItem : class =>
+        CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Remove, item);
+
+    public static CollectionChange CollectionRemove<TOwner, TItem>(
+        ObjectSetBuilder<TOwner> set,
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection,
+        TItem item) where TOwner : class where TItem : class =>
+        CollectionChange.Create(set?.Definition ?? throw new ArgumentNullException(nameof(set)), owner,
+            GetDirectMember(collection), CollectionChangeKind.Remove, item);
+
+    public static CollectionChange CollectionReset<TOwner, TItem>(
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection) where TOwner : class where TItem : class =>
+        CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Reset, null);
+
+    public static CollectionChange CollectionReset<TOwner, TItem>(
+        ObjectSetBuilder<TOwner> set,
+        TOwner owner,
+        Expression<Func<TOwner, IEnumerable<TItem>>> collection) where TOwner : class where TItem : class =>
+        CollectionChange.Create(set?.Definition ?? throw new ArgumentNullException(nameof(set)), owner,
+            GetDirectMember(collection), CollectionChangeKind.Reset, null);
+
+    internal static MemberInfo GetDirectMember(LambdaExpression property)
     {
         Expression body = property.Body;
         while (body is UnaryExpression unary) body = unary.Operand;
@@ -53,6 +93,50 @@ public static class Change
             member.Member is not PropertyInfo and not FieldInfo)
             throw new ArgumentException("A direct property or field expression is required.", nameof(property));
         return member.Member;
+    }
+}
+
+public enum CollectionChangeKind
+{
+    Add,
+    Remove,
+    Reset
+}
+
+/// <summary>Describes an explicit collection mutation that has already occurred.</summary>
+public sealed class CollectionChange
+{
+    private CollectionChange(
+        IObjectSetDefinition? set,
+        object owner,
+        MemberInfo member,
+        CollectionChangeKind kind,
+        object? item)
+    {
+        Set = set;
+        Owner = owner;
+        Member = member;
+        Kind = kind;
+        Item = item;
+    }
+
+    internal IObjectSetDefinition? Set { get; }
+    internal object Owner { get; }
+    internal MemberInfo Member { get; }
+    public CollectionChangeKind Kind { get; }
+    public object? Item { get; }
+
+    internal static CollectionChange Create(
+        IObjectSetDefinition? set,
+        object owner,
+        MemberInfo member,
+        CollectionChangeKind kind,
+        object? item)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        if (kind != CollectionChangeKind.Reset)
+            ArgumentNullException.ThrowIfNull(item);
+        return new CollectionChange(set, owner, member, kind, item);
     }
 }
 

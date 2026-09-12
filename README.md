@@ -38,6 +38,10 @@ are normalized to their net effect; conflicting chains are rejected. Domain muta
 and is not transactional. Pass `ChangeValidationMode.StrictNewValue` to `Apply` to additionally verify
 that each member currently equals its reported final new value.
 
+Collection navigation is explicit: mutate the domain collection first, then report it with
+`Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
+owner/item reverse navigation so later item-property changes resolve affected owners incrementally.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -49,6 +53,7 @@ that each member currently equals its reported final new value.
 - Ordinal and ordinal-ignore-case comparer-aware string joins
 - Correct scan fallback for opaque or unsupported predicates
 - Incremental add, remove, and scalar-property index maintenance
+- Explicit collection add/remove/reset with incremental owner/item navigation
 - Shared arbitrary-depth reverse navigation for nested paths
 - Access-impact and semantic-impact reporting
 - Deterministic, atomically validated property `ChangeSet` application
@@ -70,7 +75,6 @@ that each member currently equals its reported final new value.
 
 ## Further work
 
-- Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
 - Collection navigation
 - Scheduling and domain-specific repair policies

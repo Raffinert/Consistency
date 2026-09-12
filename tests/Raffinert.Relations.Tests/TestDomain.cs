@@ -82,3 +82,14 @@ internal sealed class ReceiptPolicy
 {
     public decimal Maximum { get; set; }
 }
+
+internal sealed class CollectionOrder
+{
+    public Guid Id { get; init; }
+    public List<CollectionOrderLine> Lines { get; } = [];
+}
+
+internal sealed class CollectionOrderLine
+{
+    public string ItemNumber { get; set; } = "";
+}

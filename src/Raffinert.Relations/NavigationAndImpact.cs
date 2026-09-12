@@ -4,15 +4,25 @@ using Raffinert.Relations.Expressions;
 
 namespace Raffinert.Relations;
 
-internal sealed class NavigationIndex(MemberInfo member)
+internal interface INavigationIndex
+{
+    MemberInfo Member { get; }
+    void AddOwner(object owner);
+    void RemoveOwner(object owner);
+    IReadOnlyCollection<object> GetOwners(object target);
+    IReadOnlyCollection<object> GetTargets(object owner);
+}
+
+internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
 {
     private readonly Dictionary<object, ForwardEntry> _forward = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, HashSet<object>> _reverse = new(ReferenceEqualityComparer.Instance);
 
     public MemberInfo Member { get; } = member;
 
-    public void AddOwner(object owner, object? target)
+    public void AddOwner(object owner)
     {
+        var target = NavigationIndexRegistry.ReadMember(Member, owner);
         if (_forward.TryGetValue(owner, out var existing))
         {
             if (!ReferenceEquals(existing.Target, target))
@@ -47,9 +57,74 @@ internal sealed class NavigationIndex(MemberInfo member)
     public IReadOnlyCollection<object> GetOwners(object target) =>
         _reverse.TryGetValue(target, out var owners) ? owners : [];
 
+    public IReadOnlyCollection<object> GetTargets(object owner) =>
+        _forward.TryGetValue(owner, out var entry) && entry.Target is not null ? [entry.Target] : [];
+
     private sealed class ForwardEntry(object? target)
     {
         public object? Target { get; } = target;
+        public int ReferenceCount { get; set; } = 1;
+    }
+}
+
+internal sealed class CollectionNavigationIndex(MemberInfo member) : INavigationIndex
+{
+    private readonly Dictionary<object, ForwardEntry> _forward = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, HashSet<object>> _reverse = new(ReferenceEqualityComparer.Instance);
+
+    public MemberInfo Member { get; } = member;
+
+    public void AddOwner(object owner)
+    {
+        if (_forward.TryGetValue(owner, out var existing))
+        {
+            existing.ReferenceCount++;
+            return;
+        }
+        var items = ReadItems(owner).ToHashSet(ReferenceEqualityComparer.Instance);
+        _forward.Add(owner, new ForwardEntry(items));
+        foreach (var item in items)
+        {
+            if (!_reverse.TryGetValue(item, out var owners))
+                _reverse.Add(item, owners = new HashSet<object>(ReferenceEqualityComparer.Instance));
+            owners.Add(owner);
+        }
+    }
+
+    public void RemoveOwner(object owner)
+    {
+        if (!_forward.TryGetValue(owner, out var entry))
+            return;
+        if (--entry.ReferenceCount > 0)
+            return;
+        _forward.Remove(owner);
+        foreach (var item in entry.Items)
+        {
+            var owners = _reverse[item];
+            owners.Remove(owner);
+            if (owners.Count == 0)
+                _reverse.Remove(item);
+        }
+    }
+
+    public IReadOnlyCollection<object> GetOwners(object target) =>
+        _reverse.TryGetValue(target, out var owners) ? owners : [];
+
+    public IReadOnlyCollection<object> GetTargets(object owner) =>
+        _forward.TryGetValue(owner, out var entry) ? entry.Items : [];
+
+    private IEnumerable<object> ReadItems(object owner)
+    {
+        if (NavigationIndexRegistry.ReadMember(Member, owner) is not System.Collections.IEnumerable collection)
+            yield break;
+        foreach (var item in collection)
+            if (item is not null)
+                yield return item;
+    }
+
+    private sealed class ForwardEntry(HashSet<object> items)
+    {
+        public HashSet<object> Items { get; } = items;
         public int ReferenceCount { get; set; } = 1;
     }
 }
@@ -58,7 +133,7 @@ internal sealed class NavigationIndexRegistry
 {
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly Dictionary<IObjectSetDefinition, IReadOnlyList<DependencyPath>> _pathsBySet;
-    private readonly Dictionary<MemberInfo, NavigationIndex> _indexes = [];
+    private readonly Dictionary<MemberInfo, INavigationIndex> _indexes = [];
     private readonly Dictionary<IObjectSetDefinition, Dictionary<object, IReadOnlyList<NavigationMembership>>> _registrations;
 
     public NavigationIndexRegistry(
@@ -116,24 +191,34 @@ internal sealed class NavigationIndexRegistry
         var memberships = new HashSet<NavigationMembership>(NavigationMembershipComparer.Instance);
         foreach (var path in _pathsBySet[set])
         {
-            object? owner = root;
-            for (var index = 0; index < path.Segments.Count - 1 && owner is not null; index++)
+            IReadOnlyCollection<object> owners = [root];
+            for (var index = 0; index < path.Segments.Count - 1 && owners.Count > 0; index++)
             {
                 var segment = path.Segments[index];
-                if (!IsReferenceNavigation(segment))
+                if (!IsNavigation(segment))
                 {
-                    owner = ReadMember(segment.Member, owner);
+                    owners = owners
+                        .Select(owner => ReadMember(segment.Member, owner))
+                        .Where(value => value is not null)
+                        .Cast<object>()
+                        .Distinct(ReferenceEqualityComparer.Instance)
+                        .ToArray();
                     continue;
                 }
 
                 var navigation = _indexes[segment.Member];
-                memberships.Add(new NavigationMembership(navigation, owner));
-                owner = ReadMember(segment.Member, owner);
+                foreach (var owner in owners)
+                {
+                    if (memberships.Add(new NavigationMembership(navigation, owner)))
+                        navigation.AddOwner(owner);
+                }
+                owners = owners
+                    .SelectMany(navigation.GetTargets)
+                    .Distinct(ReferenceEqualityComparer.Instance)
+                    .ToArray();
             }
         }
 
-        foreach (var membership in memberships)
-            membership.Index.AddOwner(membership.Owner, ReadMember(membership.Index.Member, membership.Owner));
         _registrations[set].Add(root, memberships.ToArray());
     }
 
@@ -171,7 +256,7 @@ internal sealed class NavigationIndexRegistry
             for (var index = changedIndex - 1; index >= 0; index--)
             {
                 var segment = path.Segments[index];
-                if (!IsReferenceNavigation(segment) || !_indexes.TryGetValue(segment.Member, out var navigation))
+                if (!IsNavigation(segment) || !_indexes.TryGetValue(segment.Member, out var navigation))
                 {
                     candidates = [];
                     break;
@@ -196,22 +281,36 @@ internal sealed class NavigationIndexRegistry
         for (var index = 0; index < path.Segments.Count - 1; index++)
         {
             var segment = path.Segments[index];
-            if (IsReferenceNavigation(segment))
-                _indexes.TryAdd(segment.Member, new NavigationIndex(segment.Member));
+            if (IsNavigation(segment))
+                _indexes.TryAdd(segment.Member, IsCollection(segment.Member)
+                    ? new CollectionNavigationIndex(segment.Member)
+                    : new NavigationIndex(segment.Member));
         }
     }
 
-    private static bool IsReferenceNavigation(DependencyPathSegment segment) =>
-        !segment.ValueType.IsValueType && segment.ValueType != typeof(string);
+    private static bool IsNavigation(DependencyPathSegment segment) =>
+        IsCollection(segment.Member) ||
+        (!segment.ValueType.IsValueType && segment.ValueType != typeof(string));
 
-    private static object? ReadMember(MemberInfo member, object instance) => member switch
+    private static bool IsCollection(MemberInfo member)
+    {
+        var type = member switch
+        {
+            PropertyInfo property => property.PropertyType,
+            FieldInfo field => field.FieldType,
+            _ => typeof(object)
+        };
+        return type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
+    }
+
+    internal static object? ReadMember(MemberInfo member, object instance) => member switch
     {
         PropertyInfo property => property.GetValue(instance),
         FieldInfo field => field.GetValue(instance),
         _ => throw new NotSupportedException($"Member '{member.Name}' is not a property or field.")
     };
 
-    private sealed record NavigationMembership(NavigationIndex Index, object Owner);
+    private sealed record NavigationMembership(INavigationIndex Index, object Owner);
 
     private sealed class NavigationMembershipComparer : IEqualityComparer<NavigationMembership>
     {

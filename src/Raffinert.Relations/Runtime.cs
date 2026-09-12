@@ -308,6 +308,15 @@ public sealed class RelationRuntime
         return Apply(ChangeSet.Create(change), validationMode);
     }
 
+    public ChangeImpact Apply(CollectionChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        var propertyChange = ValidateCollectionChange(change);
+        var result = CommitChanges([propertyChange]);
+        result.PolicyActions.Dispatch();
+        return result.Impact;
+    }
+
     public ChangeImpact Apply(ChangeSet changeSet)
         => Apply(changeSet, ChangeValidationMode.Default);
 
@@ -426,6 +435,33 @@ public sealed class RelationRuntime
                     "Remove and re-add the object, or declare a genuinely stable key.");
         }
         return change;
+    }
+
+    private PropertyChange ValidateCollectionChange(CollectionChange change)
+    {
+        var normalized = ValidateChange(new PropertyChange(
+            change.Set,
+            change.Owner,
+            change.Member,
+            null,
+            null));
+        var value = change.Member switch
+        {
+            PropertyInfo property => property.GetValue(change.Owner),
+            FieldInfo field => field.GetValue(change.Owner),
+            _ => null
+        };
+        if (value is not IEnumerable collection)
+            throw new InvalidOperationException($"Member '{change.Member.Name}' is not a collection.");
+        if (change.Kind != CollectionChangeKind.Reset)
+        {
+            var contains = collection.Cast<object?>().Any(item => ReferenceEquals(item, change.Item));
+            if (change.Kind == CollectionChangeKind.Add && !contains)
+                throw new InvalidOperationException("The added item is not present in the current collection.");
+            if (change.Kind == CollectionChangeKind.Remove && contains)
+                throw new InvalidOperationException("The removed item is still present in the current collection.");
+        }
+        return normalized;
     }
 
     private static IReadOnlyList<PropertyChange> NormalizeChanges(IReadOnlyList<PropertyChange> changes)

@@ -77,6 +77,7 @@ internal static class ExpressionDependencyAnalyzer
         Dictionary<ParameterExpression, ExpressionParameterRole> parameters) : ExpressionVisitor
     {
         private readonly Dictionary<ParameterExpression, ExpressionParameterRole> _parameters = parameters;
+        private readonly Dictionary<ParameterExpression, CollectionParameterBinding> _collectionBindings = [];
         private readonly List<TrackedExpressionDependency> _dependencies = [];
         private DependencyAnalysisFlags _flags;
         private bool _hasMembershipDependency;
@@ -97,9 +98,16 @@ internal static class ExpressionDependencyAnalyzer
                 }
                 else if (role != ExpressionParameterRole.DerivedValue)
                 {
+                    var rootType = memberPath.RootType;
+                    IReadOnlyList<System.Reflection.MemberInfo> members = memberPath.Members;
+                    if (_collectionBindings.TryGetValue(parameter, out var binding))
+                    {
+                        rootType = binding.RootType;
+                        members = binding.Prefix.Concat(memberPath.Members).ToArray();
+                    }
                     _dependencies.Add(new TrackedExpressionDependency(
                         role,
-                        new DependencyPath(GetParameterIndex(role), memberPath.RootType, memberPath.Members)));
+                        new DependencyPath(GetParameterIndex(role), rootType, members)));
                 }
                 return node;
             }
@@ -120,7 +128,9 @@ internal static class ExpressionDependencyAnalyzer
         {
             if (IsSupportedLinq(node))
             {
-                _hasMembershipDependency = true;
+                var collectionBinding = TryGetCollectionBinding(node.Arguments[0]);
+                if (collectionBinding is null)
+                    _hasMembershipDependency = true;
                 Visit(node.Arguments[0]);
                 foreach (var argument in node.Arguments.Skip(1))
                 {
@@ -134,12 +144,20 @@ internal static class ExpressionDependencyAnalyzer
                     var added = new List<ParameterExpression>();
                     foreach (var parameter in lambda.Parameters)
                     {
-                        if (_parameters.TryAdd(parameter, ExpressionParameterRole.RelationItem))
+                        var role = collectionBinding?.Role ?? ExpressionParameterRole.RelationItem;
+                        if (_parameters.TryAdd(parameter, role))
+                        {
                             added.Add(parameter);
+                            if (collectionBinding is not null)
+                                _collectionBindings.Add(parameter, collectionBinding);
+                        }
                     }
                     Visit(lambda.Body);
                     foreach (var parameter in added)
+                    {
+                        _collectionBindings.Remove(parameter);
                         _parameters.Remove(parameter);
+                    }
                 }
                 return node;
             }
@@ -196,7 +214,26 @@ internal static class ExpressionDependencyAnalyzer
             (declaringType == typeof(Enumerable) || declaringType == typeof(Queryable)) &&
             SupportedLinqOperators.Contains(call.Method.Name) &&
             call.Arguments.Count > 0 &&
-            IsRelationCollection(call.Arguments[0]);
+            (IsRelationCollection(call.Arguments[0]) || TryGetCollectionBinding(call.Arguments[0]) is not null);
+
+        private CollectionParameterBinding? TryGetCollectionBinding(Expression expression)
+        {
+            foreach (var parameter in _parameters.Keys)
+            {
+                if (!MemberPath.TryCreate(expression, parameter, out var path))
+                    continue;
+                var role = _parameters[parameter];
+                var rootType = path.RootType;
+                IReadOnlyList<System.Reflection.MemberInfo> prefix = path.Members;
+                if (_collectionBindings.TryGetValue(parameter, out var parent))
+                {
+                    rootType = parent.RootType;
+                    prefix = parent.Prefix.Concat(path.Members).ToArray();
+                }
+                return new CollectionParameterBinding(role, rootType, prefix);
+            }
+            return null;
+        }
 
         private bool IsRelationCollection(Expression expression)
         {
@@ -229,6 +266,11 @@ internal static class ExpressionDependencyAnalyzer
             ExpressionParameterRole.InvariantSource => 0,
             _ => 1
         };
+
+        private sealed record CollectionParameterBinding(
+            ExpressionParameterRole Role,
+            Type RootType,
+            IReadOnlyList<System.Reflection.MemberInfo> Prefix);
     }
 
     private sealed class TrackedDependencyComparer : IEqualityComparer<TrackedExpressionDependency>

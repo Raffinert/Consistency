@@ -593,6 +593,13 @@ Adding a new dependency consumer should not require adding another custom top-le
 
 # 9. P1 — Collection navigation support
 
+**Status:** Implemented.
+
+Explicit collection add, remove, and reset changes now refresh affected owners. Collection-aware
+dependency paths and bidirectional owner/item navigation indexes allow item-property changes to resolve
+their registered roots without scanning every source. Relation deltas then flow through the existing
+derived and invariant dependency graph.
+
 Only after P0/P1 propagation semantics are stable.
 
 Target cases:
