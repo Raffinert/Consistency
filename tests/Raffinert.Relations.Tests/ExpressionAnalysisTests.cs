@@ -163,6 +163,39 @@ public sealed class ExpressionAnalysisTests
         Assert.Contains(analysis.RecognizedResiduals, value => value.StartsWith("Boolean filter:"));
     }
 
+    [Fact]
+    public void Expanded_linq_operators_have_explicit_dependency_semantics()
+    {
+        Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, decimal>> selection =
+            (_, items) => items.FirstOrDefault(item => item.Enabled)!.Quantity;
+        Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, int>> paging =
+            (_, items) => items.Skip(1).Take(2).Distinct().Count();
+        Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, bool>> cardinality =
+            (_, items) => items.SingleOrDefault(item => item.Enabled) != null;
+        Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, bool>> contains =
+            (_, items) => items.Contains(items.LastOrDefault()!);
+
+        var selectionAnalysis = ExpressionDependencyAnalyzer.AnalyzeDerived(selection);
+        var pagingAnalysis = ExpressionDependencyAnalyzer.AnalyzeDerived(paging);
+        var cardinalityAnalysis = ExpressionDependencyAnalyzer.AnalyzeDerived(cardinality);
+        var containsAnalysis = ExpressionDependencyAnalyzer.AnalyzeDerived(contains);
+
+        Assert.True(selectionAnalysis.HasRelationMembershipDependency);
+        Assert.True(selectionAnalysis.LinqSemantics.HasFlag(LinqDependencySemantics.Item));
+        Assert.True(selectionAnalysis.LinqSemantics.HasFlag(LinqDependencySemantics.Ordering));
+        Assert.Contains(selectionAnalysis.Dependencies, dependency =>
+            dependency.Role == ExpressionParameterRole.RelationItem &&
+            dependency.Path.DisplayName == "DerivedItemRecord.Quantity");
+        Assert.Equal(
+            LinqDependencySemantics.Membership | LinqDependencySemantics.Ordering,
+            pagingAnalysis.LinqSemantics);
+        Assert.Equal(
+            LinqDependencySemantics.Membership | LinqDependencySemantics.Item,
+            cardinalityAnalysis.LinqSemantics);
+        Assert.True(containsAnalysis.LinqSemantics.HasFlag(LinqDependencySemantics.Membership));
+        Assert.True(containsAnalysis.LinqSemantics.HasFlag(LinqDependencySemantics.Ordering));
+    }
+
     private static bool CustomMatch(CodeHolder left, CodeHolder right) => left.Code.StartsWith(right.Code, StringComparison.Ordinal);
 
     private static class ExternalValues

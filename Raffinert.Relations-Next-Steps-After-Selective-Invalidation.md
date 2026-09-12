@@ -767,6 +767,12 @@ Do not add a source generator unless compiled expression accessors are demonstra
 
 # 13. P2 — Expand LINQ dependency coverage pragmatically
 
+**Status:** Implemented.
+
+Dependency analysis now supports `First`, `FirstOrDefault`, `Single`, `SingleOrDefault`, `Last`,
+`LastOrDefault`, `Distinct`, `Take`, `Skip`, and `Contains`. Analysis records explicit membership,
+item-property, and ordering semantics, including item members selected through first/last operators.
+
 Current common aggregate/filter/projection support is a good base.
 
 Add only well-understood operators with explicit semantics:

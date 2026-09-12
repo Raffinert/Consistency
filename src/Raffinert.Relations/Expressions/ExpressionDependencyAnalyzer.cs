@@ -18,7 +18,17 @@ internal sealed record TrackedExpressionDependency(ExpressionParameterRole Role,
 internal sealed record ExpressionDependencyAnalysis(
     IReadOnlyList<TrackedExpressionDependency> Dependencies,
     DependencyAnalysisFlags Flags,
-    bool HasRelationMembershipDependency);
+    bool HasRelationMembershipDependency,
+    LinqDependencySemantics LinqSemantics);
+
+[Flags]
+internal enum LinqDependencySemantics
+{
+    None = 0,
+    Membership = 1,
+    Item = 2,
+    Ordering = 4
+}
 
 internal static class ExpressionDependencyAnalyzer
 {
@@ -34,7 +44,17 @@ internal static class ExpressionDependencyAnalyzer
         nameof(Enumerable.Select),
         nameof(Enumerable.Where),
         nameof(Enumerable.OrderBy),
-        nameof(Enumerable.ThenBy)
+        nameof(Enumerable.ThenBy),
+        nameof(Enumerable.First),
+        nameof(Enumerable.FirstOrDefault),
+        nameof(Enumerable.Single),
+        nameof(Enumerable.SingleOrDefault),
+        nameof(Enumerable.Last),
+        nameof(Enumerable.LastOrDefault),
+        nameof(Enumerable.Distinct),
+        nameof(Enumerable.Take),
+        nameof(Enumerable.Skip),
+        nameof(Enumerable.Contains)
     ];
 
     public static ExpressionDependencyAnalysis AnalyzeRelation(LambdaExpression expression) =>
@@ -81,11 +101,13 @@ internal static class ExpressionDependencyAnalyzer
         private readonly List<TrackedExpressionDependency> _dependencies = [];
         private DependencyAnalysisFlags _flags;
         private bool _hasMembershipDependency;
+        private LinqDependencySemantics _linqSemantics;
 
         public ExpressionDependencyAnalysis CreateResult() => new(
             _dependencies.Distinct(TrackedDependencyComparer.Instance).ToArray(),
             _flags,
-            _hasMembershipDependency);
+            _hasMembershipDependency,
+            _linqSemantics);
 
         protected override Expression VisitMember(MemberExpression node)
         {
@@ -112,6 +134,18 @@ internal static class ExpressionDependencyAnalyzer
                 return node;
             }
 
+            if (node.Expression is MethodCallExpression call &&
+                IsSupportedLinq(call) &&
+                IsRelationCollection(call.Arguments[0]))
+            {
+                _dependencies.Add(new TrackedExpressionDependency(
+                    ExpressionParameterRole.RelationItem,
+                    new DependencyPath(1, node.Member.DeclaringType!, [node.Member])));
+                _linqSemantics |= LinqDependencySemantics.Item;
+                Visit(call);
+                return node;
+            }
+
             if (node.Expression is null || IsExternalMemberAccess(node))
                 _flags |= DependencyAnalysisFlags.ContainsExternalState;
             return base.VisitMember(node);
@@ -128,6 +162,7 @@ internal static class ExpressionDependencyAnalyzer
         {
             if (IsSupportedLinq(node))
             {
+                _linqSemantics |= GetLinqSemantics(node);
                 var collectionBinding = TryGetCollectionBinding(node.Arguments[0]);
                 if (collectionBinding is null)
                     _hasMembershipDependency = true;
@@ -215,6 +250,19 @@ internal static class ExpressionDependencyAnalyzer
             SupportedLinqOperators.Contains(call.Method.Name) &&
             call.Arguments.Count > 0 &&
             (IsRelationCollection(call.Arguments[0]) || TryGetCollectionBinding(call.Arguments[0]) is not null);
+
+        private static LinqDependencySemantics GetLinqSemantics(MethodCallExpression call)
+        {
+            var semantics = LinqDependencySemantics.Membership;
+            if (call.Arguments.Skip(1).Any(argument => UnwrapLambda(argument) is not null))
+                semantics |= LinqDependencySemantics.Item;
+            if (call.Method.Name is nameof(Enumerable.OrderBy) or nameof(Enumerable.ThenBy) or
+                nameof(Enumerable.First) or nameof(Enumerable.FirstOrDefault) or
+                nameof(Enumerable.Last) or nameof(Enumerable.LastOrDefault) or
+                nameof(Enumerable.Take) or nameof(Enumerable.Skip))
+                semantics |= LinqDependencySemantics.Ordering;
+            return semantics;
+        }
 
         private CollectionParameterBinding? TryGetCollectionBinding(Expression expression)
         {

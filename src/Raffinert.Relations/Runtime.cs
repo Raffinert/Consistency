@@ -73,6 +73,7 @@ public sealed class CompiledRelationModel
             lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using {derived.Relation.RightSet.ObjectType.Name}: {derived.ComputationExpression.Body}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(derived.Analysis.Flags)}");
             lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
+            lines.Add($"  LINQ semantics: {derived.Analysis.LinqSemantics}");
             foreach (var dependency in derived.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
         }

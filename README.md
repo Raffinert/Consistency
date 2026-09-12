@@ -69,6 +69,7 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 - Source lifecycle cleanup for derived, invariant, and materialized relation state
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
+- Explicit membership/item/ordering semantics for selection, cardinality, distinct, paging, and containment operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
 - A separate EF Core change-tracker adapter package
