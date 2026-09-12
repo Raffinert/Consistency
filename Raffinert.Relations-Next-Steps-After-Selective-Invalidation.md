@@ -927,6 +927,13 @@ The benchmark suite should make accidental regressions from O(local impact) to O
 
 # 17. P2 — CI and package-readiness baseline
 
+**Status:** Implemented.
+
+GitHub Actions now restores, builds, tests, verifies formatting, packs both library projects, and uploads
+the resulting NuGet artifacts. Both packages include alpha versions, descriptions, authors, tags, MIT
+license expressions, repository metadata, README files, XML docs, nullable analysis, and warnings-as-errors.
+Package publication remains intentionally disabled.
+
 Before public NuGet alpha add CI:
 
 ```text

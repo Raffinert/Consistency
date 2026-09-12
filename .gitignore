@@ -3,4 +3,5 @@
 .vs/
 TestResults/
 BenchmarkDotNet.Artifacts/
+artifacts/
 *.user
