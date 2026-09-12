@@ -881,6 +881,14 @@ Document the support policy either way.
 
 # 13. P2 — NuGet/release hardening
 
+**Status:** Implemented.
+
+Both packages now use deterministic/CI build settings, current GitHub SourceLink, embedded repository
+URL/branch/commit metadata, MSBuild package validation, and portable `.snupkg` symbol packages. CI uploads
+both package kinds but has no publication step. `CHANGELOG.md` contains alpha release notes, while
+`RELEASING.md` defines prerelease/SemVer policy, API-baseline promotion, verification, tagging, and a
+manual scoped-key NuGet publication checklist.
+
 Before the first public package release, add:
 
 ```text

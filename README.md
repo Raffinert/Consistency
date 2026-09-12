@@ -184,6 +184,7 @@ last `ResetDiagnostics()` call.
 - Structured compiled-model diagnostics and cumulative incremental-work runtime counters
 - Deterministic full-graph randomized optimized-versus-scan correctness coverage
 - CI restore/build/test/format/pack validation and NuGet-ready package metadata
+- Deterministic SourceLink-enabled packages, repository commit metadata, package validation, and `.snupkg` symbols
 
 ## Further work
 
@@ -219,6 +220,11 @@ checked-in `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` baselines. Public s
 removals, and nullability changes therefore fail the normal build until deliberately approved. The
 public `ObjectSetBuilder<T>` remains intentional: it is the transient type-safe stage that requires a
 stable key before yielding the runtime `ObjectSet<T>` handle.
+
+Release builds are deterministic and SourceLink-enabled, embed repository URL/branch/commit metadata,
+run package validation, and produce `.snupkg` symbol packages. See `CHANGELOG.md` for release notes and
+`RELEASING.md` for the prerelease version policy and manual publication checklist. Main-branch CI only
+uploads package artifacts; it never publishes them.
 
 Immediate invariant evaluations and repair callbacks run only after runtime-owned state has committed.
 If a callback throws, the operation surfaces that exception but does not roll back the committed runtime state.
