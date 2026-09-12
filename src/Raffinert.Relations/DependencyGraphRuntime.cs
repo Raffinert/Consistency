@@ -2,6 +2,16 @@ using Raffinert.Relations.Expressions;
 
 namespace Raffinert.Relations;
 
+internal sealed record DerivedImpactSnapshot(
+    IDerivedDefinition Definition,
+    DependencyImpactKind Severity,
+    IReadOnlyCollection<object> Sources);
+
+internal sealed record InvariantImpactSnapshot(
+    IInvariantDefinition Definition,
+    DependencyImpactKind Severity,
+    IReadOnlyCollection<object> Sources);
+
 /// <summary>
 /// Propagates source-scoped dependency impacts after relation state has been updated. This is a
 /// deliberately small graph of the node kinds the runtime currently supports, rather than a
@@ -66,6 +76,16 @@ internal sealed class DependencyGraphRuntime
         }
     }
 
+    public IReadOnlyList<DerivedImpactSnapshot> GetDerivedImpacts() => _derivedNodes
+        .SelectMany(node =>
+            Snapshot(node.Definition, node.InvalidSources, node.DirtySources))
+        .ToArray();
+
+    public IReadOnlyList<InvariantImpactSnapshot> GetInvariantImpacts() => _invariantNodes
+        .SelectMany(node =>
+            Snapshot(node.Definition, node.InvalidSources, node.DirtySources))
+        .ToArray();
+
     public void ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
@@ -106,7 +126,7 @@ internal sealed class DependencyGraphRuntime
                 node.SourceDependencies,
                 changes);
             if (invariantRoots.Count > 0)
-                node.State.ApplyImpact(invariantRoots, DependencyImpactKind.Dirty, policyActions);
+                node.ApplyDirect(invariantRoots, policyActions);
         }
     }
 
@@ -150,6 +170,28 @@ internal sealed class DependencyGraphRuntime
             foreach (var change in changes)
                 roots.UnionWith(_navigation.ResolveRoots(rootSet, dependency.Path, change.Instance, change.Member));
         return roots;
+    }
+
+    private static IEnumerable<DerivedImpactSnapshot> Snapshot(
+        IDerivedDefinition definition,
+        IReadOnlyCollection<object> invalid,
+        IReadOnlyCollection<object> dirty)
+    {
+        if (invalid.Count > 0)
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid);
+        if (dirty.Count > 0)
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty);
+    }
+
+    private static IEnumerable<InvariantImpactSnapshot> Snapshot(
+        IInvariantDefinition definition,
+        IReadOnlyCollection<object> invalid,
+        IReadOnlyCollection<object> dirty)
+    {
+        if (invalid.Count > 0)
+            yield return new InvariantImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid);
+        if (dirty.Count > 0)
+            yield return new InvariantImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty);
     }
 
     private sealed class DerivedNode
@@ -240,13 +282,30 @@ internal sealed class DependencyGraphRuntime
         public IInvariantDefinition Definition { get; }
         public IInvariantRuntimeState State { get; }
         public IReadOnlyList<TrackedExpressionDependency> SourceDependencies { get; }
+        public HashSet<object> InvalidSources { get; private set; } = NewSet();
+        public HashSet<object> DirtySources { get; private set; } = NewSet();
 
         public void ApplyInherited(RuntimePolicyActions policyActions)
         {
+            InvalidSources = NewSet(_derived.InvalidSources);
+            DirtySources = NewSet(_derived.DirtySources);
             if (_derived.InvalidSources.Count > 0)
                 State.ApplyImpact(_derived.InvalidSources, DependencyImpactKind.Invalid, policyActions);
             if (_derived.DirtySources.Count > 0)
                 State.ApplyImpact(_derived.DirtySources, DependencyImpactKind.Dirty, policyActions);
         }
+
+        public void ApplyDirect(IEnumerable<object> sources, RuntimePolicyActions policyActions)
+        {
+            var affected = NewSet(sources);
+            DirtySources.UnionWith(affected);
+            DirtySources.ExceptWith(InvalidSources);
+            State.ApplyImpact(affected, DependencyImpactKind.Dirty, policyActions);
+        }
+
+        private static HashSet<object> NewSet(IEnumerable<object>? values = null) =>
+            values is null
+                ? new HashSet<object>(ReferenceEqualityComparer.Instance)
+                : new HashSet<object>(values, ReferenceEqualityComparer.Instance);
     }
 }

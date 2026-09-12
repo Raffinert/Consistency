@@ -143,6 +143,9 @@ public sealed class RelationRuntime
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
     private readonly IReadOnlyList<ISourceLifecycleParticipant> _sourceLifecycleParticipants;
     private readonly DependencyGraphRuntime _dependencyGraph;
+    private readonly IReadOnlyDictionary<IRelationDefinition, int> _relationIds;
+    private readonly IReadOnlyDictionary<IDerivedDefinition, int> _derivedIds;
+    private readonly IReadOnlyDictionary<IInvariantDefinition, int> _invariantIds;
     private long _version;
 
     /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
@@ -176,6 +179,12 @@ public sealed class RelationRuntime
         var impactPolicy = dependencyImpactPolicy ?? DefaultDependencyImpactPolicy.Instance;
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
+        _relationIds = relations.Select((definition, id) => (definition, id))
+            .ToDictionary(pair => pair.definition, pair => pair.id);
+        _derivedIds = derivedStates.Select((definition, id) => (definition, id))
+            .ToDictionary(pair => pair.definition, pair => pair.id);
+        _invariantIds = invariants.Select((definition, id) => (definition, id))
+            .ToDictionary(pair => pair.definition, pair => pair.id);
         foreach (var relation in derivedStates.Select(derived => derived.Relation).Distinct())
             _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
@@ -346,10 +355,27 @@ public sealed class RelationRuntime
     /// </summary>
     public ChangeImpact Apply(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
+        var result = ApplyDetailed(mutationSet, validationMode);
+        result.DispatchPolicies();
+        return result.ChangeImpact;
+    }
+
+    /// <summary>
+    /// Validates and commits a mutation batch, returning stable impact/request data without invoking
+    /// application callbacks. Call <see cref="RuntimeApplyResult.DispatchPolicies"/> to dispatch them.
+    /// </summary>
+    public RuntimeApplyResult ApplyDetailed(MutationSet mutationSet) =>
+        ApplyDetailed(mutationSet, ChangeValidationMode.Default);
+
+    /// <summary>
+    /// Validates and commits a mutation batch, returning stable impact/request data without invoking
+    /// application callbacks. Call <see cref="RuntimeApplyResult.DispatchPolicies"/> to dispatch them.
+    /// </summary>
+    public RuntimeApplyResult ApplyDetailed(MutationSet mutationSet, ChangeValidationMode validationMode)
+    {
         var prepared = Prepare(mutationSet, validationMode);
         var impact = Commit(prepared);
-        Dispatch(prepared);
-        return impact;
+        return CreateDetailedResult(prepared, impact);
     }
 
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
@@ -408,7 +434,7 @@ public sealed class RelationRuntime
                 $"but the current version is {Version}. Prepare the mutation again.");
     }
 
-    private RuntimeApplyResult CommitMutations(
+    private RuntimeCommitResult CommitMutations(
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes)
     {
@@ -442,7 +468,65 @@ public sealed class RelationRuntime
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
         _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
-        return new RuntimeApplyResult(impact.ToPublic(), policyActions);
+        return new RuntimeCommitResult(impact.ToPublic(), policyActions);
+    }
+
+    private RuntimeApplyResult CreateDetailedResult(PreparedMutation prepared, ChangeImpact impact)
+    {
+        var relationImpacts = LastRelationImpacts
+            .OrderBy(pair => _relationIds[pair.Key])
+            .Select(pair => new RelationMutationImpact(
+                _relationIds[pair.Key],
+                pair.Key.LeftSet.ObjectType,
+                pair.Key.RightSet.ObjectType,
+                Array.AsReadOnly(pair.Value.AddedPairs
+                    .Select(value => new RelationPairImpact(value.Left, value.Right)).ToArray()),
+                Array.AsReadOnly(pair.Value.RemovedPairs
+                    .Select(value => new RelationPairImpact(value.Left, value.Right)).ToArray()),
+                Array.AsReadOnly(pair.Value.AffectedLefts.ToArray())))
+            .ToArray();
+        var derivedImpacts = _dependencyGraph.GetDerivedImpacts()
+            .GroupBy(value => value.Definition)
+            .Select(group => new DerivedMutationImpact(
+                _derivedIds[group.Key],
+                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
+                    ? DependencySeverity.Invalid
+                    : DependencySeverity.Dirty,
+                Array.AsReadOnly(group.SelectMany(value => value.Sources)
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray())))
+            .OrderBy(value => value.DerivedId)
+            .ToArray();
+        var invariantImpacts = _dependencyGraph.GetInvariantImpacts()
+            .GroupBy(value => value.Definition)
+            .Select(group => new InvariantMutationImpact(
+                _invariantIds[group.Key],
+                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
+                    ? DependencySeverity.Invalid
+                    : DependencySeverity.Dirty,
+                Array.AsReadOnly(group.SelectMany(value => value.Sources)
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray())))
+            .OrderBy(value => value.InvariantId)
+            .ToArray();
+        var actions = prepared.PolicyActions!;
+        var repairRequests = actions.RepairRequests
+            .Select(request => new RepairRequestInfo(
+                _invariantIds[request.Invariant],
+                request.Source,
+                request.Reason.ToSeverity()))
+            .ToArray();
+        var immediateRequests = actions.ImmediateEvaluations
+            .Select(request => new ImmediateEvaluationRequestInfo(
+                _invariantIds[request.Invariant.Definition],
+                request.Source))
+            .ToArray();
+        return new RuntimeApplyResult(
+            impact,
+            relationImpacts,
+            derivedImpacts,
+            invariantImpacts,
+            repairRequests,
+            immediateRequests,
+            () => Dispatch(prepared));
     }
 
     private void CommitAdd(

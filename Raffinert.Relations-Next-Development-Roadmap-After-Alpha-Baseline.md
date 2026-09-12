@@ -419,6 +419,14 @@ A normal package consumer can configure domain correctness severity without Inte
 
 # 5. P1 — Promote policy actions/repair requests to a public result model
 
+**Status:** Implemented.
+
+`ApplyDetailed` now commits synchronously and returns a public `RuntimeApplyResult` without invoking
+application callbacks. It exposes `ChangeImpact`, relation pair deltas, derived/invariant impacts,
+deduplicated repair requests, and immediate-evaluation requests using deterministic definition IDs and
+public data-only records. `DispatchPolicies()` remains an explicit one-shot convenience; asynchronous
+queue/outbox work can consume the request data independently after commit.
+
 Policy execution is now correctly deferred until after runtime-owned state commits.
 
 The next step is to stop making callbacks the only useful integration surface.

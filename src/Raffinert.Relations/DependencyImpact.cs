@@ -78,6 +78,13 @@ internal static class DependencySeverityExtensions
         DependencySeverity.Invalid => DependencyImpactKind.Invalid,
         _ => throw new ArgumentOutOfRangeException(nameof(severity))
     };
+
+    public static DependencySeverity ToSeverity(this DependencyImpactKind kind) => kind switch
+    {
+        DependencyImpactKind.Dirty => DependencySeverity.Dirty,
+        DependencyImpactKind.Invalid => DependencySeverity.Invalid,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 }
 
 internal enum DependencyImpactKind

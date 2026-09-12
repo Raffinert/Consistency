@@ -90,6 +90,21 @@ var received = model.Derived(poLines)
 `Dirty` means the cached result must be recomputed when freshness matters; `Invalid` means it must not
 be relied upon before recomputation. The same policy has identical semantics for scan and hash plans.
 
+For outbox, queue, or background-work integrations, `ApplyDetailed` commits synchronously but returns
+policy work as data before any application callback runs:
+
+```csharp
+RuntimeApplyResult result = runtime.ApplyDetailed(mutations);
+
+foreach (var request in result.RepairRequests)
+    outbox.Add(request.InvariantId, request.Source, request.Reason);
+
+result.DispatchPolicies(); // optional configured in-process callbacks
+```
+
+The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
+requests, and the original `ChangeImpact`. Definition IDs are deterministic within a compiled model.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -121,6 +136,7 @@ be relied upon before recomputation. The same policy has identical semantics for
 - Explicit membership/item/ordering semantics for selection, cardinality, distinct, paging, and containment operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
+- Structured `RuntimeApplyResult` impacts and policy requests with explicit one-shot dispatch
 - A separate EF Core change-tracker adapter package
 - EF Core unit-of-work capture with prepare-before-save, versioned commit-after-success, relationship resets, and explicit set mapping
 - A BenchmarkDotNet benchmark project

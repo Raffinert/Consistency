@@ -897,6 +897,89 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Detailed_apply_exposes_stable_impacts_and_repair_requests_before_dispatch()
+    {
+        var scheduled = new List<CodeHolder>();
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Impact(policy => policy.MembershipAdded(DependencySeverity.Invalid))
+            .Compute((source, matches) => matches.Count);
+        model.Invariant(sources).Using(count).Must((source, value) => value == 0)
+            .ScheduleRepairWith(scheduled.Add);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(0, runtime.Get(count, source));
+        scheduled.Clear();
+        item.Code = "A";
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, item, x => x.Code, "B", "A")));
+
+        Assert.Empty(scheduled);
+        var relationImpact = Assert.Single(result.RelationImpacts);
+        Assert.Equal(0, relationImpact.RelationId);
+        Assert.Equal(typeof(CodeHolder), relationImpact.LeftType);
+        Assert.Equal(typeof(CodeHolder), relationImpact.RightType);
+        var addedPair = Assert.Single(relationImpact.AddedPairs);
+        Assert.Same(source, addedPair.Left);
+        Assert.Same(item, addedPair.Right);
+        var derivedImpact = Assert.Single(result.DerivedImpacts);
+        Assert.Equal(0, derivedImpact.DerivedId);
+        Assert.Equal(DependencySeverity.Invalid, derivedImpact.Severity);
+        Assert.Equal([source], derivedImpact.Sources);
+        var invariantImpact = Assert.Single(result.InvariantImpacts);
+        Assert.Equal(0, invariantImpact.InvariantId);
+        Assert.Equal(DependencySeverity.Invalid, invariantImpact.Severity);
+        var repair = Assert.Single(result.RepairRequests);
+        Assert.Equal(0, repair.InvariantId);
+        Assert.Same(source, repair.Source);
+        Assert.Equal(DependencySeverity.Invalid, repair.Reason);
+        Assert.Empty(result.ImmediateEvaluationRequests);
+
+        result.DispatchPolicies();
+
+        Assert.Equal([source], scheduled);
+        Assert.True(result.PoliciesDispatched);
+    }
+
+    [Fact]
+    public void Detailed_apply_exposes_immediate_evaluation_requests()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        var invariant = model.Invariant(sources).Using(count).Must((source, value) => value == 0)
+            .ReactWith(InvariantReaction.EvaluateImmediately);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.True(runtime.Evaluate(invariant, source));
+        item.Code = "A";
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, item, x => x.Code, "B", "A")));
+
+        var request = Assert.Single(result.ImmediateEvaluationRequests);
+        Assert.Equal(0, request.InvariantId);
+        Assert.Same(source, request.Source);
+        Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(invariant, source));
+
+        result.DispatchPolicies();
+
+        Assert.Equal(InvariantEvaluationState.Violated, runtime.GetState(invariant, source));
+    }
+
+    [Fact]
     public void Throwing_repair_callback_observes_committed_state_without_rollback()
     {
         var model = new RelationModelBuilder();
