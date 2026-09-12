@@ -6,6 +6,44 @@ namespace Raffinert.Relations.Tests;
 public sealed class ExpressionAnalysisTests
 {
     [Fact]
+    public void Planner_selects_hash_join_for_recognized_equality()
+    {
+        Expression<Func<CodeHolder, CodeHolder, bool>> expression = (a, b) => a.Code == b.Code;
+
+        var plan = RelationPlanner.Plan(RelationExpressionAnalyzer.Analyze(expression));
+
+        var hash = Assert.IsType<HashJoinAccessPlan>(plan);
+        Assert.Single(hash.JoinKeyParts);
+    }
+
+    [Fact]
+    public void Planner_selects_scan_when_no_safe_join_is_available()
+    {
+        Expression<Func<CodeHolder, CodeHolder, bool>> expression = (a, b) => CustomMatch(a, b);
+
+        var plan = RelationPlanner.Plan(RelationExpressionAnalyzer.Analyze(expression));
+
+        Assert.Same(ScanAccessPlan.Instance, plan);
+    }
+
+    [Theory]
+    [InlineData(StringComparison.Ordinal)]
+    [InlineData(StringComparison.OrdinalIgnoreCase)]
+    public void Recognizes_well_known_string_equality(StringComparison comparison)
+    {
+        Expression<Func<CodeHolder, CodeHolder, bool>> expression = comparison == StringComparison.Ordinal
+            ? (a, b) => string.Equals(a.Code, b.Code, StringComparison.Ordinal)
+            : (a, b) => string.Equals(a.Code, b.Code, StringComparison.OrdinalIgnoreCase);
+
+        var analysis = RelationExpressionAnalyzer.Analyze(expression);
+
+        var key = Assert.Single(analysis.JoinKeyParts);
+        Assert.Equal(comparison.ToString(), key.EqualitySemantics);
+        Assert.Equal(DependencyAnalysisFlags.Complete, analysis.DependencyAnalysis);
+        Assert.False(analysis.HasResidualPredicate);
+    }
+
+    [Fact]
     public void Extracts_single_equality_join()
     {
         Expression<Func<CodeHolder, CodeHolder, bool>> expression = (a, b) => a.Code == b.Code;
@@ -52,7 +90,7 @@ public sealed class ExpressionAnalysisTests
 
         Assert.Single(analysis.JoinKeyParts);
         Assert.True(analysis.HasResidualPredicate);
-        Assert.True(analysis.IsDependencyAnalysisComplete);
+        Assert.Equal(DependencyAnalysisFlags.Complete, analysis.DependencyAnalysis);
         Assert.Contains(analysis.Dependencies, path => path.DisplayName == "CodeHolder.Enabled");
     }
 
@@ -64,8 +102,32 @@ public sealed class ExpressionAnalysisTests
         var analysis = RelationExpressionAnalyzer.Analyze(expression);
 
         Assert.Empty(analysis.JoinKeyParts);
-        Assert.False(analysis.IsDependencyAnalysisComplete);
+        Assert.True(analysis.DependencyAnalysis.HasFlag(DependencyAnalysisFlags.ContainsOpaqueCode));
         Assert.True(analysis.HasResidualPredicate);
+    }
+
+    [Fact]
+    public void Distinguishes_captured_state_from_opaque_code()
+    {
+        var prefix = "A";
+        Expression<Func<CodeHolder, CodeHolder, bool>> expression =
+            (a, b) => a.Code == b.Code && b.Code.StartsWith(prefix);
+
+        var analysis = RelationExpressionAnalyzer.Analyze(expression);
+
+        Assert.True(analysis.DependencyAnalysis.HasFlag(DependencyAnalysisFlags.ContainsExternalState));
+        Assert.True(analysis.DependencyAnalysis.HasFlag(DependencyAnalysisFlags.ContainsOpaqueCode));
+    }
+
+    [Fact]
+    public void Marks_static_state_as_external_without_calling_it_opaque()
+    {
+        Expression<Func<CodeHolder, CodeHolder, bool>> expression =
+            (a, b) => a.Code == b.Code && b.Code == ExternalValues.Code;
+
+        var analysis = RelationExpressionAnalyzer.Analyze(expression);
+
+        Assert.Equal(DependencyAnalysisFlags.ContainsExternalState, analysis.DependencyAnalysis);
     }
 
     [Fact]
@@ -79,9 +141,32 @@ public sealed class ExpressionAnalysisTests
         Assert.Equal(["PurchaseOrder", "Number"], part.Right.Members.Select(member => member.Name));
         Assert.Equal("PurchaseOrderLine.PurchaseOrder.Number", part.Right.DisplayName);
         var analysis = RelationExpressionAnalyzer.Analyze(expression);
+        var completePath = Assert.Single(analysis.DependencyPaths, dependency => dependency.Segments.Count == 2);
+        Assert.Equal(1, completePath.RootParameterIndex);
+        Assert.Equal(["PurchaseOrder", "Number"], completePath.Segments.Select(segment => segment.Member.Name));
         Assert.Contains(analysis.Dependencies, dependency => dependency.DisplayName == "PurchaseOrderLine.PurchaseOrder");
         Assert.Contains(analysis.Dependencies, dependency => dependency.DisplayName == "PurchaseOrder.Number");
     }
 
+    [Fact]
+    public void Recognizes_constant_and_range_residual_metadata_without_optimizing_it()
+    {
+        Expression<Func<DateRangeHolder, DateRangeHolder, bool>> expression = (a, b) =>
+            a.Date >= b.ValidFrom && a.Date < b.ValidTo && b.Enabled;
+
+        var analysis = RelationExpressionAnalyzer.Analyze(expression);
+
+        Assert.Empty(analysis.JoinKeyParts);
+        Assert.True(analysis.HasResidualPredicate);
+        Assert.Equal(3, analysis.RecognizedResiduals.Count);
+        Assert.Contains(analysis.RecognizedResiduals, value => value.StartsWith("Range:"));
+        Assert.Contains(analysis.RecognizedResiduals, value => value.StartsWith("Boolean filter:"));
+    }
+
     private static bool CustomMatch(CodeHolder left, CodeHolder right) => left.Code.StartsWith(right.Code, StringComparison.Ordinal);
+
+    private static class ExternalValues
+    {
+        public static string Code { get; set; } = "A";
+    }
 }

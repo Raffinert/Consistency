@@ -7,7 +7,7 @@ Relationships are defined as expression trees. The library analyzes those expres
 ## Example
 
 ```csharp
-var model = new InvariantModelBuilder();
+var model = new RelationModelBuilder();
 
 var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
 var poLines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -29,6 +29,8 @@ runtime.Apply(Change.Property(poLines, poLine, x => x.ItemNumber, oldItem, poLin
 
 `Change.Property` observes a mutation that has already happened; it never mutates the domain object.
 The object-set argument can be omitted when the instance belongs to exactly one registered set.
+An object's declared key is immutable while the object is registered. Reported key changes are rejected;
+remove and re-add the object when its identity genuinely needs to change.
 
 ## Implemented
 
@@ -36,16 +38,27 @@ The object-set argument can be omitted when the instance belongs to exactly one 
 - Binary relations whose original compiled predicate remains the semantic authority
 - Dependency and nested member-path analysis
 - Automatic single and composite hash indexes for safe equality joins
+- Explicit scan and hash-join access planning
+- Ordinal and ordinal-ignore-case comparer-aware string joins
 - Correct scan fallback for opaque or unsupported predicates
 - Incremental add, remove, and scalar-property index maintenance
-- One-reference reverse navigation for nested indexed paths
+- Shared arbitrary-depth reverse navigation for nested paths
+- Access-impact and semantic-impact reporting
+- Atomic property `ChangeSet` application
+- Bidirectional relation queries
+- Lazy derived state with distinct fresh, dirty, and invalid states
+- Invariant evaluation with immediate, dirty, and invalidation policies
+- A separate EF Core change-tracker adapter package
+- A BenchmarkDotNet benchmark project
 - Human-readable compiled model diagnostics through `DebugView`
 
-## Planned
+## Further work
 
-- Arbitrary-depth and collection reverse navigation
-- Derived state with fresh, dirty, and invalid states
-- Invariant evaluation and repair policies
-- Batch change sets and an optional EF Core adapter
+- Collection navigation
+- Range access plans (range expressions are currently diagnostic metadata)
+- Selective rather than conservative derived-state invalidation
+- Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.
+
+`RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.

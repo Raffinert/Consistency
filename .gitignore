@@ -2,4 +2,5 @@
 **/obj/
 .vs/
 TestResults/
+BenchmarkDotNet.Artifacts/
 *.user

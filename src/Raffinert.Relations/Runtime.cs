@@ -6,20 +6,28 @@ using Raffinert.Relations.Expressions;
 
 namespace Raffinert.Relations;
 
-public sealed class CompiledInvariantModel
+public sealed class CompiledRelationModel
 {
     private readonly IReadOnlyList<IObjectSetDefinition> _sets;
     private readonly IReadOnlyList<IRelationDefinition> _relations;
+    private readonly IReadOnlyList<IDerivedDefinition> _derivedStates;
+    private readonly IReadOnlyList<IInvariantDefinition> _invariants;
 
-    internal CompiledInvariantModel(IReadOnlyList<IObjectSetDefinition> sets, IReadOnlyList<IRelationDefinition> relations)
+    internal CompiledRelationModel(
+        IReadOnlyList<IObjectSetDefinition> sets,
+        IReadOnlyList<IRelationDefinition> relations,
+        IReadOnlyList<IDerivedDefinition> derivedStates,
+        IReadOnlyList<IInvariantDefinition> invariants)
     {
         _sets = sets;
         _relations = relations;
+        _derivedStates = derivedStates;
+        _invariants = invariants;
         DebugView = CreateDebugView();
     }
 
     public string DebugView { get; }
-    public InvariantRuntime CreateRuntime() => new(_sets, _relations);
+    public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants);
 
     private string CreateDebugView()
     {
@@ -34,17 +42,39 @@ public sealed class CompiledInvariantModel
             lines.Add($"Relation {relation.LeftSet.ObjectType.Name} -> {relation.RightSet.ObjectType.Name}");
             lines.Add($"  Predicate: {relation.PredicateExpression.Body}");
             lines.Add("  Dependencies:");
-            foreach (var dependency in relation.Analysis.Dependencies)
+            foreach (var dependency in relation.Analysis.DependencyPaths)
                 lines.Add($"    {dependency.DisplayName}");
             lines.Add("  Join key:");
             foreach (var key in relation.Analysis.JoinKeyParts)
-                lines.Add($"    {key.Left.DisplayName} <-> {key.Right.DisplayName}");
-            lines.Add($"  Access: {(relation.Analysis.JoinKeyParts.Count > 0 ? "HashIndex" : "Scan")}");
-            lines.Add($"  Dependency analysis: {(relation.Analysis.IsDependencyAnalysisComplete ? "Complete" : "Incomplete")}");
+                lines.Add($"    {key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})");
+            lines.Add($"  Access plan: {relation.AccessPlan.DisplayName}");
+            lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
             lines.Add($"  Residual predicate: {(relation.Analysis.HasResidualPredicate ? "Yes" : "No")}");
+            foreach (var residual in relation.Analysis.RecognizedResiduals)
+                lines.Add($"    {residual}");
+            var navigationEdges = relation.Analysis.DependencyPaths
+                .SelectMany(path => path.Segments.Take(Math.Max(0, path.Segments.Count - 1)))
+                .Where(segment => !segment.ValueType.IsValueType && segment.ValueType != typeof(string))
+                .Select(segment => $"{segment.DeclaringType.Name}.{segment.Member.Name}")
+                .Distinct()
+                .ToArray();
+            if (navigationEdges.Length > 0)
+            {
+                lines.Add("  Navigation indexes:");
+                foreach (var edge in navigationEdges)
+                    lines.Add($"    {edge} (shared reverse tracked)");
+            }
         }
+        foreach (var derived in _derivedStates)
+            lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using {derived.Relation.RightSet.ObjectType.Name}: {derived.ComputationExpression.Body}");
         return string.Join(Environment.NewLine, lines);
     }
+
+    private static string FormatDependencyAnalysis(DependencyAnalysisFlags flags) =>
+        flags == DependencyAnalysisFlags.Complete
+            ? nameof(DependencyAnalysisFlags.Complete)
+            : string.Join(", ", Enum.GetValues<DependencyAnalysisFlags>()
+                .Where(flag => flag != DependencyAnalysisFlags.Complete && flags.HasFlag(flag)));
 
     private static string GetMemberName(Expression? expression)
     {
@@ -53,31 +83,37 @@ public sealed class CompiledInvariantModel
     }
 }
 
-public sealed class InvariantRuntime
+/// <summary>
+/// Stores and queries the runtime state of a compiled relation model. This type is not thread-safe;
+/// mutations and queries must be externally synchronized.
+/// </summary>
+public sealed class RelationRuntime
 {
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> _relations;
-    private readonly IReadOnlyDictionary<(IObjectSetDefinition Set, MemberInfo Member), IReadOnlyCollection<IRelationRuntimeState>> _dependencies;
+    private readonly NavigationIndexRegistry _navigation;
+    private readonly ImpactResolver _impactResolver;
+    private readonly IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> _derivedStates;
+    private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
 
-    internal InvariantRuntime(IReadOnlyList<IObjectSetDefinition> sets, IReadOnlyList<IRelationDefinition> relations)
+    internal RelationRuntime(
+        IReadOnlyList<IObjectSetDefinition> sets,
+        IReadOnlyList<IRelationDefinition> relations,
+        IReadOnlyList<IDerivedDefinition> derivedStates,
+        IReadOnlyList<IInvariantDefinition> invariants)
     {
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
-        var dependencies = new Dictionary<(IObjectSetDefinition, MemberInfo), HashSet<IRelationRuntimeState>>();
-        foreach (var pair in _relations)
-        {
-            foreach (var dependency in pair.Key.Analysis.Dependencies)
-            {
-                foreach (var set in sets.Where(set => set.ObjectType == dependency.RootType))
-                {
-                    var key = (set, dependency.Members[0]);
-                    if (!dependencies.TryGetValue(key, out var affected))
-                        dependencies.Add(key, affected = []);
-                    affected.Add(pair.Value);
-                }
-            }
-        }
-        _dependencies = dependencies.ToDictionary(pair => pair.Key, pair => (IReadOnlyCollection<IRelationRuntimeState>)pair.Value);
+        _navigation = new NavigationIndexRegistry(sets, relations, _sets);
+        _impactResolver = new ImpactResolver(relations, _relations, _navigation);
+        _derivedStates = derivedStates.ToDictionary(
+            definition => definition,
+            definition => definition.CreateState(_relations[definition.Relation]));
+        _invariants = invariants.ToDictionary(
+            definition => definition,
+            definition => definition.CreateState(
+                _derivedStates[definition.Derived],
+                _sets[definition.Derived.SourceSet]));
     }
 
     public void Add<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -97,8 +133,13 @@ public sealed class InvariantRuntime
     {
         var state = GetSet(definition);
         state.Add(instance);
-        foreach (var relation in _relations.Values.Where(relation => ReferenceEquals(relation.RightSet, definition)))
+        _navigation.AddRoot(definition, instance);
+        var affectedRelations = _relations
+            .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
+            .ToArray();
+        foreach (var relation in affectedRelations.Select(pair => pair.Value))
             relation.AddRight(instance);
+        InvalidateForRelationMutations(affectedRelations.Select(pair => pair.Key));
     }
 
     public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -118,9 +159,15 @@ public sealed class InvariantRuntime
     {
         var state = GetSet(definition);
         if (!state.Contains(instance)) return false;
-        foreach (var relation in _relations.Values.Where(relation => ReferenceEquals(relation.RightSet, definition)))
+        var affectedRelations = _relations
+            .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
+            .ToArray();
+        foreach (var relation in affectedRelations.Select(pair => pair.Value))
             relation.RemoveRight(instance);
-        return state.Remove(instance);
+        _navigation.RemoveRoot(definition, instance);
+        var removed = state.Remove(instance);
+        InvalidateForRelationMutations(affectedRelations.Select(pair => pair.Key));
+        return removed;
     }
 
     public IReadOnlyList<TRight> Related<TLeft, TRight>(Relation<TLeft, TRight> relation, TLeft left)
@@ -138,28 +185,152 @@ public sealed class InvariantRuntime
     public IReadOnlyList<TRight> Related<TLeft, TRight>(TLeft left, Relation<TLeft, TRight> relation)
         where TLeft : class where TRight : class => Related(relation, left);
 
-    public void Apply(PropertyChange change)
+    public IReadOnlyList<TRight> RelatedFromLeft<TLeft, TRight>(Relation<TLeft, TRight> relation, TLeft left)
+        where TLeft : class where TRight : class => Related(relation, left);
+
+    public IReadOnlyList<TLeft> RelatedFromRight<TLeft, TRight>(Relation<TLeft, TRight> relation, TRight right)
+        where TLeft : class where TRight : class
+    {
+        ArgumentNullException.ThrowIfNull(relation);
+        ArgumentNullException.ThrowIfNull(right);
+        if (!_relations.TryGetValue(relation.Definition, out var state))
+            throw new ArgumentException("The relation does not belong to this compiled model.", nameof(relation));
+        if (!_sets[relation.Definition.Right].Contains(right))
+            throw new InvalidOperationException("The right instance is not registered in the relation's object set.");
+        return ((RelationRuntimeState<TLeft, TRight>)state).RelatedFromRight(right);
+    }
+
+    public TValue Get<TSource, TItem, TValue>(Derived<TSource, TItem, TValue> derived, TSource source)
+        where TSource : class where TItem : class
+    {
+        ArgumentNullException.ThrowIfNull(derived);
+        ArgumentNullException.ThrowIfNull(source);
+        if (!_derivedStates.TryGetValue(derived.Definition, out var state))
+            throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
+        if (!_sets[derived.Definition.SourceSet].Contains(source))
+            throw new InvalidOperationException("The source instance is not registered in the derived state's object set.");
+        return ((DerivedRuntimeState<TSource, TItem, TValue>)state).Get(source);
+    }
+
+    public DerivedValueState GetState<TSource, TItem, TValue>(Derived<TSource, TItem, TValue> derived, TSource source)
+        where TSource : class where TItem : class
+    {
+        ArgumentNullException.ThrowIfNull(derived);
+        ArgumentNullException.ThrowIfNull(source);
+        if (!_derivedStates.TryGetValue(derived.Definition, out var state))
+            throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
+        return ((DerivedRuntimeState<TSource, TItem, TValue>)state).GetState(source);
+    }
+
+    public bool Evaluate<TSource, TItem, TValue>(Invariant<TSource, TItem, TValue> invariant, TSource source)
+        where TSource : class where TItem : class
+    {
+        ArgumentNullException.ThrowIfNull(invariant);
+        ArgumentNullException.ThrowIfNull(source);
+        if (!_invariants.TryGetValue(invariant.Definition, out var state))
+            throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
+        return ((InvariantRuntimeState<TSource, TItem, TValue>)state).Evaluate(source);
+    }
+
+    public InvariantEvaluationState GetState<TSource, TItem, TValue>(Invariant<TSource, TItem, TValue> invariant, TSource source)
+        where TSource : class where TItem : class
+    {
+        ArgumentNullException.ThrowIfNull(invariant);
+        ArgumentNullException.ThrowIfNull(source);
+        if (!_invariants.TryGetValue(invariant.Definition, out var state))
+            throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
+        return ((InvariantRuntimeState<TSource, TItem, TValue>)state).GetState(source);
+    }
+
+    public ChangeImpact Apply(PropertyChange change)
     {
         ArgumentNullException.ThrowIfNull(change);
+        return Apply(ChangeSet.Create(change));
+    }
+
+    public ChangeImpact Apply(ChangeSet changeSet)
+    {
+        ArgumentNullException.ThrowIfNull(changeSet);
+        var changes = changeSet.Changes.Select(ValidateChange).ToArray();
+        var impact = new ResolvedChangeImpact();
+        foreach (var change in changes)
+            impact.MergeFrom(_impactResolver.Resolve(change));
+
+        foreach (var (rootSet, root) in impact.AffectedRoots)
+            _navigation.RefreshRoot(rootSet, root);
+        foreach (var pair in impact.ReindexRoots)
+            foreach (var root in pair.Value)
+                pair.Key.ReindexRight(root);
+        ApplyDerivedAndInvariantImpact(impact, changes);
+        return impact.ToPublic();
+    }
+
+    private void ApplyDerivedAndInvariantImpact(
+        ResolvedChangeImpact impact,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        var affectedDerived = new Dictionary<IDerivedDefinition, bool>();
+        foreach (var pair in _derivedStates)
+        {
+            var relationAffected = impact.AffectedRelations.Contains(pair.Key.Relation);
+            var sourceAffected = changes.Any(change => ReferenceEquals(change.Set, pair.Key.SourceSet));
+            if (!relationAffected && !sourceAffected)
+                continue;
+            var relationState = _relations[pair.Key.Relation];
+            var invalid = relationAffected &&
+                impact.ReindexRoots.TryGetValue(relationState, out var roots) && roots.Count > 0;
+            pair.Value.Invalidate(invalid);
+            affectedDerived[pair.Key] = invalid;
+        }
+
+        foreach (var pair in _invariants)
+        {
+            if (!affectedDerived.TryGetValue(pair.Key.Derived, out var invalid))
+                continue;
+            pair.Value.OnDependencyChanged(invalid);
+        }
+    }
+
+    private void InvalidateForRelationMutations(IEnumerable<IRelationDefinition> relations)
+    {
+        var affectedRelations = relations.ToHashSet();
+        if (affectedRelations.Count == 0)
+            return;
+        var affectedDerived = _derivedStates
+            .Where(pair => affectedRelations.Contains(pair.Key.Relation))
+            .ToArray();
+        foreach (var pair in affectedDerived)
+            pair.Value.Invalidate(invalid: true);
+        foreach (var pair in _invariants)
+            if (affectedDerived.Any(derived => ReferenceEquals(derived.Key, pair.Key.Derived)))
+                pair.Value.OnDependencyChanged(invalid: true);
+    }
+
+    private PropertyChange ValidateChange(PropertyChange change)
+    {
         if (change.Set is null)
         {
             var matches = _sets
                 .Where(pair => pair.Key.ObjectType.IsInstanceOfType(change.Instance) && pair.Value.Contains(change.Instance))
                 .Select(pair => pair.Key)
                 .ToArray();
-            if (matches.Length != 1)
-                throw new InvalidOperationException($"Expected the changed instance in exactly one object set, but found {matches.Length}. Use the object-set Change.Property overload.");
-            change = change.WithSet(matches[0]);
+            if (matches.Length > 1)
+                throw new InvalidOperationException($"Expected the changed instance in at most one object set, but found {matches.Length}. Use the object-set Change.Property overload.");
+            if (matches.Length == 1)
+                change = change.WithSet(matches[0]);
         }
 
-        var set = GetSet(change.Set!);
-        if (!set.Contains(change.Instance))
-            throw new InvalidOperationException("The changed instance is not registered in the specified object set.");
-        if (_dependencies.TryGetValue((change.Set!, change.Member), out var affectedRelations))
+        if (change.Set is not null)
         {
-            foreach (var relation in affectedRelations)
-                relation.Apply(change);
+            var set = GetSet(change.Set);
+            if (!set.Contains(change.Instance))
+                throw new InvalidOperationException("The changed instance is not registered in the specified object set.");
+            if (change.Set.KeyMembers.Contains(change.Member))
+                throw new InvalidOperationException(
+                    $"The registered key member '{change.Member.Name}' of '{change.Set.ObjectType.Name}' cannot be changed. " +
+                    "Remove and re-add the object, or declare a genuinely stable key.");
         }
+        return change;
     }
 
     private ObjectSetDefinition<T> FindUniqueSet<T>() where T : class
@@ -183,6 +354,7 @@ internal sealed class ObjectSetRuntime
     private readonly IObjectSetDefinition _definition;
     private readonly HashSet<object> _instances = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<object, object> _byKey = new();
+    private readonly Dictionary<object, object> _registeredKeys = new(ReferenceEqualityComparer.Instance);
 
     public ObjectSetRuntime(IObjectSetDefinition definition) => _definition = definition;
     public IEnumerable<object> Instances => _instances;
@@ -192,18 +364,22 @@ internal sealed class ObjectSetRuntime
     {
         if (!_definition.ObjectType.IsInstanceOfType(instance))
             throw new ArgumentException($"Expected an instance of '{_definition.ObjectType.Name}'.");
+        if (_instances.Contains(instance))
+            throw new InvalidOperationException("The object instance is already registered in this object set.");
         var key = _definition.ReadKey(instance) ?? throw new InvalidOperationException("Object keys cannot be null.");
         if (_byKey.ContainsKey(key))
             throw new InvalidOperationException($"An object with key '{key}' is already registered in '{_definition.ObjectType.Name}'.");
         _instances.Add(instance);
         _byKey.Add(key, instance);
+        _registeredKeys.Add(instance, key);
     }
 
     public bool Remove(object instance)
     {
         if (!_instances.Remove(instance)) return false;
-        var key = _definition.ReadKey(instance);
-        if (key is not null && _byKey.TryGetValue(key, out var keyed) && ReferenceEquals(keyed, instance))
+        var key = _registeredKeys[instance];
+        _registeredKeys.Remove(instance);
+        if (_byKey.TryGetValue(key, out var keyed) && ReferenceEquals(keyed, instance))
             _byKey.Remove(key);
         return true;
     }
@@ -214,21 +390,25 @@ internal interface IRelationRuntimeState
     IObjectSetDefinition RightSet { get; }
     void AddRight(object instance);
     void RemoveRight(object instance);
-    void Apply(PropertyChange change);
+    void ReindexRight(object instance);
 }
 
 internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState
     where TLeft : class where TRight : class
 {
     private readonly RelationDefinition<TLeft, TRight> _definition;
+    private readonly ObjectSetRuntime _leftObjects;
     private readonly ObjectSetRuntime _rightObjects;
     private readonly Dictionary<CompositeKey, HashSet<TRight>> _index = [];
     private readonly Dictionary<TRight, CompositeKey> _keys = new(ReferenceEqualityComparer<TRight>.Instance);
-    private readonly Dictionary<object, HashSet<TRight>> _reverse = new(ReferenceEqualityComparer.Instance);
 
-    public RelationRuntimeState(RelationDefinition<TLeft, TRight> definition, ObjectSetRuntime rightObjects)
+    public RelationRuntimeState(
+        RelationDefinition<TLeft, TRight> definition,
+        ObjectSetRuntime leftObjects,
+        ObjectSetRuntime rightObjects)
     {
         _definition = definition;
+        _leftObjects = leftObjects;
         _rightObjects = rightObjects;
     }
 
@@ -237,61 +417,40 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public void AddRight(object instance)
     {
         var right = (TRight)instance;
-        if (_definition.Analysis.JoinKeyParts.Count > 0)
+        if (_definition.AccessPlan is HashJoinAccessPlan hashPlan)
         {
-            var key = ReadRightKey(right);
+            var key = ReadRightKey(hashPlan, right);
             if (!_index.TryGetValue(key, out var bucket)) _index.Add(key, bucket = new(ReferenceEqualityComparer<TRight>.Instance));
             bucket.Add(right);
             _keys[right] = key;
         }
-        AddReverseReferences(right);
     }
 
     public void RemoveRight(object instance)
     {
         var right = (TRight)instance;
         RemoveFromIndex(right);
-        RemoveReverseReferences(right);
     }
 
     public IReadOnlyList<TRight> Related(TLeft left)
     {
-        IEnumerable<TRight> candidates;
-        if (_definition.Analysis.JoinKeyParts.Count == 0)
+        IEnumerable<TRight> candidates = _definition.AccessPlan switch
         {
-            candidates = _rightObjects.Instances.Cast<TRight>();
-        }
-        else
-        {
-            var key = new CompositeKey(_definition.Analysis.JoinKeyParts.Select(part => part.Left.Read(left)).ToArray());
-            candidates = _index.TryGetValue(key, out var bucket) ? bucket : [];
-        }
+            ScanAccessPlan => _rightObjects.Instances.Cast<TRight>(),
+            HashJoinAccessPlan hashPlan => ReadHashCandidates(hashPlan, left),
+            _ => throw new NotSupportedException($"Unsupported access plan '{_definition.AccessPlan.GetType().Name}'.")
+        };
         return candidates.Where(right => _definition.Predicate(left, right)).ToArray();
     }
 
-    public void Apply(PropertyChange change)
-    {
-        if (ReferenceEquals(change.Set, _definition.Right) && change.Instance is TRight right)
-        {
-            if (AffectsRightPath(change.Member)) Reindex(right);
-        }
+    public IReadOnlyList<TLeft> RelatedFromRight(TRight right) =>
+        _leftObjects.Instances.Cast<TLeft>().Where(left => _definition.Predicate(left, right)).ToArray();
 
-        if (_reverse.TryGetValue(change.Instance, out var roots) && AffectsNestedMember(change.Member))
-        {
-            foreach (var root in roots.ToArray()) Reindex(root);
-        }
-    }
-
-    private bool AffectsRightPath(MemberInfo member) =>
-        _definition.Analysis.JoinKeyParts.Any(part => part.Right.Members.Contains(member));
-
-    private bool AffectsNestedMember(MemberInfo member) =>
-        _definition.Analysis.JoinKeyParts.Any(part => part.Right.Members.Skip(1).Contains(member));
+    public void ReindexRight(object instance) => Reindex((TRight)instance);
 
     private void Reindex(TRight right)
     {
         RemoveFromIndex(right);
-        RemoveReverseReferences(right);
         AddRight(right);
     }
 
@@ -305,47 +464,49 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         }
     }
 
-    private CompositeKey ReadRightKey(TRight right) =>
-        new(_definition.Analysis.JoinKeyParts.Select(part => part.Right.Read(right)).ToArray());
-
-    private void AddReverseReferences(TRight right)
+    private IEnumerable<TRight> ReadHashCandidates(HashJoinAccessPlan plan, TLeft left)
     {
-        foreach (var path in _definition.Analysis.JoinKeyParts.Select(part => part.Right).Where(path => path.Members.Count > 1))
-        {
-            var navigation = ReadMember(path.Members[0], right);
-            if (navigation is null) continue;
-            if (!_reverse.TryGetValue(navigation, out var roots)) _reverse.Add(navigation, roots = new(ReferenceEqualityComparer<TRight>.Instance));
-            roots.Add(right);
-        }
+        var key = CreateKey(plan.JoinKeyParts.Select(part => part.Left.Read(left)), plan);
+        return _index.TryGetValue(key, out var bucket) ? bucket : [];
     }
 
-    private void RemoveReverseReferences(TRight right)
-    {
-        foreach (var pair in _reverse.ToArray())
-        {
-            pair.Value.Remove(right);
-            if (pair.Value.Count == 0) _reverse.Remove(pair.Key);
-        }
-    }
+    private static CompositeKey ReadRightKey(HashJoinAccessPlan plan, TRight right) =>
+        CreateKey(plan.JoinKeyParts.Select(part => part.Right.Read(right)), plan);
 
-    private static object? ReadMember(MemberInfo member, object instance) => member switch
-    {
-        PropertyInfo property => property.GetValue(instance),
-        FieldInfo field => field.GetValue(instance),
-        _ => null
-    };
+    private static CompositeKey CreateKey(IEnumerable<object?> components, HashJoinAccessPlan plan) =>
+        new(components.ToArray(), plan.JoinKeyParts.Select(part => part.Comparer).ToArray());
+
 }
 
 internal readonly struct CompositeKey : IEquatable<CompositeKey>
 {
     private readonly object?[] _components;
-    public CompositeKey(object?[] components) => _components = components;
-    public bool Equals(CompositeKey other) => _components.AsSpan().SequenceEqual(other._components);
+    private readonly IReadOnlyList<IEqualityComparer<object?>> _comparers;
+
+    public CompositeKey(object?[] components, IReadOnlyList<IEqualityComparer<object?>> comparers)
+    {
+        _components = components;
+        _comparers = comparers;
+    }
+
+    public bool Equals(CompositeKey other)
+    {
+        if (_components.Length != other._components.Length)
+            return false;
+        for (var index = 0; index < _components.Length; index++)
+            if (!_comparers[index].Equals(_components[index], other._components[index]))
+                return false;
+        return true;
+    }
     public override bool Equals(object? obj) => obj is CompositeKey other && Equals(other);
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        foreach (var component in _components) hash.Add(component);
+        for (var index = 0; index < _components.Length; index++)
+        {
+            var component = _components[index];
+            hash.Add(component is null ? 0 : _comparers[index].GetHashCode(component!));
+        }
         return hash.ToHashCode();
     }
 }

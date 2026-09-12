@@ -6,12 +6,12 @@ public sealed class RelationBuilder<TLeft, TRight>
     where TLeft : class
     where TRight : class
 {
-    private readonly InvariantModelBuilder _model;
+    private readonly RelationModelBuilder _model;
     private readonly ObjectSetBuilder<TLeft> _left;
     private readonly ObjectSetBuilder<TRight> _right;
     private bool _defined;
 
-    internal RelationBuilder(InvariantModelBuilder model, ObjectSetBuilder<TLeft> left, ObjectSetBuilder<TRight> right)
+    internal RelationBuilder(RelationModelBuilder model, ObjectSetBuilder<TLeft> left, ObjectSetBuilder<TRight> right)
     {
         _model = model;
         _left = left;
@@ -29,7 +29,8 @@ public sealed class RelationBuilder<TLeft, TRight>
             _left.Definition,
             _right.Definition,
             predicate,
-            Expressions.RelationExpressionAnalyzer.Analyze(predicate));
+            Expressions.RelationExpressionAnalyzer.Analyze(predicate),
+            _model);
         _model.AddRelation(definition);
         return new Relation<TLeft, TRight>(definition);
     }
@@ -50,6 +51,7 @@ internal interface IRelationDefinition
     IObjectSetDefinition RightSet { get; }
     LambdaExpression PredicateExpression { get; }
     Expressions.RelationAnalysis Analysis { get; }
+    Expressions.RelationAccessPlan AccessPlan { get; }
     IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets);
 }
 
@@ -61,13 +63,15 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
         ObjectSetDefinition<TLeft> leftSet,
         ObjectSetDefinition<TRight> rightSet,
         Expression<Func<TLeft, TRight, bool>> predicate,
-        Expressions.RelationAnalysis analysis)
+        Expressions.RelationAnalysis analysis,
+        RelationModelBuilder model)
     {
         Left = leftSet;
         Right = rightSet;
         Predicate = predicate.Compile();
         PredicateExpression = predicate;
         Analysis = analysis;
+        AccessPlan = Expressions.RelationPlanner.Plan(analysis, model.ForceScanPlansForTesting);
     }
 
     public ObjectSetDefinition<TLeft> Left { get; }
@@ -77,7 +81,8 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
     public IObjectSetDefinition RightSet => Right;
     public LambdaExpression PredicateExpression { get; }
     public Expressions.RelationAnalysis Analysis { get; }
+    public Expressions.RelationAccessPlan AccessPlan { get; }
 
     public IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets) =>
-        new RelationRuntimeState<TLeft, TRight>(this, sets[Right]);
+        new RelationRuntimeState<TLeft, TRight>(this, sets[Left], sets[Right]);
 }

@@ -1,14 +1,26 @@
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Raffinert.Relations;
 
 /// <summary>Builds an immutable description of object sets and their relations.</summary>
-public sealed class InvariantModelBuilder
+public sealed class RelationModelBuilder
 {
     private readonly object _identity = new();
     private readonly List<IObjectSetDefinition> _objectSets = [];
     private readonly List<IRelationDefinition> _relations = [];
+    private readonly List<IDerivedDefinition> _derivedStates = [];
+    private readonly List<IInvariantDefinition> _invariants = [];
     private bool _built;
+
+    internal bool ForceScanPlansForTesting { get; private set; }
+
+    internal RelationModelBuilder UseScanPlansForTesting()
+    {
+        ThrowIfBuilt();
+        ForceScanPlansForTesting = true;
+        return this;
+    }
 
     public ObjectSetBuilder<T> Objects<T>() where T : class
     {
@@ -32,7 +44,23 @@ public sealed class InvariantModelBuilder
         return new RelationBuilder<TLeft, TRight>(this, left, right);
     }
 
-    public CompiledInvariantModel Build()
+    public DerivedBuilder<TSource> Derived<TSource>(ObjectSetBuilder<TSource> source) where TSource : class
+    {
+        ThrowIfBuilt();
+        ArgumentNullException.ThrowIfNull(source);
+        EnsureOwned(source.ModelIdentity);
+        return new DerivedBuilder<TSource>(this, source);
+    }
+
+    public InvariantBuilder<TSource> Invariant<TSource>(ObjectSetBuilder<TSource> source) where TSource : class
+    {
+        ThrowIfBuilt();
+        ArgumentNullException.ThrowIfNull(source);
+        EnsureOwned(source.ModelIdentity);
+        return new InvariantBuilder<TSource>(this, source);
+    }
+
+    public CompiledRelationModel Build()
     {
         ThrowIfBuilt();
         foreach (var set in _objectSets)
@@ -42,7 +70,11 @@ public sealed class InvariantModelBuilder
         }
 
         _built = true;
-        return new CompiledInvariantModel(_objectSets.ToArray(), _relations.ToArray());
+        return new CompiledRelationModel(
+            _objectSets.ToArray(),
+            _relations.ToArray(),
+            _derivedStates.ToArray(),
+            _invariants.ToArray());
     }
 
     internal void AddRelation(IRelationDefinition relation)
@@ -50,6 +82,34 @@ public sealed class InvariantModelBuilder
         ThrowIfBuilt();
         _relations.Add(relation);
     }
+
+    internal void AddDerived(IDerivedDefinition derived)
+    {
+        ThrowIfBuilt();
+        _derivedStates.Add(derived);
+    }
+
+    internal void AddInvariant(IInvariantDefinition invariant)
+    {
+        ThrowIfBuilt();
+        _invariants.Add(invariant);
+    }
+
+    internal void EnsureRelation(IRelationDefinition relation)
+    {
+        ThrowIfBuilt();
+        if (!_relations.Contains(relation))
+            throw new ArgumentException("The relation does not belong to this model builder.");
+    }
+
+    internal void EnsureDerived(IDerivedDefinition derived)
+    {
+        ThrowIfBuilt();
+        if (!_derivedStates.Contains(derived))
+            throw new ArgumentException("The derived state does not belong to this model builder.");
+    }
+
+    internal void EnsureMutable() => ThrowIfBuilt();
 
     private void EnsureOwned(object identity)
     {
@@ -100,6 +160,7 @@ internal interface IObjectSetDefinition
     Type ObjectType { get; }
     bool HasKey { get; }
     LambdaExpression? KeyExpression { get; }
+    IReadOnlySet<MemberInfo> KeyMembers { get; }
     object? ReadKey(object instance);
 }
 
@@ -111,13 +172,44 @@ internal sealed class ObjectSetDefinition<T>(int id) : IObjectSetDefinition wher
     public Type ObjectType => typeof(T);
     public bool HasKey => _keyAccessor is not null;
     public LambdaExpression? KeyExpression { get; private set; }
+    public IReadOnlySet<MemberInfo> KeyMembers { get; private set; } = new HashSet<MemberInfo>();
 
     public void SetKey(LambdaExpression expression, Func<T, object?> accessor)
     {
         KeyExpression = expression;
+        KeyMembers = KeyMemberCollector.Collect(expression);
         _keyAccessor = accessor;
     }
 
     public object? ReadKey(object instance) =>
         (_keyAccessor ?? throw new InvalidOperationException("The object set has no key."))((T)instance);
+}
+
+internal sealed class KeyMemberCollector : ExpressionVisitor
+{
+    private readonly ParameterExpression _parameter;
+    private readonly HashSet<MemberInfo> _members = [];
+
+    private KeyMemberCollector(ParameterExpression parameter) => _parameter = parameter;
+
+    public static IReadOnlySet<MemberInfo> Collect(LambdaExpression expression)
+    {
+        var collector = new KeyMemberCollector(expression.Parameters[0]);
+        collector.Visit(expression.Body);
+        return collector._members;
+    }
+
+    protected override Expression VisitMember(MemberExpression node)
+    {
+        Expression? root = node.Expression;
+        while (root is MemberExpression member)
+            root = member.Expression;
+        while (root is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            root = unary.Operand;
+
+        if (root == _parameter)
+            _members.Add(node.Member);
+
+        return base.VisitMember(node);
+    }
 }

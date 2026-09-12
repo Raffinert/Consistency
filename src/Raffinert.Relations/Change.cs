@@ -5,6 +5,20 @@ namespace Raffinert.Relations;
 
 public static class Change
 {
+    /// <summary>Describes a reflected property or field change, primarily for change-tracking adapters.</summary>
+    public static PropertyChange Property(
+        object instance,
+        MemberInfo member,
+        object? oldValue,
+        object? newValue)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(member);
+        if (member is not PropertyInfo and not FieldInfo)
+            throw new ArgumentException("A property or field member is required.", nameof(member));
+        return new PropertyChange(null, instance, member, oldValue, newValue);
+    }
+
     /// <summary>Describes a property change that has already been made on the domain object.</summary>
     public static PropertyChange Property<T, TValue>(
         ObjectSetBuilder<T> set,
@@ -60,4 +74,22 @@ public sealed class PropertyChange
     public object? NewValue { get; }
 
     internal PropertyChange WithSet(IObjectSetDefinition set) => new(set, Instance, Member, OldValue, NewValue);
+}
+
+/// <summary>An immutable batch of property changes that must be applied as one runtime operation.</summary>
+public sealed class ChangeSet
+{
+    private ChangeSet(IReadOnlyList<PropertyChange> changes) => Changes = changes;
+
+    internal IReadOnlyList<PropertyChange> Changes { get; }
+
+    public static ChangeSet Create(params PropertyChange[] changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        if (changes.Length == 0)
+            throw new ArgumentException("A change set must contain at least one change.", nameof(changes));
+        if (changes.Any(change => change is null))
+            throw new ArgumentException("A change set cannot contain null changes.", nameof(changes));
+        return new ChangeSet(changes.ToArray());
+    }
 }

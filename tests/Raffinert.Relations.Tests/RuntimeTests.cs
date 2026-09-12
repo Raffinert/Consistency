@@ -58,7 +58,7 @@ public sealed class RuntimeTests
     [Fact]
     public void Opaque_predicate_falls_back_to_a_semantically_correct_scan()
     {
-        var model = new InvariantModelBuilder();
+        var model = new RelationModelBuilder();
         var left = model.Objects<CodeHolder>().Key(x => x.Id);
         var right = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(left, right).Where((a, b) => MatchesPrefix(a.Code, b.ItemNumber));
@@ -72,14 +72,14 @@ public sealed class RuntimeTests
         runtime.Add(right, miss);
 
         Assert.Equal([match], runtime.Related(relation, source));
-        Assert.Contains("Access: Scan", compiled.DebugView);
-        Assert.Contains("Dependency analysis: Incomplete", compiled.DebugView);
+        Assert.Contains("Access plan: Scan", compiled.DebugView);
+        Assert.Contains("Dependency analysis: ContainsOpaqueCode", compiled.DebugView);
     }
 
     [Fact]
     public void Nested_property_change_reindexes_referencing_roots()
     {
-        var model = new InvariantModelBuilder();
+        var model = new RelationModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -108,7 +108,7 @@ public sealed class RuntimeTests
     [Fact]
     public void Reference_navigation_change_updates_reverse_navigation_and_index()
     {
-        var model = new InvariantModelBuilder();
+        var model = new RelationModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -146,12 +146,317 @@ public sealed class RuntimeTests
         Assert.True(runtime.Remove(line));
     }
 
-    private static InvariantModelBuilder CreateLineModel(
+    [Fact]
+    public void Null_guarded_nested_relation_is_safe_and_reindexes_when_navigation_is_assigned()
+    {
+        var model = new RelationModelBuilder();
+        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var relation = model.Relation(invoices, lines).Where((invoice, line) =>
+            line.PurchaseOrder != null &&
+            invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO-100", "A");
+        var line = Line("ignored", "A");
+
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        Assert.Empty(runtime.Related(relation, invoice));
+
+        var order = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-100" };
+        line.PurchaseOrder = order;
+        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, null, order));
+
+        Assert.Equal([line], runtime.Related(relation, invoice));
+    }
+
+    [Fact]
+    public void Hash_and_scan_plans_remain_equivalent_after_runtime_changes()
+    {
+        var hashModel = new RelationModelBuilder();
+        var hashLeft = hashModel.Objects<CodeHolder>().Key(x => x.Id);
+        var hashRight = hashModel.Objects<CodeHolder>().Key(x => x.Id);
+        var hashRelation = hashModel.Relation(hashLeft, hashRight).Where((a, b) => a.Code == b.Code);
+        var hashRuntime = hashModel.Build().CreateRuntime();
+
+        var scanModel = new RelationModelBuilder();
+        var scanLeft = scanModel.Objects<CodeHolder>().Key(x => x.Id);
+        var scanRight = scanModel.Objects<CodeHolder>().Key(x => x.Id);
+        var scanRelation = scanModel.Relation(scanLeft, scanRight).Where((a, b) => CodesEqual(a, b));
+        var scanRuntime = scanModel.Build().CreateRuntime();
+
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var first = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var second = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        hashRuntime.Add(hashLeft, source);
+        scanRuntime.Add(scanLeft, source);
+        foreach (var candidate in new[] { first, second })
+        {
+            hashRuntime.Add(hashRight, candidate);
+            scanRuntime.Add(scanRight, candidate);
+        }
+
+        AssertEquivalent();
+
+        second.Code = "A";
+        hashRuntime.Apply(Change.Property(hashRight, second, x => x.Code, "B", "A"));
+        scanRuntime.Apply(Change.Property(scanRight, second, x => x.Code, "B", "A"));
+        AssertEquivalent();
+
+        Assert.True(hashRuntime.Remove(hashRight, first));
+        Assert.True(scanRuntime.Remove(scanRight, first));
+        AssertEquivalent();
+
+        void AssertEquivalent() => Assert.Equal(
+            scanRuntime.Related(scanRelation, source).Select(item => item.Id).Order(),
+            hashRuntime.Related(hashRelation, source).Select(item => item.Id).Order());
+    }
+
+    [Fact]
+    public void Arbitrary_depth_change_from_an_unregistered_nested_object_reindexes_all_roots()
+    {
+        var model = new RelationModelBuilder();
+        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var relation = model.Relation(invoices, lines).Where((invoice, line) =>
+            line.PurchaseOrder != null &&
+            line.PurchaseOrder.Supplier != null &&
+            line.PurchaseOrder.Supplier.Country != null &&
+            invoice.PurchaseOrderNumber == line.PurchaseOrder.Supplier.Country.Code);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("NO", "A");
+        var country = new Country { Id = Guid.NewGuid(), Code = "MATCH" };
+        var supplier = new Supplier { Id = Guid.NewGuid(), Country = country };
+        var order = new PurchaseOrder { Id = Guid.NewGuid(), Supplier = supplier };
+        var first = Line("", "A");
+        var second = Line("", "B");
+        first.PurchaseOrder = order;
+        second.PurchaseOrder = order;
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, first);
+        runtime.Add(lines, second);
+
+        Assert.Empty(runtime.Related(relation, invoice));
+
+        invoice.PurchaseOrderNumber = "MATCH";
+        runtime.Apply(Change.Property(invoices, invoice, x => x.PurchaseOrderNumber, "NO", "MATCH"));
+        Assert.Equal(2, runtime.Related(relation, invoice).Count);
+
+        country.Code = "OTHER";
+        var impact = runtime.Apply(Change.Property(country, x => x.Code, "MATCH", "OTHER"));
+
+        Assert.Empty(runtime.Related(relation, invoice));
+        Assert.Equal(1, impact.Access.ReindexedRelations);
+        Assert.Equal(2, impact.Access.ReindexedRoots);
+        Assert.Equal(1, impact.Semantic.AffectedRelations);
+        Assert.Equal(2, impact.Semantic.AffectedRoots);
+    }
+
+    [Fact]
+    public void Reference_navigation_can_change_from_object_to_null()
+    {
+        var model = new RelationModelBuilder();
+        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var relation = model.Relation(invoices, lines).Where((invoice, line) =>
+            line.PurchaseOrder != null && invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "A");
+        var order = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO" };
+        var line = Line("", "A");
+        line.PurchaseOrder = order;
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+        Assert.Equal([line], runtime.Related(relation, invoice));
+
+        line.PurchaseOrder = null;
+        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, order, null));
+
+        Assert.Empty(runtime.Related(relation, invoice));
+    }
+
+    [Fact]
+    public void Residual_property_change_has_semantic_but_not_access_impact()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "A");
+        var line = Line("PO", "A", enabled: true);
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        line.Enabled = false;
+        var impact = runtime.Apply(Change.Property(lines, line, x => x.Enabled, true, false));
+
+        Assert.Empty(runtime.Related(relation, invoice));
+        Assert.Equal(0, impact.Access.ReindexedRelations);
+        Assert.Equal(1, impact.Semantic.AffectedRelations);
+    }
+
+    [Fact]
+    public void Change_set_reindexes_a_root_once_when_two_key_fields_change()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO-2", "B");
+        var line = Line("PO-1", "A");
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        line.PurchaseOrderNumber = "PO-2";
+        line.ItemNumber = "B";
+        var impact = runtime.Apply(ChangeSet.Create(
+            Change.Property(lines, line, x => x.PurchaseOrderNumber, "PO-1", "PO-2"),
+            Change.Property(lines, line, x => x.ItemNumber, "A", "B")));
+
+        Assert.Equal([line], runtime.Related(relation, invoice));
+        Assert.Equal(1, impact.Access.ReindexedRelations);
+        Assert.Equal(1, impact.Access.ReindexedRoots);
+    }
+
+    [Fact]
+    public void Invalid_change_rejects_the_entire_change_set_before_index_updates()
+    {
+        var model = new RelationModelBuilder();
+        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var relation = model.Relation(invoices, lines).Where((invoice, line) =>
+            line.PurchaseOrder != null && invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO-2", "A");
+        var first = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-1" };
+        var second = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-2" };
+        var line = Line("", "A");
+        line.PurchaseOrder = first;
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        var oldId = line.Id;
+        line.PurchaseOrder = second;
+        Assert.Throws<InvalidOperationException>(() => runtime.Apply(ChangeSet.Create(
+            Change.Property(lines, line, x => x.PurchaseOrder, first, second),
+            Change.Property(lines, line, x => x.Id, oldId, line.Id))));
+
+        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, first, second));
+        Assert.Equal([line], runtime.Related(relation, invoice));
+    }
+
+    [Fact]
+    public void Randomized_hash_results_equal_forced_scan_after_mutations()
+    {
+        var hashModel = new RelationModelBuilder();
+        var hashLeft = hashModel.Objects<CodeHolder>().Key(x => x.Id);
+        var hashRight = hashModel.Objects<CodeHolder>().Key(x => x.Id);
+        var hashRelation = hashModel.Relation(hashLeft, hashRight).Where((a, b) => a.Code == b.Code && b.Enabled);
+        var hashRuntime = hashModel.Build().CreateRuntime();
+
+        var scanModel = new RelationModelBuilder().UseScanPlansForTesting();
+        var scanLeft = scanModel.Objects<CodeHolder>().Key(x => x.Id);
+        var scanRight = scanModel.Objects<CodeHolder>().Key(x => x.Id);
+        var scanRelation = scanModel.Relation(scanLeft, scanRight).Where((a, b) => a.Code == b.Code && b.Enabled);
+        var scanRuntime = scanModel.Build().CreateRuntime();
+
+        var random = new Random(7319);
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var active = new List<CodeHolder>();
+        hashRuntime.Add(hashLeft, source);
+        scanRuntime.Add(scanLeft, source);
+
+        for (var operation = 0; operation < 250; operation++)
+        {
+            switch (random.Next(active.Count == 0 ? 1 : 4))
+            {
+                case 0:
+                    {
+                        var item = new CodeHolder
+                        {
+                            Id = Guid.NewGuid(),
+                            Code = RandomCode(),
+                            Enabled = random.Next(2) == 0
+                        };
+                        active.Add(item);
+                        hashRuntime.Add(hashRight, item);
+                        scanRuntime.Add(scanRight, item);
+                        break;
+                    }
+                case 1:
+                    {
+                        var item = active[random.Next(active.Count)];
+                        var oldCode = item.Code;
+                        item.Code = RandomCode();
+                        hashRuntime.Apply(Change.Property(hashRight, item, x => x.Code, oldCode, item.Code));
+                        scanRuntime.Apply(Change.Property(scanRight, item, x => x.Code, oldCode, item.Code));
+                        break;
+                    }
+                case 2:
+                    {
+                        var item = active[random.Next(active.Count)];
+                        item.Enabled = !item.Enabled;
+                        hashRuntime.Apply(Change.Property(hashRight, item, x => x.Enabled, !item.Enabled, item.Enabled));
+                        scanRuntime.Apply(Change.Property(scanRight, item, x => x.Enabled, !item.Enabled, item.Enabled));
+                        break;
+                    }
+                default:
+                    {
+                        var index = random.Next(active.Count);
+                        var item = active[index];
+                        active.RemoveAt(index);
+                        hashRuntime.Remove(hashRight, item);
+                        scanRuntime.Remove(scanRight, item);
+                        break;
+                    }
+            }
+
+            Assert.Equal(
+                scanRuntime.Related(scanRelation, source).Select(item => item.Id).Order(),
+                hashRuntime.Related(hashRelation, source).Select(item => item.Id).Order());
+        }
+
+        string RandomCode() => ((char)('A' + random.Next(4))).ToString();
+    }
+
+    [Fact]
+    public void Ordinal_ignore_case_string_equality_uses_matching_hash_semantics()
+    {
+        var model = new RelationModelBuilder();
+        var left = model.Objects<CodeHolder>().Key(x => x.Id);
+        var right = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(left, right).Where((a, b) =>
+            string.Equals(a.Code, b.Code, StringComparison.OrdinalIgnoreCase));
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "AbC" };
+        var match = new CodeHolder { Id = Guid.NewGuid(), Code = "aBc" };
+        runtime.Add(left, source);
+        runtime.Add(right, match);
+
+        Assert.Equal([match], runtime.Related(relation, source));
+    }
+
+    [Fact]
+    public void Relation_can_be_queried_from_the_right_without_a_reverse_hash_index()
+    {
+        var model = new RelationModelBuilder();
+        var left = model.Objects<CodeHolder>().Key(x => x.Id);
+        var right = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(left, right).Where((a, b) => a.Code == b.Code);
+        var runtime = model.Build().CreateRuntime();
+        var first = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var second = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        var target = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(left, first);
+        runtime.Add(left, second);
+        runtime.Add(right, target);
+
+        Assert.Equal([first], runtime.RelatedFromRight(relation, target));
+    }
+
+    private static RelationModelBuilder CreateLineModel(
         out ObjectSetBuilder<InvoiceLine> invoices,
         out ObjectSetBuilder<PurchaseOrderLine> poLines,
         out Relation<InvoiceLine, PurchaseOrderLine> relation)
     {
-        var model = new InvariantModelBuilder();
+        var model = new RelationModelBuilder();
         invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         poLines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         relation = model.Relation(invoices, poLines).Where((invoice, line) =>
@@ -177,4 +482,6 @@ public sealed class RuntimeTests
     };
 
     private static bool MatchesPrefix(string value, string prefix) => value.StartsWith(prefix, StringComparison.Ordinal);
+
+    private static bool CodesEqual(CodeHolder left, CodeHolder right) => left.Code == right.Code;
 }
