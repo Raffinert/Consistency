@@ -15,11 +15,19 @@ public sealed class RelationModelBuilder
     private bool _built;
 
     internal bool ForceScanPlansForTesting { get; private set; }
+    internal bool ForceFullRecomputePlansForTesting { get; private set; }
 
     internal RelationModelBuilder UseScanPlansForTesting()
     {
         ThrowIfBuilt();
         ForceScanPlansForTesting = true;
+        return this;
+    }
+
+    internal RelationModelBuilder UseFullRecomputePlansForTesting()
+    {
+        ThrowIfBuilt();
+        ForceFullRecomputePlansForTesting = true;
         return this;
     }
 

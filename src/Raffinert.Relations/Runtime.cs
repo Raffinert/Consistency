@@ -84,6 +84,7 @@ public sealed class CompiledRelationModel
             lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
             lines.Add($"  Impact policy: membership added={derived.ImpactPolicy.MembershipAdded}, " +
                 $"removed={derived.ImpactPolicy.MembershipRemoved}, item changed={derived.ImpactPolicy.ItemChanged}");
+            lines.Add($"  Computation plan: {derived.ComputationPlanName}");
             lines.Add($"  LINQ semantics: {derived.Analysis.LinqSemantics}");
             foreach (var dependency in derived.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
@@ -981,6 +982,12 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public long PredicateEvaluationCount => _predicateEvaluationCount;
 
     public void ResetDiagnostics() => _predicateEvaluationCount = 0;
+
+    public int RelatedCount(TLeft left) =>
+        _rightsByLeft.TryGetValue(left, out var rights) ? rights.Count : 0;
+
+    public bool IsRelated(TLeft left, TRight right) =>
+        _rightsByLeft.TryGetValue(left, out var rights) && rights.Contains(right);
 
     public void EnableExactPropagation() => _hasExactPropagation = true;
 

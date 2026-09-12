@@ -115,7 +115,9 @@ internal sealed class DependencyGraphRuntime
                 itemSources,
                 membershipRoots,
                 membershipSeverity,
-                node.Definition.ImpactPolicy.ItemChanged.ToKind());
+                node.Definition.ImpactPolicy.ItemChanged.ToKind(),
+                relationImpact,
+                changes);
         }
 
         foreach (var node in _invariantNodes)
@@ -220,7 +222,9 @@ internal sealed class DependencyGraphRuntime
             IEnumerable<object> itemSources,
             IEnumerable<object> membershipRoots,
             DependencyImpactKind membershipSeverity,
-            DependencyImpactKind itemSeverity)
+            DependencyImpactKind itemSeverity,
+            RelationImpact? relationImpact,
+            IReadOnlyList<PropertyChange> changes)
         {
             InvalidSources = membershipSeverity == DependencyImpactKind.Invalid
                 ? NewSet(membershipRoots)
@@ -233,10 +237,13 @@ internal sealed class DependencyGraphRuntime
             if (membershipSeverity == DependencyImpactKind.Dirty)
                 DirtySources.UnionWith(membershipRoots);
             DirtySources.ExceptWith(InvalidSources);
+            var incrementallyUpdated = State.ApplyIncremental(DirtySources, relationImpact, changes);
             if (InvalidSources.Count > 0)
                 State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
-            if (DirtySources.Count > 0)
-                State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
+            if (DirtySources.Count > incrementallyUpdated.Count)
+                State.ApplyImpact(
+                    DirtySources.Where(source => !incrementallyUpdated.Contains(source)),
+                    DependencyImpactKind.Dirty);
         }
 
         public void Apply(IEnumerable<object> sources, DependencyImpactKind severity)

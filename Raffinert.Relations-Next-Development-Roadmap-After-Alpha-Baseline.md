@@ -496,6 +496,14 @@ not inside graph propagation.
 
 # 6. P1 — Incremental derived computation plans
 
+**Status:** Implemented.
+
+Derived definitions can opt into conservative planning with `Incrementally()`. Exact standalone
+`Count`, `LongCount`, parameterless `Any`, and direct non-null numeric `Sum` expressions maintain fresh
+cached values from relation membership and item-value deltas in O(delta)/O(1) work. Unsupported shapes
+fall back to the original compiled computation. `DebugView` reports the selected plan, and a forced-full
+reference path plus randomized mutation tests verify equivalence.
+
 The engine is now good at identifying exactly which sources are affected, but recomputing a derived value still executes the full user computation over:
 
 ```csharp

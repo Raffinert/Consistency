@@ -105,6 +105,20 @@ result.DispatchPolicies(); // optional configured in-process callbacks
 The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
 requests, and the original `ChangeImpact`. Definition IDs are deterministic within a compiled model.
 
+Standalone aggregates can opt into conservative incremental maintenance:
+
+```csharp
+var received = model.Derived(poLines)
+    .Using(receipts)
+    .Incrementally()
+    .Compute((line, matches) => matches.Sum(receipt => receipt.Quantity));
+```
+
+Exact `Count`, `LongCount`, parameterless `Any`, and direct numeric `Sum` expressions have incremental
+plans. They update already-fresh cache entries from relation/item deltas without enumerating the full
+match list. Unrecognized expressions retain the original compiled computation as the semantic fallback;
+the selected plan is shown in `DebugView`.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -125,6 +139,7 @@ requests, and the original `ChangeImpact`. Definition IDs are deterministic with
 - Deterministic, atomically validated `ChangeSet` and unified lifecycle/property/collection `MutationSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
+- Opt-in incremental `Count`, `LongCount`, `Any`, and direct numeric `Sum` computation plans
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
 - Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
 - Exact source-scoped derived invalidation backed by bidirectional relation membership

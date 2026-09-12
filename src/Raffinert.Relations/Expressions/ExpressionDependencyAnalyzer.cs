@@ -35,6 +35,7 @@ internal static class ExpressionDependencyAnalyzer
     private static readonly HashSet<string> SupportedLinqOperators =
     [
         nameof(Enumerable.Count),
+        nameof(Enumerable.LongCount),
         nameof(Enumerable.Any),
         nameof(Enumerable.All),
         nameof(Enumerable.Sum),

@@ -71,6 +71,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
         false);
+    private bool _useIncrementalComputation;
 
     internal DerivedUsingBuilder(
         RelationModelBuilder model,
@@ -92,6 +93,16 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         return this;
     }
 
+    /// <summary>
+    /// Enables conservative incremental planning for a recognized standalone aggregate. Unsupported
+    /// expressions continue to use the original compiled computation as a full-recompute fallback.
+    /// </summary>
+    public DerivedUsingBuilder<TSource, TItem> Incrementally()
+    {
+        _useIncrementalComputation = true;
+        return this;
+    }
+
     public Derived<TSource, TItem, TValue> Compute<TValue>(
         Expression<Func<TSource, IReadOnlyList<TItem>, TValue>> computation)
     {
@@ -101,7 +112,8 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             _relation.Definition,
             computation,
             computation.Compile(),
-            _impactPolicy);
+            _impactPolicy,
+            _model.ForceFullRecomputePlansForTesting || !_useIncrementalComputation);
         _model.AddDerived(definition);
         return new Derived<TSource, TItem, TValue>(definition, _model.EnsureMutable);
     }
@@ -230,6 +242,7 @@ internal interface IDerivedDefinition
     LambdaExpression ComputationExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
     DerivedImpactPolicy ImpactPolicy { get; }
+    string ComputationPlanName { get; }
     bool AllowIncompleteDependencies { get; }
     IDerivedRuntimeState CreateState(IRelationRuntimeState relationState);
 }
@@ -239,7 +252,8 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     RelationDefinition<TSource, TItem> relation,
     LambdaExpression computationExpression,
     Func<TSource, IReadOnlyList<TItem>, TValue> computation,
-    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    DerivedImpactPolicy impactPolicy,
+    bool forceFullRecompute) : IDerivedDefinition
     where TSource : class
     where TItem : class
 {
@@ -252,6 +266,11 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public ExpressionDependencyAnalysis Analysis { get; } =
         ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
     public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
+    public IDerivedComputationPlan<TSource, TItem, TValue>? IncrementalPlan { get; } =
+        DerivedComputationPlanner.Create(
+            (Expression<Func<TSource, IReadOnlyList<TItem>, TValue>>)computationExpression,
+            forceFullRecompute);
+    public string ComputationPlanName => IncrementalPlan?.DisplayName ?? "FullRecompute";
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(IRelationRuntimeState relationState) =>
@@ -263,6 +282,10 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
     IDerivedDefinition Definition { get; }
     int SourceStateEntryCount { get; }
     void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
+    IReadOnlyCollection<object> ApplyIncremental(
+        IEnumerable<object> sources,
+        RelationImpact? relationImpact,
+        IReadOnlyList<PropertyChange> changes);
 }
 
 internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
@@ -299,13 +322,33 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
         }
     }
 
+    public IReadOnlyCollection<object> ApplyIncremental(
+        IEnumerable<object> sources,
+        RelationImpact? relationImpact,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        if (definition.IncrementalPlan is null)
+            return [];
+        var updatedSources = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var source in sources.Cast<TSource>())
+        {
+            if (!_cache.TryGetValue(source, out var entry) || entry.State != DerivedValueState.Fresh ||
+                !definition.IncrementalPlan.TryUpdate(
+                    entry.Value, source, relationImpact, changes, relationState, out var updated))
+                continue;
+            entry.Value = updated;
+            updatedSources.Add(source);
+        }
+        return updatedSources;
+    }
+
     public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
 
     public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
 
     private sealed class CacheEntry(TValue value, DerivedValueState state)
     {
-        public TValue Value { get; } = value;
+        public TValue Value { get; set; } = value;
         public DerivedValueState State { get; set; } = state;
     }
 }
