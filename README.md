@@ -191,6 +191,16 @@ translated through the same core change contracts. A stale prepared mutation is 
 advances between preparation and commit and requires application-level reconciliation; it cannot roll back
 the database transaction.
 
+For database-generated keys, additions are prepared while EF still owns the temporary/default value but
+are committed only after `SaveChanges`, when the generated stable key is available. If `SaveChanges`
+participates in an explicit or ambient transaction, success does not mean that transaction is durable:
+capture and `Prepare` before saving, then call the unit's `Commit` and `Dispatch` only after the surrounding
+transaction commits. Discard the prepared unit on rollback. Calling `SaveChangesAndApply` inside an
+uncommitted external transaction advances runtime state too early, so use the manual three-phase API there.
+
+When using `SaveChanges(acceptAllChangesOnSuccess: false)`, commit and dispatch the captured unit once, then
+call `ChangeTracker.AcceptAllChanges()` separately; do not recapture the still-`Added`/`Modified` entries.
+
 `RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
 
 Immediate invariant evaluations and repair callbacks run only after runtime-owned state has committed.

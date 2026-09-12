@@ -677,6 +677,15 @@ changes from one domain operation propagate only once.
 
 # 9. P1 — Harden the EF Core adapter against real transaction scenarios
 
+**Status:** Implemented.
+
+SQLite in-memory relational coverage now exercises constraint/save failure, rollback and post-commit
+manual application, explicit transactions, `SaveChanges(false)`, concurrency conflicts, store-generated
+keys, cascade deletion, owned-value changes, many-to-many skip navigations, and repeated saves in one
+context. Collection capture now includes modified skip navigations on unchanged principals. The README
+documents generated-key timing, the difference between SaveChanges success and transaction durability,
+and the manual prepare/commit/dispatch boundary required for externally controlled transactions.
+
 After prepare/commit exists, expand EF integration tests beyond InMemory-style happy paths.
 
 Use SQLite in-memory relational tests for transaction behavior.

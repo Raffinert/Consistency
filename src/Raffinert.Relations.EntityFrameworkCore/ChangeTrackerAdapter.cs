@@ -158,7 +158,7 @@ public static class ChangeTrackerAdapter
                     removals.Add(mapping.Remove(entry.Entity));
             }
 
-            if (entry.State == EntityState.Modified)
+            if (entry.State is not EntityState.Added and not EntityState.Deleted)
             {
                 foreach (var collection in entry.Collections.Where(value => value.IsModified))
                 {
