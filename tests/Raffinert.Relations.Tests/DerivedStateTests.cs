@@ -184,7 +184,7 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
-    public void Derived_state_distinguishes_dirty_from_invalid_and_recomputes_lazily()
+    public void Relation_membership_changes_default_to_dirty_and_recompute_lazily()
     {
         var model = new RelationModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
@@ -212,8 +212,8 @@ public sealed class DerivedStateTests
         second.Code = "A";
         runtime.Apply(Change.Property(items, second, x => x.Code, "B", "A"));
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
-        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(atMostOne, source));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
+        Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(atMostOne, source));
         Assert.Equal(2, runtime.Get(count, source));
         Assert.False(runtime.Evaluate(atMostOne, source));
 
@@ -226,7 +226,7 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
-    public void Adding_and_removing_relation_items_invalidates_cached_derived_state()
+    public void Adding_and_removing_relation_items_dirty_cached_derived_state()
     {
         var model = new RelationModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
@@ -240,11 +240,11 @@ public sealed class DerivedStateTests
         Assert.Equal(0, runtime.Get(count, source));
 
         runtime.Add(items, item);
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
         Assert.Equal(1, runtime.Get(count, source));
 
         runtime.Remove(items, item);
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
         Assert.Equal(0, runtime.Get(count, source));
     }
 
@@ -276,7 +276,7 @@ public sealed class DerivedStateTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Item_join_key_change_invalidates_sources_that_lose_and_gain_membership(bool forceScan)
+    public void Item_join_key_change_dirties_sources_that_lose_and_gain_membership(bool forceScan)
     {
         var model = CreateQuantityModel(
             out var sources,
@@ -284,7 +284,9 @@ public sealed class DerivedStateTests
             out var quantity,
             (source, matches) => matches.Sum(item => item.Quantity),
             forceScan);
-        var runtime = model.Build().CreateRuntime();
+        var compiled = model.Build();
+        Assert.Contains($"Access plan: {(forceScan ? "Scan" : "HashJoin")}", compiled.DebugView);
+        var runtime = compiled.CreateRuntime();
         var losing = Source("A");
         var gaining = Source("B");
         var unrelated = Source("C");
@@ -298,15 +300,15 @@ public sealed class DerivedStateTests
         item.Code = "B";
         runtime.Apply(Change.Property(items, item, x => x.Code, "A", "B"));
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, losing));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, gaining));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
         Assert.Equal(0m, runtime.Get(quantity, losing));
         Assert.Equal(2m, runtime.Get(quantity, gaining));
     }
 
     [Fact]
-    public void Nested_join_key_change_invalidates_sources_that_lose_and_gain_membership()
+    public void Nested_join_key_change_dirties_sources_that_lose_and_gain_membership()
     {
         var model = new RelationModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
@@ -329,8 +331,8 @@ public sealed class DerivedStateTests
         details.Code = "B";
         runtime.Apply(Change.Property(details, x => x.Code, "A", "B"));
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, losing));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, gaining));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
         Assert.Equal(0m, runtime.Get(quantity, losing));
         Assert.Equal(2m, runtime.Get(quantity, gaining));
     }
@@ -364,7 +366,31 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
-    public void Item_addition_and_removal_invalidate_only_matching_sources()
+    public void Explicit_dependency_policy_can_make_residual_membership_change_invalid()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.Code == item.Code && item.Enabled);
+        var quantity = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime(new InvalidMembershipImpactPolicy());
+        var source = Source("A");
+        var item = Item("A", quantity: 2m);
+        item.Enabled = true;
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        runtime.Get(quantity, source);
+
+        item.Enabled = false;
+        runtime.Apply(Change.Property(items, item, x => x.Enabled, true, false));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
+    }
+
+    [Fact]
+    public void Item_addition_and_removal_dirty_only_matching_sources()
     {
         var model = CreateQuantityModel(
             out var sources,
@@ -382,13 +408,13 @@ public sealed class DerivedStateTests
 
         runtime.Add(items, item);
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, matching));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, matching));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
         runtime.Get(quantity, matching);
 
         runtime.Remove(items, item);
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, matching));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, matching));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
     }
 
@@ -560,4 +586,10 @@ public sealed class DerivedStateTests
         Derived<DerivedSourceRecord, DerivedItemRecord, decimal> Derived,
         DerivedSourceRecord Source,
         DerivedItemRecord Item);
+
+    private sealed class InvalidMembershipImpactPolicy : IDependencyImpactPolicy
+    {
+        public DependencyImpactKind Classify(RelationMembershipDependencyImpact impact) =>
+            DependencyImpactKind.Invalid;
+    }
 }

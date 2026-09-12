@@ -22,6 +22,10 @@ The highest priority is **not** collection navigation yet.
 
 # 1. P0 — Decouple `Dirty` / `Invalid` from access-plan details
 
+**Status:** Implemented.
+
+Dependency severity is now classified by an explicit internal policy. The default policy marks relation-membership changes `Dirty`, independently of join-key recognition, hash-index participation, or forced-scan planning.
+
 The current runtime uses whether a changed dependency path is a recognized join-key path to decide whether a relation change should be treated as invalidating.
 
 Conceptually this looks like:

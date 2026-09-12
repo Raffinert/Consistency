@@ -28,6 +28,8 @@ public sealed class CompiledRelationModel
 
     public string DebugView { get; }
     public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants);
+    internal RelationRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
+        new(_sets, _relations, _derivedStates, _invariants, dependencyImpactPolicy);
 
     private string CreateDebugView()
     {
@@ -108,13 +110,16 @@ public sealed class RelationRuntime
     private readonly ImpactResolver _impactResolver;
     private readonly IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> _derivedStates;
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
+    private readonly IDependencyImpactPolicy _dependencyImpactPolicy;
 
     internal RelationRuntime(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
-        IReadOnlyList<IInvariantDefinition> invariants)
+        IReadOnlyList<IInvariantDefinition> invariants,
+        IDependencyImpactPolicy? dependencyImpactPolicy = null)
     {
+        _dependencyImpactPolicy = dependencyImpactPolicy ?? DefaultDependencyImpactPolicy.Instance;
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
         foreach (var relation in derivedStates.Select(derived => derived.Relation).Distinct())
@@ -160,7 +165,7 @@ public sealed class RelationRuntime
             deltas[relation.Key] = relation.Value.AddRight(instance);
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
-        InvalidateForRelationMutations(deltas);
+        InvalidateForRelationMutations(deltas, []);
     }
 
     public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -193,7 +198,7 @@ public sealed class RelationRuntime
             MergeDelta(deltas, relation.Key, relation.Value.RemoveLeft(instance));
         _navigation.RemoveRoot(definition, instance);
         var removed = state.Remove(instance);
-        InvalidateForRelationMutations(deltas);
+        InvalidateForRelationMutations(deltas, []);
         return removed;
     }
 
@@ -368,7 +373,12 @@ public sealed class RelationRuntime
             var relationState = _relations[pair.Key.Relation];
             var itemSources = relationState.GetLeftsForRights(itemRoots);
             var membershipIsInvalid = membershipRoots.Count > 0 &&
-                impact.InvalidatingRelations.Contains(pair.Key.Relation);
+                _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
+                    pair.Key.Relation,
+                    pair.Key,
+                    relationDelta!,
+                    changes)) ==
+                DependencyImpactKind.Invalid;
             var invalidSources = membershipIsInvalid
                 ? new HashSet<object>(membershipRoots, ReferenceEqualityComparer.Instance)
                 : new HashSet<object>(ReferenceEqualityComparer.Instance);
@@ -419,18 +429,32 @@ public sealed class RelationRuntime
     }
 
     private void InvalidateForRelationMutations(
-        IReadOnlyDictionary<IRelationDefinition, RelationDelta> deltas)
+        IReadOnlyDictionary<IRelationDefinition, RelationDelta> deltas,
+        IReadOnlyList<PropertyChange> changes)
     {
         var affectedDerived = _derivedStates
             .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
                 deltas.TryGetValue(pair.Key.Relation, out var delta) && delta.AffectedLefts.Count > 0)
-            .ToDictionary(pair => pair.Key, pair => pair.Value);
+            .ToDictionary(
+                pair => pair.Key,
+                pair => _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
+                    pair.Key.Relation,
+                    pair.Key,
+                    deltas[pair.Key.Relation],
+                    changes)));
         foreach (var pair in affectedDerived)
-            pair.Value.Invalidate(deltas[pair.Key.Relation].AffectedLefts, invalid: true);
+            _derivedStates[pair.Key].Invalidate(
+                deltas[pair.Key.Relation].AffectedLefts,
+                pair.Value == DependencyImpactKind.Invalid);
         foreach (var pair in _invariants)
         {
-            if (affectedDerived.ContainsKey(pair.Key.Derived))
-                pair.Value.OnDependencyChanged(deltas[pair.Key.Derived.Relation].AffectedLefts, invalid: true);
+            if (affectedDerived.TryGetValue(pair.Key.Derived, out var severity))
+            {
+                var delta = deltas[pair.Key.Derived.Relation];
+                pair.Value.OnDependencyChanged(
+                    delta.AffectedLefts,
+                    severity == DependencyImpactKind.Invalid);
+            }
         }
     }
 
