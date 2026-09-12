@@ -211,5 +211,11 @@ call `ChangeTracker.AcceptAllChanges()` separately; do not recapture the still-`
 
 `RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
 
+Both packages check their complete public surface with `Microsoft.CodeAnalysis.PublicApiAnalyzers` and
+checked-in `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` baselines. Public signature additions,
+removals, and nullability changes therefore fail the normal build until deliberately approved. The
+public `ObjectSetBuilder<T>` remains intentional: it is the transient type-safe stage that requires a
+stable key before yielding the runtime `ObjectSet<T>` handle.
+
 Immediate invariant evaluations and repair callbacks run only after runtime-owned state has committed.
 If a callback throws, the operation surfaces that exception but does not roll back the committed runtime state.

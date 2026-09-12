@@ -792,6 +792,14 @@ This makes performance regressions observable without BenchmarkDotNet.
 
 # 11. P1 — API compatibility baseline before alpha publication
 
+**Status:** Implemented.
+
+Both package projects now run `Microsoft.CodeAnalysis.PublicApiAnalyzers` under the existing
+warnings-as-errors build and carry checked-in nullable-aware public API baselines. Signature additions,
+removals, and changes require an explicit baseline update and are therefore visible in review/CI. The
+current fluent surface was reviewed; `ObjectSetBuilder<T>` intentionally remains public as the transient
+type-safe key-configuration stage that produces the stable `ObjectSet<T>` handle.
+
 The packages now have `0.1.0-alpha.1` metadata but publication is intentionally disabled.
 
 Before publishing, explicitly review the public API surface.

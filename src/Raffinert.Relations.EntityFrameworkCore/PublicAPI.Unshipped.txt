@@ -1,0 +1,16 @@
+#nullable enable
+Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Apply(Raffinert.Relations.RelationRuntime! runtime) -> void
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Commit(Raffinert.Relations.RelationRuntime! runtime) -> Raffinert.Relations.ChangeImpact?
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Dispatch(Raffinert.Relations.RelationRuntime! runtime) -> void
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.HasChanges.get -> bool
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Prepare(Raffinert.Relations.RelationRuntime! runtime) -> void
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings.Map<TEntity>(Raffinert.Relations.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings!
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings.RelationUnitOfWorkMappings() -> void
+static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.ApplyTrackedChanges(this Raffinert.Relations.RelationRuntime! runtime, Microsoft.EntityFrameworkCore.DbContext! context) -> Raffinert.Relations.ChangeImpact?
+static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.CaptureUnitOfWork(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker! changeTracker, Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings! mappings) -> Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork!
+static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.CreateChangeSet(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker! changeTracker) -> Raffinert.Relations.ChangeSet?
+static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.SaveChangesAndApply(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings! mappings) -> int
+static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.SaveChangesAndApplyAsync(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings! mappings, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
