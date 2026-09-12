@@ -635,6 +635,14 @@ The user should be able to see when exact propagation trades CPU for substantial
 
 # 8. P1 — Strengthen collection semantics
 
+**Status:** Implemented.
+
+Collection dependency membership is now explicitly documented and tested as a reference-identity set:
+equal distinct items remain distinct, duplicate references do not create multiplicity, and ordering or
+replacement changes use reset/property signals. Coverage includes nested collection paths, detached-item
+mutations, shared items across roots, reset/reordering, and collection plus lifecycle changes in one
+mutation batch. The obsolete collection-navigation README backlog entry was removed.
+
 Collection navigation is now implemented, so remove it from README `Further work`.
 
 Before considering collection support mature, explicitly define and test:

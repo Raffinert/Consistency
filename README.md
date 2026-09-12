@@ -67,6 +67,13 @@ in the dispatch phase.
 Collection navigation is explicit: mutate the domain collection first, then report it with
 `Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
 owner/item reverse navigation so later item-property changes resolve affected owners incrementally.
+Membership uses reference-identity set semantics: equal-but-distinct objects remain distinct, while
+duplicate occurrences of the same reference count as one dependency membership. Report
+`CollectionRemove` only when the final occurrence is absent; use `CollectionReset` after duplicate-count,
+ordering, wholesale replacement, or other changes where an add/remove signal is insufficient. Ordering
+and multiplicity are not independently indexed, but reset reevaluates expressions that depend on them.
+Nested collections and one item shared by multiple registered roots are reverse-tracked; after removal,
+later item mutations no longer affect the former owner.
 
 Cached derived computations, invariant predicates, and relations materialized for derived propagation
 must have complete dependency analysis. `Build()` rejects opaque code or mutable captured/static state by
@@ -170,7 +177,6 @@ average fan-out, and a density-warning flag. Configure advisory thresholds with
 ## Further work
 
 - Range access plans (range expressions are currently diagnostic metadata)
-- Collection navigation
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.

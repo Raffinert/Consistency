@@ -5,6 +5,7 @@ internal sealed class InvoiceLine
     public Guid Id { get; init; }
     public string PurchaseOrderNumber { get; set; } = "";
     public string ItemNumber { get; set; } = "";
+    public object? Tag { get; set; }
 }
 
 internal sealed class PurchaseOrderLine
@@ -92,4 +93,26 @@ internal sealed class CollectionOrder
 internal sealed class CollectionOrderLine
 {
     public string ItemNumber { get; set; } = "";
+}
+
+internal sealed class ReplaceableCollectionOrder
+{
+    public Guid Id { get; init; }
+    public List<ValueEqualCollectionLine> Lines { get; set; } = [];
+    public CollectionContainer Container { get; set; } = new();
+}
+
+internal sealed class CollectionContainer
+{
+    public List<ValueEqualCollectionLine> Lines { get; } = [];
+}
+
+internal sealed class ValueEqualCollectionLine
+{
+    public string ItemNumber { get; set; } = "";
+
+    public override bool Equals(object? obj) =>
+        obj is ValueEqualCollectionLine other && other.ItemNumber == ItemNumber;
+
+    public override int GetHashCode() => ItemNumber.GetHashCode(StringComparison.Ordinal);
 }
