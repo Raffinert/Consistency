@@ -316,6 +316,66 @@ public sealed class RuntimeTests
     }
 
     [Fact]
+    public void Contiguous_repeated_changes_are_normalized_to_their_net_effect()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "C");
+        var line = Line("PO", "A");
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        line.ItemNumber = "C";
+        var impact = runtime.Apply(ChangeSet.Create(
+            Change.Property(lines, line, x => x.ItemNumber, "A", "B"),
+            Change.Property(lines, line, x => x.ItemNumber, "B", "C")),
+            ChangeValidationMode.StrictNewValue);
+
+        Assert.Equal([line], runtime.Related(relation, invoice));
+        Assert.Equal(1, impact.Access.ReindexedRoots);
+    }
+
+    [Fact]
+    public void Conflicting_repeated_changes_are_rejected_before_runtime_updates()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "C");
+        var line = Line("PO", "A");
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        line.ItemNumber = "C";
+        Assert.Throws<InvalidOperationException>(() => runtime.Apply(ChangeSet.Create(
+            Change.Property(lines, line, x => x.ItemNumber, "A", "B"),
+            Change.Property(lines, line, x => x.ItemNumber, "A", "C"))));
+
+        line.ItemNumber = "A";
+        runtime.Apply(Change.Property(lines, line, x => x.ItemNumber, "C", "A"));
+        Assert.Empty(runtime.Related(relation, invoice));
+    }
+
+    [Fact]
+    public void Strict_validation_rejects_an_unapplied_domain_mutation()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "B");
+        var line = Line("PO", "A");
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+
+        Assert.Throws<InvalidOperationException>(() => runtime.Apply(
+            Change.Property(lines, line, x => x.ItemNumber, "A", "B"),
+            ChangeValidationMode.StrictNewValue));
+
+        line.ItemNumber = "B";
+        runtime.Apply(Change.Property(lines, line, x => x.ItemNumber, "A", "B"),
+            ChangeValidationMode.StrictNewValue);
+        Assert.Equal([line], runtime.Related(relation, invoice));
+    }
+
+    [Fact]
     public void Invalid_change_rejects_the_entire_change_set_before_index_updates()
     {
         var model = new RelationModelBuilder();

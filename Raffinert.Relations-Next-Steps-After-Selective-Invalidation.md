@@ -470,6 +470,13 @@ No arbitrary user/application delegate executes while relation/navigation/index 
 
 # 7. P1 — Tighten `ChangeSet` semantics
 
+**Status:** Implemented.
+
+Change sets are now normalized deterministically by instance/member. Contiguous repeated changes collapse
+to their net transition, conflicts are rejected before runtime state changes, and optional strict validation
+checks the current member value against the reported final value. The runtime/domain atomicity boundary is
+documented on the public API and in the README.
+
 `ChangeSet` describes domain mutations that have already happened.
 
 Therefore the library cannot provide full transaction rollback over domain object state.

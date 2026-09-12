@@ -295,10 +295,28 @@ public sealed class RelationRuntime
         return Apply(ChangeSet.Create(change));
     }
 
+    public ChangeImpact Apply(PropertyChange change, ChangeValidationMode validationMode)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        return Apply(ChangeSet.Create(change), validationMode);
+    }
+
     public ChangeImpact Apply(ChangeSet changeSet)
+        => Apply(changeSet, ChangeValidationMode.Default);
+
+    /// <summary>
+    /// Validates the entire batch, atomically commits runtime-owned indexes and dependency state,
+    /// and then dispatches policy callbacks. Domain mutations must already have occurred and are
+    /// never rolled back by this operation.
+    /// </summary>
+    public ChangeImpact Apply(ChangeSet changeSet, ChangeValidationMode validationMode)
     {
         ArgumentNullException.ThrowIfNull(changeSet);
-        var changes = changeSet.Changes.Select(ValidateChange).ToArray();
+        if (!Enum.IsDefined(validationMode))
+            throw new ArgumentOutOfRangeException(nameof(validationMode));
+        var changes = NormalizeChanges(changeSet.Changes.Select(ValidateChange).ToArray());
+        if (validationMode == ChangeValidationMode.StrictNewValue)
+            ValidateCurrentValues(changes);
         var result = CommitChanges(changes);
         result.PolicyActions.Dispatch();
         return result.Impact;
@@ -558,6 +576,72 @@ public sealed class RelationRuntime
                     "Remove and re-add the object, or declare a genuinely stable key.");
         }
         return change;
+    }
+
+    private static IReadOnlyList<PropertyChange> NormalizeChanges(IReadOnlyList<PropertyChange> changes)
+    {
+        var normalized = new List<PropertyChange>();
+        var positions = new Dictionary<ChangedMember, int>();
+        foreach (var change in changes)
+        {
+            var key = new ChangedMember(change.Instance, change.Member);
+            if (!positions.TryGetValue(key, out var position))
+            {
+                positions.Add(key, normalized.Count);
+                normalized.Add(change);
+                continue;
+            }
+
+            var previous = normalized[position];
+            if (!Equals(previous.NewValue, change.OldValue))
+                throw new InvalidOperationException(
+                    $"Conflicting changes for member '{change.Member.Name}'. " +
+                    $"Expected the next old value to equal the previous new value.");
+            normalized[position] = new PropertyChange(
+                previous.Set,
+                previous.Instance,
+                previous.Member,
+                previous.OldValue,
+                change.NewValue);
+        }
+        return normalized;
+    }
+
+    private static void ValidateCurrentValues(IReadOnlyList<PropertyChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            var actual = change.Member switch
+            {
+                PropertyInfo property => property.GetValue(change.Instance),
+                FieldInfo field => field.GetValue(change.Instance),
+                _ => throw new InvalidOperationException("A property or field member is required.")
+            };
+            if (!Equals(actual, change.NewValue))
+                throw new InvalidOperationException(
+                    $"The current value of '{change.Member.Name}' does not equal the reported new value.");
+        }
+    }
+
+    private readonly struct ChangedMember : IEquatable<ChangedMember>
+    {
+        private readonly object _instance;
+        private readonly MemberInfo _member;
+
+        public ChangedMember(object instance, MemberInfo member)
+        {
+            _instance = instance;
+            _member = member;
+        }
+
+        public bool Equals(ChangedMember other) =>
+            ReferenceEquals(_instance, other._instance) && _member.Equals(other._member);
+
+        public override bool Equals(object? obj) => obj is ChangedMember other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(
+            RuntimeHelpers.GetHashCode(_instance),
+            _member);
     }
 
     private ObjectSetDefinition<T> FindUniqueSet<T>() where T : class

@@ -76,7 +76,11 @@ public sealed class PropertyChange
     internal PropertyChange WithSet(IObjectSetDefinition set) => new(set, Instance, Member, OldValue, NewValue);
 }
 
-/// <summary>An immutable batch of property changes that must be applied as one runtime operation.</summary>
+/// <summary>
+/// An immutable batch describing domain mutations that have already occurred. The runtime validates
+/// the complete batch before atomically updating its own indexes and dependency state; it does not
+/// mutate or roll back domain objects.
+/// </summary>
 public sealed class ChangeSet
 {
     private ChangeSet(IReadOnlyList<PropertyChange> changes) => Changes = changes;
@@ -92,4 +96,14 @@ public sealed class ChangeSet
             throw new ArgumentException("A change set cannot contain null changes.", nameof(changes));
         return new ChangeSet(changes.ToArray());
     }
+}
+
+/// <summary>Controls validation performed before a change is applied to runtime-owned state.</summary>
+public enum ChangeValidationMode
+{
+    /// <summary>Validate registration, stable keys, and repeated-change consistency.</summary>
+    Default,
+
+    /// <summary>Also require each changed member's current value to equal its reported final new value.</summary>
+    StrictNewValue
 }

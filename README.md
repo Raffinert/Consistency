@@ -32,6 +32,12 @@ The object-set argument can be omitted when the instance belongs to exactly one 
 An object's declared key is immutable while the object is registered. Reported key changes are rejected;
 remove and re-add the object when its identity genuinely needs to change.
 
+A `ChangeSet` is fully validated before runtime-maintained indexes and dependency state are updated.
+Repeated changes to one instance/member must form a contiguous value chain (`A -> B`, `B -> C`) and
+are normalized to their net effect; conflicting chains are rejected. Domain mutation remains external
+and is not transactional. Pass `ChangeValidationMode.StrictNewValue` to `Apply` to additionally verify
+that each member currently equals its reported final new value.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -45,7 +51,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Incremental add, remove, and scalar-property index maintenance
 - Shared arbitrary-depth reverse navigation for nested paths
 - Access-impact and semantic-impact reporting
-- Atomic property `ChangeSet` application
+- Deterministic, atomically validated property `ChangeSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
@@ -65,7 +71,7 @@ remove and re-add the object when its identity genuinely needs to change.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- Stricter `ChangeSet` validation and documented atomicity
+- Focused dependency-graph propagation
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.
