@@ -297,6 +297,10 @@ Removing a root object removes every engine-owned source-scoped state entry asso
 
 # 4. P0 — Formalize the `Fresh` / `Dirty` / `Invalid` state machine
 
+**Status:** Implemented.
+
+Public state semantics are documented and dependency transitions are centralized. Dirty impact cannot downgrade Invalid state; successful derived recomputation returns to Fresh, while successful invariant evaluation returns to Valid or Violated. Complete transition matrices and mixed-severity runtime tests enforce the contract.
+
 The states already exist, but their semantics should become part of the architectural contract.
 
 Recommended definitions:

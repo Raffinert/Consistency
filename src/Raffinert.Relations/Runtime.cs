@@ -133,9 +133,7 @@ public sealed class RelationRuntime
             definition => definition.CreateState(_relations[definition.Relation]));
         _invariants = invariants.ToDictionary(
             definition => definition,
-            definition => definition.CreateState(
-                _derivedStates[definition.Derived],
-                _sets[definition.Derived.SourceSet]));
+            definition => definition.CreateState(_derivedStates[definition.Derived]));
         _sourceLifecycleParticipants = _derivedStates.Values.Cast<ISourceLifecycleParticipant>()
             .Concat(_invariants.Values)
             .ToArray();
@@ -398,9 +396,9 @@ public sealed class RelationRuntime
                 dirtySources.UnionWith(membershipRoots);
             dirtySources.ExceptWith(invalidSources);
             if (invalidSources.Count > 0)
-                pair.Value.Invalidate(invalidSources, invalid: true);
+                pair.Value.ApplyImpact(invalidSources, DependencyImpactKind.Invalid);
             if (dirtySources.Count > 0)
-                pair.Value.Invalidate(dirtySources, invalid: false);
+                pair.Value.ApplyImpact(dirtySources, DependencyImpactKind.Dirty);
             if (invalidSources.Count > 0 || dirtySources.Count > 0)
             {
                 affectedDerived[pair.Key] = (invalidSources, dirtySources);
@@ -412,9 +410,9 @@ public sealed class RelationRuntime
             if (affectedDerived.TryGetValue(pair.Key.Derived, out var inherited))
             {
                 if (inherited.Invalid.Count > 0)
-                    pair.Value.OnDependencyChanged(inherited.Invalid, invalid: true);
+                    pair.Value.ApplyImpact(inherited.Invalid, DependencyImpactKind.Invalid);
                 if (inherited.Dirty.Count > 0)
-                    pair.Value.OnDependencyChanged(inherited.Dirty, invalid: false);
+                    pair.Value.ApplyImpact(inherited.Dirty, DependencyImpactKind.Dirty);
             }
 
             var invariantRoots = ResolveDependencyRoots(
@@ -422,7 +420,7 @@ public sealed class RelationRuntime
                 pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
                 changes);
             if (invariantRoots.Count > 0)
-                pair.Value.OnDependencyChanged(invariantRoots, invalid: false);
+                pair.Value.ApplyImpact(invariantRoots, DependencyImpactKind.Dirty);
         }
     }
 
@@ -463,16 +461,12 @@ public sealed class RelationRuntime
                         changes)),
                     impact.Sources));
         foreach (var pair in affectedDerived)
-            _derivedStates[pair.Key].Invalidate(
-                pair.Value.Sources,
-                pair.Value.Severity == DependencyImpactKind.Invalid);
+            _derivedStates[pair.Key].ApplyImpact(pair.Value.Sources, pair.Value.Severity);
         foreach (var pair in _invariants)
         {
             if (affectedDerived.TryGetValue(pair.Key.Derived, out var impact))
             {
-                pair.Value.OnDependencyChanged(
-                    impact.Sources,
-                    impact.Severity == DependencyImpactKind.Invalid);
+                pair.Value.ApplyImpact(impact.Sources, impact.Severity);
             }
         }
     }

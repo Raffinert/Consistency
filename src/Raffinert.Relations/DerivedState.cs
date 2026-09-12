@@ -3,19 +3,29 @@ using Raffinert.Relations.Expressions;
 
 namespace Raffinert.Relations;
 
+/// <summary>Describes the freshness and usability of a cached derived value.</summary>
 public enum DerivedValueState
 {
+    /// <summary>The value was computed from all currently accepted dependencies.</summary>
     Fresh,
+    /// <summary>No fresh value is available; it is either not computed yet or its cache may be stale.</summary>
     Dirty,
+    /// <summary>The cached value must not be relied upon before successful recomputation.</summary>
     Invalid
 }
 
+/// <summary>Describes the evaluation and dependency state of an invariant.</summary>
 public enum InvariantEvaluationState
 {
+    /// <summary>The invariant has not been evaluated for the source.</summary>
     Unknown,
+    /// <summary>The invariant was evaluated successfully and its predicate returned true.</summary>
     Valid,
+    /// <summary>The invariant was evaluated successfully and its predicate returned false.</summary>
     Violated,
+    /// <summary>The evaluated result may be stale and should be evaluated again when freshness matters.</summary>
     Dirty,
+    /// <summary>The evaluated result must not be relied upon before successful revalidation.</summary>
     Invalid
 }
 
@@ -203,8 +213,7 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
 {
     IDerivedDefinition Definition { get; }
     int SourceStateEntryCount { get; }
-    void Invalidate(bool invalid);
-    void Invalidate(IEnumerable<object> sources, bool invalid);
+    void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
 }
 
 internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
@@ -231,23 +240,13 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
     public DerivedValueState GetState(TSource source) =>
         _cache.TryGetValue(source, out var entry) ? entry.State : DerivedValueState.Dirty;
 
-    public void Invalidate(bool invalid)
-    {
-        foreach (var entry in _cache.Values)
-        {
-            if (invalid || entry.State != DerivedValueState.Invalid)
-                entry.State = invalid ? DerivedValueState.Invalid : DerivedValueState.Dirty;
-        }
-    }
-
-    public void Invalidate(IEnumerable<object> sources, bool invalid)
+    public void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact)
     {
         foreach (var source in sources.Cast<TSource>())
         {
             if (!_cache.TryGetValue(source, out var entry))
                 continue;
-            if (invalid || entry.State != DerivedValueState.Invalid)
-                entry.State = invalid ? DerivedValueState.Invalid : DerivedValueState.Dirty;
+            entry.State = DependencyStateTransitions.Apply(entry.State, impact);
         }
     }
 
@@ -267,7 +266,7 @@ internal interface IInvariantDefinition
     IDerivedDefinition Derived { get; }
     InvariantReaction Reaction { get; }
     ExpressionDependencyAnalysis Analysis { get; }
-    IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState, ObjectSetRuntime sourceObjects);
+    IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState);
 }
 
 internal sealed class InvariantDefinition<TSource, TItem, TValue>(
@@ -286,25 +285,22 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
     public InvariantReaction Reaction { get; set; } = InvariantReaction.MarkDirty;
     public Action<TSource>? RepairScheduler { get; set; }
 
-    public IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState, ObjectSetRuntime sourceObjects) =>
+    public IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState) =>
         new InvariantRuntimeState<TSource, TItem, TValue>(
             this,
-            (DerivedRuntimeState<TSource, TItem, TValue>)derivedState,
-            sourceObjects);
+            (DerivedRuntimeState<TSource, TItem, TValue>)derivedState);
 }
 
 internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
 {
     IInvariantDefinition Definition { get; }
     int SourceStateEntryCount { get; }
-    void OnDependencyChanged(bool invalid);
-    void OnDependencyChanged(IEnumerable<object> sources, bool invalid);
+    void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
 }
 
 internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
     InvariantDefinition<TSource, TItem, TValue> definition,
-    DerivedRuntimeState<TSource, TItem, TValue> derivedState,
-    ObjectSetRuntime sourceObjects) : IInvariantRuntimeState
+    DerivedRuntimeState<TSource, TItem, TValue> derivedState) : IInvariantRuntimeState
     where TSource : class
     where TItem : class
 {
@@ -324,12 +320,7 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
     public InvariantEvaluationState GetState(TSource source) =>
         _states.TryGetValue(source, out var state) ? state : InvariantEvaluationState.Unknown;
 
-    public void OnDependencyChanged(bool invalid)
-    {
-        OnDependencyChanged(sourceObjects.Instances, invalid);
-    }
-
-    public void OnDependencyChanged(IEnumerable<object> sources, bool invalid)
+    public void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact)
     {
         var typedSources = sources.Cast<TSource>().Distinct(ReferenceEqualityComparer<TSource>.Instance).ToArray();
         switch (definition.Reaction)
@@ -339,15 +330,15 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
                     Evaluate(source);
                 break;
             case InvariantReaction.MarkInvalid:
-                Mark(typedSources, InvariantEvaluationState.Invalid);
+                Mark(typedSources, DependencyImpactKind.Invalid);
                 break;
             case InvariantReaction.ScheduleRepair:
-                Mark(typedSources, InvariantEvaluationState.Invalid);
+                Mark(typedSources, DependencyImpactKind.Invalid);
                 foreach (var source in typedSources)
                     definition.RepairScheduler!(source);
                 break;
             default:
-                Mark(typedSources, invalid ? InvariantEvaluationState.Invalid : InvariantEvaluationState.Dirty);
+                Mark(typedSources, impact);
                 break;
         }
     }
@@ -356,14 +347,13 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
 
     public void OnSourceRemoved(object source) => _states.Remove((TSource)source);
 
-    private void Mark(IEnumerable<TSource> sources, InvariantEvaluationState state)
+    private void Mark(IEnumerable<TSource> sources, DependencyImpactKind impact)
     {
         foreach (var source in sources)
         {
-            if (!_states.TryGetValue(source, out var current) ||
-                state == InvariantEvaluationState.Dirty && current == InvariantEvaluationState.Invalid)
+            if (!_states.TryGetValue(source, out var current))
                 continue;
-            _states[source] = state;
+            _states[source] = DependencyStateTransitions.Apply(current, impact);
         }
     }
 }

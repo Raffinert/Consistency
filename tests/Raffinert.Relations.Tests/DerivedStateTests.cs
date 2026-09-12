@@ -375,6 +375,8 @@ public sealed class DerivedStateTests
             source.Code == item.Code && item.Enabled);
         var quantity = model.Derived(sources).Using(relation)
             .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var invariant = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= 10m);
         var runtime = model.Build().CreateRuntime(new InvalidMembershipImpactPolicy());
         var source = Source("A");
         var item = Item("A", quantity: 2m);
@@ -382,11 +384,19 @@ public sealed class DerivedStateTests
         runtime.Add(sources, source);
         runtime.Add(items, item);
         runtime.Get(quantity, source);
+        Assert.True(runtime.Evaluate(invariant, source));
 
         item.Enabled = false;
         runtime.Apply(Change.Property(items, item, x => x.Enabled, true, false));
 
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
+        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, source));
+
+        Assert.Equal(0m, runtime.Get(quantity, source));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, source));
+        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, source));
+        Assert.True(runtime.Evaluate(invariant, source));
+        Assert.Equal(InvariantEvaluationState.Valid, runtime.GetState(invariant, source));
     }
 
     [Theory]
