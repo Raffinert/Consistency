@@ -199,9 +199,10 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
         new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relationState);
 }
 
-internal interface IDerivedRuntimeState
+internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
 {
     IDerivedDefinition Definition { get; }
+    int SourceStateEntryCount { get; }
     void Invalidate(bool invalid);
     void Invalidate(IEnumerable<object> sources, bool invalid);
 }
@@ -215,6 +216,8 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
     private readonly Dictionary<TSource, CacheEntry> _cache = new(ReferenceEqualityComparer<TSource>.Instance);
 
     public IDerivedDefinition Definition => definition;
+    public IObjectSetDefinition SourceSet => definition.SourceSet;
+    public int SourceStateEntryCount => _cache.Count;
 
     public TValue Get(TSource source)
     {
@@ -247,6 +250,10 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
                 entry.State = invalid ? DerivedValueState.Invalid : DerivedValueState.Dirty;
         }
     }
+
+    public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
+
+    public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
 
     private sealed class CacheEntry(TValue value, DerivedValueState state)
     {
@@ -286,9 +293,10 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
             sourceObjects);
 }
 
-internal interface IInvariantRuntimeState
+internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
 {
     IInvariantDefinition Definition { get; }
+    int SourceStateEntryCount { get; }
     void OnDependencyChanged(bool invalid);
     void OnDependencyChanged(IEnumerable<object> sources, bool invalid);
 }
@@ -303,6 +311,8 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
     private readonly Dictionary<TSource, InvariantEvaluationState> _states = new(ReferenceEqualityComparer<TSource>.Instance);
 
     public IInvariantDefinition Definition => definition;
+    public IObjectSetDefinition SourceSet => definition.Derived.SourceSet;
+    public int SourceStateEntryCount => _states.Count;
 
     public bool Evaluate(TSource source)
     {
@@ -341,6 +351,10 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
                 break;
         }
     }
+
+    public void OnSourceAdded(object source) => _states.Remove((TSource)source);
+
+    public void OnSourceRemoved(object source) => _states.Remove((TSource)source);
 
     private void Mark(IEnumerable<TSource> sources, InvariantEvaluationState state)
     {

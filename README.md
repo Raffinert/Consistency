@@ -50,6 +50,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Policy-driven dependency severity, independent of scan/hash access planning
 - Exact source-scoped derived invalidation backed by bidirectional relation membership
+- Source lifecycle cleanup for derived, invariant, and materialized relation state
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
@@ -61,7 +62,7 @@ remove and re-add the object when its identity genuinely needs to change.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- Source-removal lifecycle cleanup for derived and invariant state
+- Formalized derived and invariant state-transition contracts
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.

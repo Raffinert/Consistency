@@ -111,6 +111,7 @@ public sealed class RelationRuntime
     private readonly ImpactResolver _impactResolver;
     private readonly IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> _derivedStates;
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
+    private readonly IReadOnlyList<ISourceLifecycleParticipant> _sourceLifecycleParticipants;
     private readonly IDependencyImpactPolicy _dependencyImpactPolicy;
 
     internal RelationRuntime(
@@ -135,6 +136,9 @@ public sealed class RelationRuntime
             definition => definition.CreateState(
                 _derivedStates[definition.Derived],
                 _sets[definition.Derived.SourceSet]));
+        _sourceLifecycleParticipants = _derivedStates.Values.Cast<ISourceLifecycleParticipant>()
+            .Concat(_invariants.Values)
+            .ToArray();
     }
 
     public void Add<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -154,6 +158,7 @@ public sealed class RelationRuntime
     {
         var state = GetSet(definition);
         state.Add(instance);
+        NotifySourceAdded(definition, instance);
         _navigation.AddRoot(definition, instance);
         var rightRelations = _relations
             .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
@@ -198,6 +203,7 @@ public sealed class RelationRuntime
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.RemoveLeft(instance));
         _navigation.RemoveRoot(definition, instance);
+        NotifySourceRemoved(definition, instance);
         var removed = state.Remove(instance);
         InvalidateForRelationMutations(deltas, []);
         return removed;
@@ -439,25 +445,34 @@ public sealed class RelationRuntime
         var affectedDerived = _derivedStates
             .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
                 deltas.TryGetValue(pair.Key.Relation, out var delta) && delta.AffectedLefts.Count > 0)
+            .Select(pair =>
+            {
+                var sources = deltas[pair.Key.Relation].AffectedLefts
+                    .Where(_sets[pair.Key.SourceSet].Contains)
+                    .ToHashSet(ReferenceEqualityComparer.Instance);
+                return (Definition: pair.Key, Sources: sources);
+            })
+            .Where(impact => impact.Sources.Count > 0)
             .ToDictionary(
-                pair => pair.Key,
-                pair => _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    pair.Key.Relation,
-                    pair.Key,
-                    deltas[pair.Key.Relation],
-                    changes)));
+                impact => impact.Definition,
+                impact => (
+                    Severity: _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
+                        impact.Definition.Relation,
+                        impact.Definition,
+                        deltas[impact.Definition.Relation],
+                        changes)),
+                    impact.Sources));
         foreach (var pair in affectedDerived)
             _derivedStates[pair.Key].Invalidate(
-                deltas[pair.Key.Relation].AffectedLefts,
-                pair.Value == DependencyImpactKind.Invalid);
+                pair.Value.Sources,
+                pair.Value.Severity == DependencyImpactKind.Invalid);
         foreach (var pair in _invariants)
         {
-            if (affectedDerived.TryGetValue(pair.Key.Derived, out var severity))
+            if (affectedDerived.TryGetValue(pair.Key.Derived, out var impact))
             {
-                var delta = deltas[pair.Key.Derived.Relation];
                 pair.Value.OnDependencyChanged(
-                    delta.AffectedLefts,
-                    severity == DependencyImpactKind.Invalid);
+                    impact.Sources,
+                    impact.Severity == DependencyImpactKind.Invalid);
             }
         }
     }
@@ -472,6 +487,29 @@ public sealed class RelationRuntime
         else
             deltas.Add(relation, delta);
     }
+
+    private void NotifySourceAdded(IObjectSetDefinition set, object source)
+    {
+        foreach (var participant in _sourceLifecycleParticipants)
+            if (ReferenceEquals(participant.SourceSet, set))
+                participant.OnSourceAdded(source);
+    }
+
+    private void NotifySourceRemoved(IObjectSetDefinition set, object source)
+    {
+        foreach (var participant in _sourceLifecycleParticipants)
+            if (ReferenceEquals(participant.SourceSet, set))
+                participant.OnSourceRemoved(source);
+    }
+
+    internal int DerivedStateEntryCount =>
+        _derivedStates.Values.Sum(state => state.SourceStateEntryCount);
+
+    internal int InvariantStateEntryCount =>
+        _invariants.Values.Sum(state => state.SourceStateEntryCount);
+
+    internal int MaterializedRelationPairCount =>
+        _relations.Values.Sum(state => state.MaterializedPairCount);
 
     private PropertyChange ValidateChange(PropertyChange change)
     {
@@ -557,6 +595,7 @@ internal interface IRelationRuntimeState
     IObjectSetDefinition LeftSet { get; }
     IObjectSetDefinition RightSet { get; }
     bool HasExactPropagation { get; }
+    int MaterializedPairCount { get; }
     void EnableExactPropagation();
     RelationDelta AddLeft(object instance);
     RelationDelta RemoveLeft(object instance);
@@ -627,6 +666,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public IObjectSetDefinition LeftSet => _definition.Left;
     public IObjectSetDefinition RightSet => _definition.Right;
     public bool HasExactPropagation => _hasExactPropagation;
+    public int MaterializedPairCount => _rightsByLeft.Sum(pair => pair.Value.Count);
 
     public void EnableExactPropagation() => _hasExactPropagation = true;
 

@@ -237,6 +237,10 @@ A right-side equality-key change in a large relation should scale with the relev
 
 # 3. P0 — Source lifecycle cleanup
 
+**Status:** Implemented.
+
+Derived and invariant runtime states now participate in source lifecycle notifications. Removing a source clears cached/evaluated entries, materialized membership, and reverse-index state; propagation excludes removed roots so immediate and repair policies cannot recreate state. Re-adding the same reference starts clean, with repeated-cycle retention coverage.
+
 Removing a source root currently removes it from relation membership and the object set, but engine-owned higher-level state can still retain references.
 
 Potential retained state includes:

@@ -560,6 +560,103 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Removing_and_readding_source_cleans_all_source_scoped_runtime_state()
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var invariant = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= 10m);
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        runtime.Add(sources, source);
+        runtime.Add(items, Item("A", quantity: 2m));
+        Assert.Equal(2m, runtime.Get(quantity, source));
+        Assert.True(runtime.Evaluate(invariant, source));
+        Assert.Equal(1, runtime.DerivedStateEntryCount);
+        Assert.Equal(1, runtime.InvariantStateEntryCount);
+        Assert.Equal(1, runtime.MaterializedRelationPairCount);
+
+        Assert.True(runtime.Remove(sources, source));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
+        Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
+        Assert.Equal(0, runtime.DerivedStateEntryCount);
+        Assert.Equal(0, runtime.InvariantStateEntryCount);
+        Assert.Equal(0, runtime.MaterializedRelationPairCount);
+
+        runtime.Add(sources, source);
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
+        Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
+        Assert.Equal(0, runtime.DerivedStateEntryCount);
+        Assert.Equal(0, runtime.InvariantStateEntryCount);
+        Assert.Equal(1, runtime.MaterializedRelationPairCount);
+        Assert.Equal(2m, runtime.Get(quantity, source));
+        Assert.True(runtime.Evaluate(invariant, source));
+    }
+
+    [Fact]
+    public void Repeated_source_add_remove_cycles_do_not_grow_runtime_state()
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var invariant = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= 10m);
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        runtime.Add(items, Item("A", quantity: 2m));
+
+        for (var iteration = 0; iteration < 100; iteration++)
+        {
+            runtime.Add(sources, source);
+            runtime.Get(quantity, source);
+            runtime.Evaluate(invariant, source);
+            Assert.True(runtime.Remove(sources, source));
+
+            Assert.Equal(0, runtime.DerivedStateEntryCount);
+            Assert.Equal(0, runtime.InvariantStateEntryCount);
+            Assert.Equal(0, runtime.MaterializedRelationPairCount);
+        }
+    }
+
+    [Fact]
+    public void Source_removal_does_not_recreate_state_or_schedule_repairs()
+    {
+        var scheduled = new List<DerivedSourceRecord>();
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var immediate = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= 10m)
+            .ReactWith(InvariantReaction.EvaluateImmediately);
+        var repair = model.Invariant(sources).Using(quantity)
+            .Must((source, value) => value <= 10m)
+            .ScheduleRepairWith(scheduled.Add);
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        runtime.Add(sources, source);
+        runtime.Add(items, Item("A", quantity: 2m));
+        Assert.True(runtime.Evaluate(immediate, source));
+        Assert.True(runtime.Evaluate(repair, source));
+        scheduled.Clear();
+
+        Assert.True(runtime.Remove(sources, source));
+
+        Assert.Empty(scheduled);
+        Assert.Equal(0, runtime.DerivedStateEntryCount);
+        Assert.Equal(0, runtime.InvariantStateEntryCount);
+        Assert.Equal(0, runtime.MaterializedRelationPairCount);
+    }
+
+    [Fact]
     public void One_item_mutation_leaves_ten_thousand_unrelated_source_caches_fresh()
     {
         const int unrelatedCount = 10_000;
