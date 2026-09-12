@@ -70,6 +70,7 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 - Invariant evaluation with immediate, dirty, and invalidation policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
 - A separate EF Core change-tracker adapter package
+- EF Core unit-of-work capture with entity lifecycle, relationship resets, explicit set mapping, and post-save apply
 - A BenchmarkDotNet benchmark project
 - Human-readable compiled model diagnostics through `DebugView`
 
@@ -80,6 +81,13 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.
+
+The EF Core adapter captures a `RelationUnitOfWork` before `SaveChanges`, then applies it only after the
+database operation succeeds. `SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering.
+Added and deleted entities require a `RelationUnitOfWorkMappings` entry; selectors disambiguate CLR types
+used by multiple object sets. Modified scalars, references, owned entries, and collection resets are
+translated through the same core change contracts. Runtime application failure after database success
+is surfaced and requires application-level reconciliation; it cannot roll back the database transaction.
 
 `RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
 

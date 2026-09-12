@@ -22,7 +22,62 @@ public sealed class EntityFrameworkCoreAdapterTests
         Assert.Equal("NEW", change.NewValue);
     }
 
-    private sealed class TestDbContext : DbContext
+    [Fact]
+    public void Save_changes_and_apply_maps_added_modified_and_deleted_entities()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Key(value => value.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new TestDbContext();
+        var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+
+        context.Add(entity);
+        context.SaveChangesAndApply(runtime, mappings);
+        Assert.True(runtime.Remove(objects, entity));
+        runtime.Add(objects, entity);
+
+        entity.Code = "B";
+        context.SaveChangesAndApply(runtime, mappings);
+
+        context.Remove(entity);
+        context.SaveChangesAndApply(runtime, mappings);
+        Assert.False(runtime.Remove(objects, entity));
+    }
+
+    [Fact]
+    public void Failed_database_save_does_not_advance_runtime_state()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Key(value => value.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new FailingDbContext();
+        var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        context.Add(entity);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            context.SaveChangesAndApply(runtime, mappings));
+
+        Assert.False(runtime.Remove(objects, entity));
+    }
+
+    [Fact]
+    public void Multiple_sets_for_one_clr_type_require_disambiguating_selectors()
+    {
+        var model = new RelationModelBuilder();
+        var first = model.Objects<CodeHolder>().Key(value => value.Id);
+        var second = model.Objects<CodeHolder>().Key(value => value.Id);
+        model.Build();
+        var mappings = new RelationUnitOfWorkMappings().Map(first).Map(second);
+        using var context = new TestDbContext();
+        context.Add(new CodeHolder { Id = Guid.NewGuid() });
+
+        Assert.Throws<InvalidOperationException>(() =>
+            ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings));
+    }
+
+    private class TestDbContext : DbContext
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>
             modelBuilder.Entity<CodeHolder>();
@@ -31,5 +86,10 @@ public sealed class EntityFrameworkCoreAdapterTests
         {
             optionsBuilder.UseInMemoryDatabase($"relations-{Guid.NewGuid()}");
         }
+    }
+
+    private sealed class FailingDbContext : TestDbContext
+    {
+        public override int SaveChanges() => throw new InvalidOperationException("Database failure.");
     }
 }

@@ -647,6 +647,13 @@ Collection add/remove updates relations, derived values, and invariants incremen
 
 # 10. P1 — Mature the EF Core adapter into a unit-of-work adapter
 
+**Status:** Implemented.
+
+The EF adapter now captures added, deleted, scalar, reference, owned-entry, and collection-reset work
+before `SaveChanges`, with explicit/selectable mappings for CLR types used by multiple sets. Sync and async
+helpers apply the captured work only after database success, and the remaining post-database runtime-failure
+reconciliation boundary is documented explicitly.
+
 The current adapter handles modified scalar properties.
 
 Expand in stages.

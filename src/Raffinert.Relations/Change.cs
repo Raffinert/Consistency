@@ -19,6 +19,22 @@ public static class Change
         return new PropertyChange(null, instance, member, oldValue, newValue);
     }
 
+    /// <summary>Describes a reflected change for a specific object set.</summary>
+    public static PropertyChange Property<T>(
+        ObjectSetBuilder<T> set,
+        T instance,
+        MemberInfo member,
+        object? oldValue,
+        object? newValue) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(member);
+        if (member is not PropertyInfo and not FieldInfo)
+            throw new ArgumentException("A property or field member is required.", nameof(member));
+        return new PropertyChange(set.Definition, instance, member, oldValue, newValue);
+    }
+
     /// <summary>Describes a property change that has already been made on the domain object.</summary>
     public static PropertyChange Property<T, TValue>(
         ObjectSetBuilder<T> set,
@@ -84,6 +100,14 @@ public static class Change
         Expression<Func<TOwner, IEnumerable<TItem>>> collection) where TOwner : class where TItem : class =>
         CollectionChange.Create(set?.Definition ?? throw new ArgumentNullException(nameof(set)), owner,
             GetDirectMember(collection), CollectionChangeKind.Reset, null);
+
+    /// <summary>Describes a reflected collection reset, primarily for change-tracking adapters.</summary>
+    public static CollectionChange CollectionReset(object owner, MemberInfo member)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(member);
+        return CollectionChange.Create(null, owner, member, CollectionChangeKind.Reset, null);
+    }
 
     internal static MemberInfo GetDirectMember(LambdaExpression property)
     {
