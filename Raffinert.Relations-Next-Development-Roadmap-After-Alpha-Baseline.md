@@ -848,6 +848,13 @@ That is fine, but decide intentionally before alpha.
 
 # 12. P2 — Multi-targeting decision
 
+**Status:** Implemented.
+
+The dependency-free core now targets both `net8.0` and `net10.0`; the implementation audit found no
+.NET 10-only dependency in its public/runtime behavior. The EF adapter remains on `net10.0` with EF Core
+10, while tests and benchmarks run on .NET 10. CI build/pack compiles and packages both core target
+frameworks, and the README records this support policy.
+
 The project currently targets `.NET 10` only.
 
 Before broader OSS adoption, decide intentionally whether the core should target:

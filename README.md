@@ -2,6 +2,9 @@
 
 Raffinert.Relations is an experimental declarative dependency engine for .NET object models.
 
+The dependency-free core package supports .NET 8 and .NET 10. The EF adapter targets .NET 10 and EF
+Core 10. Tests and benchmarks run on .NET 10; the normal build and pack gates compile both core targets.
+
 Relationships are defined as expression trees. The library analyzes those expressions to derive dependencies, access paths, indexes, and change impact, allowing relationship queries to be maintained incrementally without repeating the business rule in index or refresh configuration.
 
 ## Example
