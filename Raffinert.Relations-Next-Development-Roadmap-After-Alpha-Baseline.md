@@ -742,6 +742,15 @@ Longer term, provide integration guidance/API for applying prepared runtime chan
 
 # 10. P1 — Public diagnostics and explainability
 
+**Status:** Implemented.
+
+`CompiledRelationModel.Diagnostics` exposes immutable structured records for object sets, relations,
+derived values, and invariants, including deterministic IDs, dependencies, plans, completeness,
+materialization, LINQ semantics, and configured policy behavior. `RuntimeDiagnostics` now counts
+predicate evaluations, reindexed/affected roots, pair additions/removals, full recomputations,
+incremental updates, and emitted policy requests since reset, alongside per-relation density data.
+`DebugView` remains the human-readable view of the same model concepts.
+
 `DebugView` is useful, but the engine now has enough planning/propagation machinery that structured diagnostics will be valuable.
 
 Consider public read-only diagnostics models for:

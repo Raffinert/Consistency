@@ -494,7 +494,13 @@ public sealed record RelationRuntimeDiagnostics(
 /// <summary>Accumulated execution counters and current relation materialization statistics.</summary>
 public sealed record RuntimeDiagnostics(
     long PredicateEvaluations,
-    int AffectedSources,
+    long ReindexedRoots,
+    long AffectedSources,
+    long RelationPairsAdded,
+    long RelationPairsRemoved,
+    long DerivedFullRecomputations,
+    long IncrementalDerivedUpdates,
+    long PolicyRequestsEmitted,
     IReadOnlyList<RelationRuntimeDiagnostics> Relations);
 
 internal sealed class ImpactResolver(

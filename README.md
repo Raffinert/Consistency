@@ -131,6 +131,13 @@ the selected plan is shown in `DebugView`.
 average fan-out, and a density-warning flag. Configure advisory thresholds with
 `CreateRuntime(new RuntimeDiagnosticOptions { ... })`; they do not reject or limit runtime mutations.
 
+`compiled.Diagnostics` is the machine-readable counterpart to `DebugView`. It provides immutable object
+set, relation, derived-value, and invariant records with deterministic IDs, types/expressions,
+dependencies, access plans, completeness issues, materialization, LINQ semantics, computation plans, and
+configured reactions/severities. Runtime counters additionally track reindexed roots, affected sources,
+membership pairs added/removed, full and incremental derived computations, and policy requests since the
+last `ResetDiagnostics()` call.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -171,6 +178,7 @@ average fan-out, and a density-warning flag. Configure advisory thresholds with
 - Measured range-planning benchmark (current equality-prefix strategy retained)
 - Human-readable compiled model diagnostics through `DebugView`
 - Per-relation materialization, index-size, pair-count, fan-out, and configurable density diagnostics
+- Structured compiled-model diagnostics and cumulative incremental-work runtime counters
 - Deterministic full-graph randomized optimized-versus-scan correctness coverage
 - CI restore/build/test/format/pack validation and NuGet-ready package metadata
 

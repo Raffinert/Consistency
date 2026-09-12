@@ -281,6 +281,9 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
 {
     IDerivedDefinition Definition { get; }
     int SourceStateEntryCount { get; }
+    long FullRecomputationCount { get; }
+    long IncrementalUpdateCount { get; }
+    void ResetDiagnostics();
     void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
     IReadOnlyCollection<object> ApplyIncremental(
         IEnumerable<object> sources,
@@ -299,12 +302,15 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
     public IDerivedDefinition Definition => definition;
     public IObjectSetDefinition SourceSet => definition.SourceSet;
     public int SourceStateEntryCount => _cache.Count;
+    public long FullRecomputationCount { get; private set; }
+    public long IncrementalUpdateCount { get; private set; }
 
     public TValue Get(TSource source)
     {
         if (_cache.TryGetValue(source, out var entry) && entry.State == DerivedValueState.Fresh)
             return entry.Value;
         var value = definition.Computation(source, relationState.Related(source));
+        FullRecomputationCount++;
         _cache[source] = new CacheEntry(value, DerivedValueState.Fresh);
         return value;
     }
@@ -337,9 +343,16 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
                     entry.Value, source, relationImpact, changes, relationState, out var updated))
                 continue;
             entry.Value = updated;
+            IncrementalUpdateCount++;
             updatedSources.Add(source);
         }
         return updatedSources;
+    }
+
+    public void ResetDiagnostics()
+    {
+        FullRecomputationCount = 0;
+        IncrementalUpdateCount = 0;
     }
 
     public void OnSourceAdded(object source) => _cache.Remove((TSource)source);

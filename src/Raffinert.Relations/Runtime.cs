@@ -23,10 +23,12 @@ public sealed class CompiledRelationModel
         _relations = relations;
         _derivedStates = derivedStates;
         _invariants = invariants;
+        Diagnostics = CreateDiagnostics();
         DebugView = CreateDebugView();
     }
 
     public string DebugView { get; }
+    public CompiledModelDiagnostics Diagnostics { get; }
     public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants);
     public RelationRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
     {
@@ -109,6 +111,80 @@ public sealed class CompiledRelationModel
         return string.Join(Environment.NewLine, lines);
     }
 
+    private CompiledModelDiagnostics CreateDiagnostics()
+    {
+        var relationIds = _relations.Select((definition, id) => (definition, id))
+            .ToDictionary(pair => pair.definition, pair => pair.id);
+        var derivedIds = _derivedStates.Select((definition, id) => (definition, id))
+            .ToDictionary(pair => pair.definition, pair => pair.id);
+        return new CompiledModelDiagnostics(
+            _sets.Select(set => new ObjectSetModelDiagnostics(
+                set.Id,
+                set.ObjectType,
+                set.KeyExpression?.Body.ToString() ?? "<missing>"))
+                .ToArray(),
+            _relations.Select((relation, id) => new RelationModelDiagnostics(
+                id,
+                relation.LeftSet.Id,
+                relation.RightSet.Id,
+                relation.LeftSet.ObjectType,
+                relation.RightSet.ObjectType,
+                relation.PredicateExpression.Body.ToString(),
+                relation.Analysis.DependencyPaths.Select(path => path.DisplayName).ToArray(),
+                relation.Analysis.JoinKeyParts.Select(key =>
+                    $"{key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})").ToArray(),
+                ToPublicAccessPlan(relation.AccessPlan),
+                relation.ReverseAccessPlan is null ? null : ToPublicAccessPlan(relation.ReverseAccessPlan),
+                relation.ReverseAccessPlan is null
+                    ? RelationMaterializationMode.None
+                    : RelationMaterializationMode.ExactPropagation,
+                ToPublicCompleteness(relation.Analysis.DependencyAnalysis),
+                relation.AllowIncompleteDependencies))
+                .ToArray(),
+            _derivedStates.Select((derived, id) => new DerivedModelDiagnostics(
+                id,
+                derived.SourceSet.Id,
+                relationIds[derived.Relation],
+                derived.ComputationExpression.Body.ToString(),
+                derived.Analysis.Dependencies.Select(dependency =>
+                    $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),
+                ToPublicCompleteness(derived.Analysis.Flags),
+                derived.AllowIncompleteDependencies,
+                derived.Analysis.HasRelationMembershipDependency,
+                (DerivedLinqSemantics)(int)derived.Analysis.LinqSemantics,
+                derived.ComputationPlanName,
+                derived.ImpactPolicy.MembershipAdded,
+                derived.ImpactPolicy.MembershipRemoved,
+                derived.ImpactPolicy.ItemChanged))
+                .ToArray(),
+            _invariants.Select((invariant, id) => new InvariantModelDiagnostics(
+                id,
+                derivedIds[invariant.Derived],
+                invariant.PredicateExpression.Body.ToString(),
+                invariant.Analysis.Dependencies.Select(dependency =>
+                    $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),
+                ToPublicCompleteness(invariant.Analysis.Flags),
+                invariant.AllowIncompleteDependencies,
+                invariant.Reaction))
+                .ToArray());
+    }
+
+    private static RelationAccessPlanKind ToPublicAccessPlan(RelationAccessPlan plan) => plan switch
+    {
+        HashJoinAccessPlan => RelationAccessPlanKind.HashJoin,
+        _ => RelationAccessPlanKind.Scan
+    };
+
+    private static DependencyCompletenessIssue ToPublicCompleteness(DependencyAnalysisFlags flags)
+    {
+        var result = DependencyCompletenessIssue.None;
+        if (flags.HasFlag(DependencyAnalysisFlags.ContainsOpaqueCode))
+            result |= DependencyCompletenessIssue.OpaqueCode;
+        if (flags.HasFlag(DependencyAnalysisFlags.ContainsExternalState))
+            result |= DependencyCompletenessIssue.ExternalState;
+        return result;
+    }
+
     private static string FormatDependencyAnalysis(DependencyAnalysisFlags flags) =>
         flags == DependencyAnalysisFlags.Complete
             ? nameof(DependencyAnalysisFlags.Complete)
@@ -155,6 +231,11 @@ public sealed class RelationRuntime
     private readonly IReadOnlyDictionary<IInvariantDefinition, int> _invariantIds;
     private readonly RuntimeDiagnosticOptions _diagnosticOptions;
     private long _version;
+    private long _reindexedRoots;
+    private long _affectedSources;
+    private long _relationPairsAdded;
+    private long _relationPairsRemoved;
+    private long _policyRequestsEmitted;
 
     /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
     public long Version => _version;
@@ -165,10 +246,13 @@ public sealed class RelationRuntime
     /// <summary>Returns diagnostic counters accumulated since creation or the last reset.</summary>
     public RuntimeDiagnostics Diagnostics => new(
         _relations.Values.Sum(relation => relation.PredicateEvaluationCount),
-        LastRelationImpacts.Values
-            .SelectMany(impact => impact.AffectedLefts)
-            .Distinct(ReferenceEqualityComparer.Instance)
-            .Count(),
+        _reindexedRoots,
+        _affectedSources,
+        _relationPairsAdded,
+        _relationPairsRemoved,
+        _derivedStates.Values.Sum(state => state.FullRecomputationCount),
+        _derivedStates.Values.Sum(state => state.IncrementalUpdateCount),
+        _policyRequestsEmitted,
         _relations.OrderBy(pair => _relationIds[pair.Key])
             .Select(pair => CreateRelationDiagnostics(pair.Key, pair.Value))
             .ToArray());
@@ -178,6 +262,13 @@ public sealed class RelationRuntime
     {
         foreach (var relation in _relations.Values)
             relation.ResetDiagnostics();
+        foreach (var derived in _derivedStates.Values)
+            derived.ResetDiagnostics();
+        _reindexedRoots = 0;
+        _affectedSources = 0;
+        _relationPairsAdded = 0;
+        _relationPairsRemoved = 0;
+        _policyRequestsEmitted = 0;
     }
 
     internal RelationRuntime(
@@ -504,7 +595,16 @@ public sealed class RelationRuntime
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
         _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
-        return new RuntimeCommitResult(impact.ToPublic(), policyActions);
+        var publicImpact = impact.ToPublic();
+        _reindexedRoots += publicImpact.Access.ReindexedRoots;
+        _affectedSources += _dependencyGraph.GetDerivedImpacts()
+            .SelectMany(value => value.Sources)
+            .Distinct(ReferenceEqualityComparer.Instance)
+            .Count();
+        _relationPairsAdded += relationImpacts.Values.Sum(value => value.AddedPairs.Count);
+        _relationPairsRemoved += relationImpacts.Values.Sum(value => value.RemovedPairs.Count);
+        _policyRequestsEmitted += policyActions.ImmediateEvaluations.Count + policyActions.RepairRequests.Count;
+        return new RuntimeCommitResult(publicImpact, policyActions);
     }
 
     private RuntimeApplyResult CreateDetailedResult(PreparedMutation prepared, ChangeImpact impact)
