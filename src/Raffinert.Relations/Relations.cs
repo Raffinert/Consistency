@@ -32,7 +32,7 @@ public sealed class RelationBuilder<TLeft, TRight>
             Expressions.RelationExpressionAnalyzer.Analyze(predicate),
             _model);
         _model.AddRelation(definition);
-        return new Relation<TLeft, TRight>(definition);
+        return new Relation<TLeft, TRight>(definition, _model.EnsureMutable);
     }
 }
 
@@ -41,8 +41,26 @@ public sealed class Relation<TLeft, TRight>
     where TLeft : class
     where TRight : class
 {
-    internal Relation(RelationDefinition<TLeft, TRight> definition) => Definition = definition;
+    private readonly Action _ensureMutable;
+
+    internal Relation(RelationDefinition<TLeft, TRight> definition, Action ensureMutable)
+    {
+        Definition = definition;
+        _ensureMutable = ensureMutable;
+    }
     internal RelationDefinition<TLeft, TRight> Definition { get; }
+
+    /// <summary>
+    /// Explicitly permits incomplete dependency tracking. If this relation is materialized for a
+    /// derived value, cached freshness is not guaranteed for dependencies hidden by opaque code or
+    /// mutable external state.
+    /// </summary>
+    public Relation<TLeft, TRight> AllowIncompleteDependencies()
+    {
+        _ensureMutable();
+        Definition.AllowIncompleteDependencies = true;
+        return this;
+    }
 }
 
 internal interface IRelationDefinition
@@ -53,6 +71,7 @@ internal interface IRelationDefinition
     Expressions.RelationAnalysis Analysis { get; }
     Expressions.RelationAccessPlan AccessPlan { get; }
     Expressions.RelationAccessPlan? ReverseAccessPlan { get; }
+    bool AllowIncompleteDependencies { get; }
     void RequireExactPropagation();
     IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets);
 }
@@ -88,6 +107,7 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
     public Expressions.RelationAnalysis Analysis { get; }
     public Expressions.RelationAccessPlan AccessPlan { get; }
     public Expressions.RelationAccessPlan? ReverseAccessPlan { get; private set; }
+    public bool AllowIncompleteDependencies { get; set; }
 
     public void RequireExactPropagation() =>
         ReverseAccessPlan ??= Expressions.RelationPlanner.PlanReverse(Analysis, _forceScanPlans);

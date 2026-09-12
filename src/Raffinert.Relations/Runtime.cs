@@ -52,6 +52,11 @@ public sealed class CompiledRelationModel
             lines.Add($"  Access plan: {relation.AccessPlan.DisplayName}");
             lines.Add($"  Reverse access plan: {relation.ReverseAccessPlan?.DisplayName ?? "Disabled"}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
+            var materialized = _derivedStates.Any(derived => ReferenceEquals(derived.Relation, relation));
+            lines.Add($"  Dependency tracking: {FormatDependencyTracking(
+                relation.Analysis.DependencyAnalysis,
+                relation.AllowIncompleteDependencies,
+                materialized)}");
             lines.Add($"  Residual predicate: {(relation.Analysis.HasResidualPredicate ? "Yes" : "No")}");
             foreach (var residual in relation.Analysis.RecognizedResiduals)
                 lines.Add($"    {residual}");
@@ -72,6 +77,10 @@ public sealed class CompiledRelationModel
         {
             lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using {derived.Relation.RightSet.ObjectType.Name}: {derived.ComputationExpression.Body}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(derived.Analysis.Flags)}");
+            lines.Add($"  Dependency tracking: {FormatDependencyTracking(
+                derived.Analysis.Flags,
+                derived.AllowIncompleteDependencies,
+                cached: true)}");
             lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
             lines.Add($"  LINQ semantics: {derived.Analysis.LinqSemantics}");
             foreach (var dependency in derived.Analysis.Dependencies)
@@ -81,6 +90,10 @@ public sealed class CompiledRelationModel
         {
             lines.Add($"Invariant {invariant.Derived.SourceSet.ObjectType.Name}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(invariant.Analysis.Flags)}");
+            lines.Add($"  Dependency tracking: {FormatDependencyTracking(
+                invariant.Analysis.Flags,
+                invariant.AllowIncompleteDependencies,
+                cached: true)}");
             foreach (var dependency in invariant.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
         }
@@ -92,6 +105,20 @@ public sealed class CompiledRelationModel
             ? nameof(DependencyAnalysisFlags.Complete)
             : string.Join(", ", Enum.GetValues<DependencyAnalysisFlags>()
                 .Where(flag => flag != DependencyAnalysisFlags.Complete && flags.HasFlag(flag)));
+
+    private static string FormatDependencyTracking(
+        DependencyAnalysisFlags flags,
+        bool explicitlyAllowed,
+        bool cached)
+    {
+        if (flags == DependencyAnalysisFlags.Complete)
+            return "Fully tracked";
+        if (explicitlyAllowed)
+            return $"Incomplete, explicitly allowed ({flags}); cached freshness is not guaranteed";
+        return cached
+            ? $"Incomplete, rejected at build ({flags})"
+            : $"Incomplete direct-query evaluation ({flags}); no cached freshness claim";
+    }
 
     private static string GetMemberName(Expression? expression)
     {

@@ -84,7 +84,7 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
-    public void Opaque_computation_reports_incomplete_dependency_analysis()
+    public void Opaque_computation_is_rejected_by_default()
     {
         var model = CreateQuantityModel(
             out _,
@@ -92,11 +92,11 @@ public sealed class DerivedStateTests
             out var receivedQuantity,
             (source, matches) => OpaqueTotal(matches));
 
-        var compiled = model.Build();
+        var error = Assert.Throws<InvalidOperationException>(() => model.Build());
 
-        Assert.True(receivedQuantity.Definition.Analysis.Flags.HasFlag(
-            Expressions.DependencyAnalysisFlags.ContainsOpaqueCode));
-        Assert.Contains("Dependency analysis: ContainsOpaqueCode", compiled.DebugView);
+        Assert.Contains("Derived computation", error.Message);
+        Assert.Contains("ContainsOpaqueCode", error.Message);
+        Assert.Contains("AllowIncompleteDependencies", error.Message);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
-    public void Captured_computation_state_is_reported_as_external()
+    public void Captured_computation_state_is_rejected_by_default()
     {
         var multiplier = 2m;
         var model = CreateQuantityModel(
@@ -136,6 +136,25 @@ public sealed class DerivedStateTests
 
         Assert.True(derived.Definition.Analysis.Flags.HasFlag(
             Expressions.DependencyAnalysisFlags.ContainsExternalState));
+        Assert.Contains("ContainsExternalState",
+            Assert.Throws<InvalidOperationException>(() => model.Build()).Message);
+    }
+
+    [Fact]
+    public void Explicit_opt_in_allows_incomplete_derived_tracking_without_claiming_freshness_guarantees()
+    {
+        var model = CreateQuantityModel(
+            out _,
+            out _,
+            out var derived,
+            (source, matches) => OpaqueTotal(matches));
+        derived.AllowIncompleteDependencies();
+
+        var compiled = model.Build();
+
+        Assert.Contains(
+            "Dependency tracking: Incomplete, explicitly allowed (ContainsOpaqueCode); cached freshness is not guaranteed",
+            compiled.DebugView);
     }
 
     [Fact]
@@ -411,7 +430,8 @@ public sealed class DerivedStateTests
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
-            PredicateProbe.Observe() && source.Code == item.Code);
+            PredicateProbe.Observe() && source.Code == item.Code)
+            .AllowIncompleteDependencies();
         var quantity = model.Derived(sources).Using(relation)
             .Compute((source, matches) => matches.Sum(item => item.Quantity));
         var compiled = model.Build();

@@ -87,7 +87,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             computation,
             computation.Compile());
         _model.AddDerived(definition);
-        return new Derived<TSource, TItem, TValue>(definition);
+        return new Derived<TSource, TItem, TValue>(definition, _model.EnsureMutable);
     }
 }
 
@@ -95,8 +95,25 @@ public sealed class Derived<TSource, TItem, TValue>
     where TSource : class
     where TItem : class
 {
-    internal Derived(DerivedDefinition<TSource, TItem, TValue> definition) => Definition = definition;
+    private readonly Action _ensureMutable;
+
+    internal Derived(DerivedDefinition<TSource, TItem, TValue> definition, Action ensureMutable)
+    {
+        Definition = definition;
+        _ensureMutable = ensureMutable;
+    }
     internal DerivedDefinition<TSource, TItem, TValue> Definition { get; }
+
+    /// <summary>
+    /// Explicitly permits incomplete dependency tracking for this computation. Cached freshness is
+    /// not guaranteed for dependencies hidden by opaque code or mutable external state.
+    /// </summary>
+    public Derived<TSource, TItem, TValue> AllowIncompleteDependencies()
+    {
+        _ensureMutable();
+        Definition.AllowIncompleteDependencies = true;
+        return this;
+    }
 }
 
 public sealed class InvariantBuilder<TSource> where TSource : class
@@ -177,6 +194,17 @@ public sealed class Invariant<TSource, TItem, TValue>
         Definition.Reaction = InvariantReaction.ScheduleRepair;
         return this;
     }
+
+    /// <summary>
+    /// Explicitly permits incomplete dependency tracking for this predicate. Cached evaluation
+    /// freshness is not guaranteed for dependencies hidden by opaque code or mutable external state.
+    /// </summary>
+    public Invariant<TSource, TItem, TValue> AllowIncompleteDependencies()
+    {
+        _ensureMutable();
+        Definition.AllowIncompleteDependencies = true;
+        return this;
+    }
 }
 
 internal interface IDerivedDefinition
@@ -185,6 +213,7 @@ internal interface IDerivedDefinition
     IRelationDefinition Relation { get; }
     LambdaExpression ComputationExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
+    bool AllowIncompleteDependencies { get; }
     IDerivedRuntimeState CreateState(IRelationRuntimeState relationState);
 }
 
@@ -204,6 +233,7 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public LambdaExpression ComputationExpression { get; } = computationExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
         ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
+    public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(IRelationRuntimeState relationState) =>
         new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relationState);
@@ -265,7 +295,9 @@ internal interface IInvariantDefinition
 {
     IDerivedDefinition Derived { get; }
     InvariantReaction Reaction { get; }
+    LambdaExpression PredicateExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
+    bool AllowIncompleteDependencies { get; }
     IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState);
     void DispatchRepair(object source);
 }
@@ -282,6 +314,7 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
     public LambdaExpression PredicateExpression { get; } = predicateExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
         ExpressionDependencyAnalyzer.AnalyzeInvariant(predicateExpression);
+    public bool AllowIncompleteDependencies { get; set; }
     public IDerivedDefinition Derived => DerivedDefinition;
     public InvariantReaction Reaction { get; set; } = InvariantReaction.MarkDirty;
     public Action<TSource>? RepairScheduler { get; set; }

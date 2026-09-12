@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using Raffinert.Relations.Expressions;
 
 namespace Raffinert.Relations;
 
@@ -68,8 +69,31 @@ public sealed class RelationModelBuilder
             if (!set.HasKey)
                 throw new InvalidOperationException($"Object set '{set.ObjectType.Name}' has no key. Call Key(...) before Build().");
         }
+        foreach (var derived in _derivedStates)
+        {
+            ValidateComplete(
+                "Derived computation",
+                derived.ComputationExpression.Body.ToString(),
+                derived.Analysis.Flags,
+                derived.AllowIncompleteDependencies);
+        }
+        foreach (var invariant in _invariants)
+        {
+            ValidateComplete(
+                "Invariant predicate",
+                invariant.PredicateExpression.Body.ToString(),
+                invariant.Analysis.Flags,
+                invariant.AllowIncompleteDependencies);
+        }
         foreach (var relation in _derivedStates.Select(derived => derived.Relation).Distinct())
+        {
+            ValidateComplete(
+                "Materialized relation",
+                relation.PredicateExpression.Body.ToString(),
+                relation.Analysis.DependencyAnalysis,
+                relation.AllowIncompleteDependencies);
             relation.RequireExactPropagation();
+        }
 
         _built = true;
         return new CompiledRelationModel(
@@ -112,6 +136,20 @@ public sealed class RelationModelBuilder
     }
 
     internal void EnsureMutable() => ThrowIfBuilt();
+
+    private static void ValidateComplete(
+        string consumerKind,
+        string description,
+        DependencyAnalysisFlags flags,
+        bool allowIncomplete)
+    {
+        if (flags == DependencyAnalysisFlags.Complete || allowIncomplete)
+            return;
+        throw new InvalidOperationException(
+            $"{consumerKind} '{description}' has incomplete dependency tracking ({flags}). " +
+            "Call AllowIncompleteDependencies() on that definition to explicitly accept weaker " +
+            "cached-freshness guarantees.");
+    }
 
     private void EnsureOwned(object identity)
     {

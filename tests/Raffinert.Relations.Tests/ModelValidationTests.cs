@@ -81,4 +81,79 @@ public sealed class ModelValidationTests
         Assert.Throws<InvalidOperationException>(() =>
             runtime.Add(set, new MutableKeyHolder { Id = registeredKey }));
     }
+
+    [Fact]
+    public void Opaque_invariant_predicate_is_rejected_unless_explicitly_allowed()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        var invariant = model.Invariant(sources).Using(count)
+            .Must((source, value) => OpaqueInvariant(source, value));
+
+        var error = Assert.Throws<InvalidOperationException>(() => model.Build());
+
+        Assert.Contains("Invariant predicate", error.Message);
+        Assert.Contains("ContainsOpaqueCode", error.Message);
+
+        invariant.AllowIncompleteDependencies();
+        Assert.Contains("Incomplete, explicitly allowed", model.Build().DebugView);
+    }
+
+    [Fact]
+    public void Opaque_materialized_relation_is_rejected_unless_explicitly_allowed()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item));
+        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+
+        var error = Assert.Throws<InvalidOperationException>(() => model.Build());
+
+        Assert.Contains("Materialized relation", error.Message);
+        Assert.Contains("ContainsOpaqueCode", error.Message);
+    }
+
+    [Fact]
+    public void Opaque_direct_query_relation_remains_valid_and_does_not_claim_cached_freshness()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item));
+        var compiled = model.Build();
+        var runtime = compiled.CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+
+        Assert.Equal([item], runtime.Related(relation, source));
+        Assert.Contains("Incomplete direct-query evaluation", compiled.DebugView);
+    }
+
+    [Fact]
+    public void Explicit_opt_in_allows_an_incomplete_materialized_relation_and_marks_diagnostics()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item))
+            .AllowIncompleteDependencies();
+        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+
+        var compiled = model.Build();
+
+        Assert.Contains("Incomplete, explicitly allowed", compiled.DebugView);
+        Assert.Contains("cached freshness is not guaranteed", compiled.DebugView);
+    }
+
+    private static bool OpaqueInvariant(CodeHolder source, int value) =>
+        source.Enabled || value <= 1;
+
+    private static bool OpaqueRelation(CodeHolder source, CodeHolder item) =>
+        source.Code == item.Code;
 }

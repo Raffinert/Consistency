@@ -42,12 +42,20 @@ Collection navigation is explicit: mutate the domain collection first, then repo
 `Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
 owner/item reverse navigation so later item-property changes resolve affected owners incrementally.
 
+Cached derived computations, invariant predicates, and relations materialized for derived propagation
+must have complete dependency analysis. `Build()` rejects opaque code or mutable captured/static state by
+default because the runtime cannot keep those caches reliably fresh. Direct-query-only relations may stay
+opaque because their original predicate is evaluated on every query. Deliberate prototypes can call
+`AllowIncompleteDependencies()` on the affected relation, derived value, or invariant; `DebugView` then
+labels the weaker guarantee explicitly, and cached freshness must not be treated as fully tracked.
+
 ## Implemented
 
 - Typed object sets with stable keys
 - Separate mutable object-set builders and stable `ObjectSet<T>` runtime handles
 - Binary relations whose original compiled predicate remains the semantic authority
 - Dependency and nested member-path analysis
+- Safe-by-default cached dependency completeness validation with explicit weaker-guarantee opt-ins
 - Automatic single and composite hash indexes for safe equality joins
 - Explicit scan and hash-join access planning
 - Reverse hash access for exact derived-state propagation

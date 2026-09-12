@@ -40,6 +40,14 @@ Do **not** add more optimizer structures simply because the expression analyzer 
 
 # 1. P0 — Make incomplete dependency analysis safe by construction
 
+**Status:** Implemented.
+
+Model construction now rejects incomplete derived computations, invariant predicates, and relations
+materialized for derived propagation. Direct-query-only opaque relations remain valid. Each cached
+definition has an explicit `AllowIncompleteDependencies()` escape hatch whose XML documentation and
+`DebugView` output state that cached freshness is not guaranteed; incomplete direct-query relations are
+identified separately and make no cached-freshness claim.
+
 This is the highest-priority correctness issue before a public alpha.
 
 The analyzer can currently report:
