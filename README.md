@@ -77,6 +77,7 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 - A BenchmarkDotNet benchmark project
 - Measured range-planning benchmark (current equality-prefix strategy retained)
 - Human-readable compiled model diagnostics through `DebugView`
+- Deterministic full-graph randomized optimized-versus-scan correctness coverage
 
 ## Further work
 

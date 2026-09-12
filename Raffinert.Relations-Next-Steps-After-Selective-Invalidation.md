@@ -841,6 +841,13 @@ Forced-scan equivalence remains mandatory.
 
 # 15. P2 — Expand full-graph randomized correctness testing
 
+**Status:** Implemented.
+
+A deterministic 300-operation full-graph test compares hash and forced-scan runtimes plus direct reference
+calculations across source/item lifecycle, join and residual changes, nested leaf changes, navigation
+replacement, relation deltas, affected roots, derived values/states, invariant results/states, and repair
+requests. Failures emit the seed and complete operation trace.
+
 The key invariant is now broader than relation lookup:
 
 ```text

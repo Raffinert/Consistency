@@ -115,6 +115,9 @@ public sealed class RelationRuntime
     private readonly IReadOnlyList<ISourceLifecycleParticipant> _sourceLifecycleParticipants;
     private readonly DependencyGraphRuntime _dependencyGraph;
 
+    internal IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts { get; private set; } =
+        new Dictionary<IRelationDefinition, RelationImpact>();
+
     internal RelationRuntime(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
@@ -178,8 +181,11 @@ public sealed class RelationRuntime
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
         var policyActions = new RuntimePolicyActions();
+        LastRelationImpacts = deltas.ToDictionary(
+            pair => pair.Key,
+            pair => RelationImpact.FromDelta(pair.Key, pair.Value));
         _dependencyGraph.ApplyRelationImpacts(
-            deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
+            LastRelationImpacts,
             [],
             policyActions);
         policyActions.Dispatch();
@@ -217,8 +223,11 @@ public sealed class RelationRuntime
         NotifySourceRemoved(definition, instance);
         var removed = state.Remove(instance);
         var policyActions = new RuntimePolicyActions();
+        LastRelationImpacts = deltas.ToDictionary(
+            pair => pair.Key,
+            pair => RelationImpact.FromDelta(pair.Key, pair.Value));
         _dependencyGraph.ApplyRelationImpacts(
-            deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
+            LastRelationImpacts,
             [],
             policyActions);
         policyActions.Dispatch();
@@ -355,6 +364,7 @@ public sealed class RelationRuntime
                 pair.Key.ReindexLeft(root);
         var relationDeltas = ResolveRelationDeltas(impact);
         var relationImpacts = impact.CreateRelationImpacts(_relations, relationDeltas);
+        LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
         _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
         return new RuntimeApplyResult(impact.ToPublic(), policyActions);
