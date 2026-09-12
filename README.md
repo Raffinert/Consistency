@@ -119,6 +119,11 @@ plans. They update already-fresh cache entries from relation/item deltas without
 match list. Unrecognized expressions retain the original compiled computation as the semantic fallback;
 the selected plan is shown in `DebugView`.
 
+`DebugView` also identifies each relation's `None` or `ExactPropagation` materialization mode.
+`runtime.Diagnostics.Relations` reports forward/reverse access-index entries, materialized pair count,
+average fan-out, and a density-warning flag. Configure advisory thresholds with
+`CreateRuntime(new RuntimeDiagnosticOptions { ... })`; they do not reject or limit runtime mutations.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -158,6 +163,7 @@ the selected plan is shown in `DebugView`.
 - Propagation precision diagnostics and 1/10/100-change benchmarks at 10k/100k scale
 - Measured range-planning benchmark (current equality-prefix strategy retained)
 - Human-readable compiled model diagnostics through `DebugView`
+- Per-relation materialization, index-size, pair-count, fan-out, and configurable density diagnostics
 - Deterministic full-graph randomized optimized-versus-scan correctness coverage
 - CI restore/build/test/format/pack validation and NuGet-ready package metadata
 

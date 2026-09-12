@@ -457,7 +457,45 @@ public sealed record SemanticImpact(int AffectedRelations, int AffectedRoots);
 public sealed record ChangeImpact(AccessImpact Access, SemanticImpact Semantic);
 
 /// <summary>Counts propagation work to make precision regressions observable.</summary>
-public sealed record RuntimeDiagnostics(long PredicateEvaluations, int AffectedSources);
+/// <summary>How relation membership is retained for dependency propagation.</summary>
+public enum RelationMaterializationMode
+{
+    None,
+    ExactPropagation
+}
+
+/// <summary>Configurable warning thresholds for runtime diagnostic snapshots.</summary>
+public sealed class RuntimeDiagnosticOptions
+{
+    public int MaterializedPairWarningThreshold { get; init; } = 100_000;
+    public double AverageFanOutWarningThreshold { get; init; } = 1_000;
+
+    internal void Validate()
+    {
+        if (MaterializedPairWarningThreshold <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaterializedPairWarningThreshold));
+        if (AverageFanOutWarningThreshold <= 0 || double.IsNaN(AverageFanOutWarningThreshold))
+            throw new ArgumentOutOfRangeException(nameof(AverageFanOutWarningThreshold));
+    }
+}
+
+/// <summary>A structural and density snapshot for one runtime relation.</summary>
+public sealed record RelationRuntimeDiagnostics(
+    int RelationId,
+    Type LeftType,
+    Type RightType,
+    RelationMaterializationMode Materialization,
+    int ForwardIndexEntries,
+    int ReverseIndexEntries,
+    int MaterializedPairCount,
+    double AverageFanOut,
+    bool HasDensityWarning);
+
+/// <summary>Accumulated execution counters and current relation materialization statistics.</summary>
+public sealed record RuntimeDiagnostics(
+    long PredicateEvaluations,
+    int AffectedSources,
+    IReadOnlyList<RelationRuntimeDiagnostics> Relations);
 
 internal sealed class ImpactResolver(
     IReadOnlyList<IRelationDefinition> relations,

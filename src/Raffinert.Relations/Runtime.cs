@@ -28,6 +28,11 @@ public sealed class CompiledRelationModel
 
     public string DebugView { get; }
     public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants);
+    public RelationRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
+    {
+        ArgumentNullException.ThrowIfNull(diagnosticOptions);
+        return new RelationRuntime(_sets, _relations, _derivedStates, _invariants, null, diagnosticOptions);
+    }
     internal RelationRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
         new(_sets, _relations, _derivedStates, _invariants, dependencyImpactPolicy);
 
@@ -51,6 +56,7 @@ public sealed class CompiledRelationModel
                 lines.Add($"    {key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})");
             lines.Add($"  Access plan: {relation.AccessPlan.DisplayName}");
             lines.Add($"  Reverse access plan: {relation.ReverseAccessPlan?.DisplayName ?? "Disabled"}");
+            lines.Add($"  Relation materialization: {(relation.ReverseAccessPlan is null ? "None" : "ExactPropagation")}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
             var materialized = _derivedStates.Any(derived => ReferenceEquals(derived.Relation, relation));
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
@@ -147,6 +153,7 @@ public sealed class RelationRuntime
     private readonly IReadOnlyDictionary<IRelationDefinition, int> _relationIds;
     private readonly IReadOnlyDictionary<IDerivedDefinition, int> _derivedIds;
     private readonly IReadOnlyDictionary<IInvariantDefinition, int> _invariantIds;
+    private readonly RuntimeDiagnosticOptions _diagnosticOptions;
     private long _version;
 
     /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
@@ -161,7 +168,10 @@ public sealed class RelationRuntime
         LastRelationImpacts.Values
             .SelectMany(impact => impact.AffectedLefts)
             .Distinct(ReferenceEqualityComparer.Instance)
-            .Count());
+            .Count(),
+        _relations.OrderBy(pair => _relationIds[pair.Key])
+            .Select(pair => CreateRelationDiagnostics(pair.Key, pair.Value))
+            .ToArray());
 
     /// <summary>Resets diagnostic counters without changing relation or dependency state.</summary>
     public void ResetDiagnostics()
@@ -175,8 +185,11 @@ public sealed class RelationRuntime
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
         IReadOnlyList<IInvariantDefinition> invariants,
-        IDependencyImpactPolicy? dependencyImpactPolicy = null)
+        IDependencyImpactPolicy? dependencyImpactPolicy = null,
+        RuntimeDiagnosticOptions? diagnosticOptions = null)
     {
+        _diagnosticOptions = diagnosticOptions ?? new RuntimeDiagnosticOptions();
+        _diagnosticOptions.Validate();
         var impactPolicy = dependencyImpactPolicy ?? DefaultDependencyImpactPolicy.Instance;
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
@@ -206,6 +219,28 @@ public sealed class RelationRuntime
             _derivedStates,
             _invariants,
             impactPolicy);
+    }
+
+    private RelationRuntimeDiagnostics CreateRelationDiagnostics(
+        IRelationDefinition definition,
+        IRelationRuntimeState state)
+    {
+        var leftCount = _sets[definition.LeftSet].Count;
+        var averageFanOut = leftCount == 0 ? 0 : (double)state.MaterializedPairCount / leftCount;
+        return new RelationRuntimeDiagnostics(
+            _relationIds[definition],
+            definition.LeftSet.ObjectType,
+            definition.RightSet.ObjectType,
+            state.HasExactPropagation
+                ? RelationMaterializationMode.ExactPropagation
+                : RelationMaterializationMode.None,
+            state.ForwardIndexEntryCount,
+            state.ReverseIndexEntryCount,
+            state.MaterializedPairCount,
+            averageFanOut,
+            state.HasExactPropagation &&
+            (state.MaterializedPairCount >= _diagnosticOptions.MaterializedPairWarningThreshold ||
+             averageFanOut >= _diagnosticOptions.AverageFanOutWarningThreshold));
     }
 
     public void Add<T>(ObjectSet<T> set, T instance) where T : class
@@ -902,6 +937,7 @@ internal sealed class ObjectSetRuntime
 
     public ObjectSetRuntime(IObjectSetDefinition definition) => _definition = definition;
     public IEnumerable<object> Instances => _instances;
+    public int Count => _instances.Count;
     public IEnumerable<(object Instance, object Key)> RegisteredEntries =>
         _registeredKeys.Select(pair => (pair.Key, pair.Value));
     public bool Contains(object instance) => _instances.Contains(instance);
@@ -937,6 +973,8 @@ internal interface IRelationRuntimeState
     IObjectSetDefinition RightSet { get; }
     bool HasExactPropagation { get; }
     int MaterializedPairCount { get; }
+    int ForwardIndexEntryCount { get; }
+    int ReverseIndexEntryCount { get; }
     long PredicateEvaluationCount { get; }
     void ResetDiagnostics();
     void EnableExactPropagation();
@@ -979,6 +1017,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public IObjectSetDefinition RightSet => _definition.Right;
     public bool HasExactPropagation => _hasExactPropagation;
     public int MaterializedPairCount => _rightsByLeft.Sum(pair => pair.Value.Count);
+    public int ForwardIndexEntryCount => _keys.Count;
+    public int ReverseIndexEntryCount => _leftKeys.Count;
     public long PredicateEvaluationCount => _predicateEvaluationCount;
 
     public void ResetDiagnostics() => _predicateEvaluationCount = 0;

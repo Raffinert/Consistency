@@ -127,6 +127,59 @@ public sealed class RuntimeTests
     }
 
     [Fact]
+    public void Runtime_diagnostics_distinguish_query_indexes_from_exact_materialization()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var queryOnly = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var materialized = model.Relation(sources, items).Where((source, item) => source.Enabled == item.Enabled);
+        model.Derived(sources).Using(materialized).Compute((source, matches) => matches.Count);
+        var compiled = model.Build();
+        var runtime = compiled.CreateRuntime(new RuntimeDiagnosticOptions
+        {
+            MaterializedPairWarningThreshold = 5,
+            AverageFanOutWarningThreshold = 10
+        });
+        var lefts = new[]
+        {
+            new CodeHolder { Id = Guid.NewGuid(), Code = "A", Enabled = true },
+            new CodeHolder { Id = Guid.NewGuid(), Code = "B", Enabled = true }
+        };
+        var rights = Enumerable.Range(0, 3).Select(index => new CodeHolder
+        {
+            Id = Guid.NewGuid(),
+            Code = index == 0 ? "A" : "X",
+            Enabled = true
+        }).ToArray();
+        foreach (var source in lefts)
+            runtime.Add(sources, source);
+        foreach (var item in rights)
+            runtime.Add(items, item);
+
+        var diagnostics = runtime.Diagnostics;
+
+        var query = diagnostics.Relations[0];
+        Assert.Equal(0, query.RelationId);
+        Assert.Equal(RelationMaterializationMode.None, query.Materialization);
+        Assert.Equal(3, query.ForwardIndexEntries);
+        Assert.Equal(0, query.ReverseIndexEntries);
+        Assert.Equal(0, query.MaterializedPairCount);
+        Assert.False(query.HasDensityWarning);
+
+        var exact = diagnostics.Relations[1];
+        Assert.Equal(RelationMaterializationMode.ExactPropagation, exact.Materialization);
+        Assert.Equal(3, exact.ForwardIndexEntries);
+        Assert.Equal(2, exact.ReverseIndexEntries);
+        Assert.Equal(6, exact.MaterializedPairCount);
+        Assert.Equal(3, exact.AverageFanOut);
+        Assert.True(exact.HasDensityWarning);
+        Assert.Contains("Relation materialization: None", compiled.DebugView);
+        Assert.Contains("Relation materialization: ExactPropagation", compiled.DebugView);
+        _ = queryOnly;
+    }
+
+    [Fact]
     public void Opaque_predicate_falls_back_to_a_semantically_correct_scan()
     {
         var model = new RelationModelBuilder();

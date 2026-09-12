@@ -590,6 +590,13 @@ Recognized aggregate derived values can update in O(delta) while remaining equiv
 
 # 7. P1 — Distinguish cached relation membership from public relation query planning
 
+**Status:** Implemented.
+
+Compiled diagnostics identify `None` versus `ExactPropagation` materialization. Per-relation runtime
+snapshots expose deterministic IDs, access/reverse-index entry counts, exact pair counts, average fan-out,
+and advisory density warnings. `RuntimeDiagnosticOptions` configures pair/fan-out thresholds without
+introducing hard limits, making the O(left × right) memory tradeoff visible to consumers.
+
 Relations consumed by derived state currently enable exact propagation and maintain bidirectional membership.
 
 This is correct, but the runtime should make the memory/performance contract explicit.
