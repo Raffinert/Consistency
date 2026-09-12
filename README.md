@@ -188,8 +188,9 @@ last `ResetDiagnostics()` call.
 
 ## Further work
 
-- Range access plans (range expressions are currently diagnostic metadata)
-- Scheduling and domain-specific repair policies
+- Additional access plans only for measured workloads that satisfy the
+  [optimizer admission policy](docs/optimizer-policy.md)
+- Optional asynchronous dispatch integrations built on structured policy requests
 
 The core package has no EF Core or dependency-injection dependency.
 
@@ -197,6 +198,7 @@ The core package has no EF Core or dependency-injection dependency.
 
 - [Architecture and runtime contracts](docs/architecture.md)
 - [End-to-end purchase order and goods receipt example](docs/purchase-order-example.md)
+- [Measured-workload optimizer policy](docs/optimizer-policy.md)
 - [Release and versioning process](RELEASING.md)
 
 The EF Core adapter captures and prepares a `RelationUnitOfWork` before `SaveChanges`, then commits its

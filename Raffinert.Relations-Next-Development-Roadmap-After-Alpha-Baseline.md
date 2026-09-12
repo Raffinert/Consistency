@@ -957,6 +957,14 @@ Move detailed architecture to `docs/` once the public API stabilizes.
 
 # 15. P2 — Continue optimizer work only from measured workloads
 
+**Status:** Implemented (decision and guardrail; no speculative index added).
+
+The existing equality-prefix/range-residual measurement remains decisive, so no range tree was added.
+`docs/optimizer-policy.md` records the decision and requires a reproducible domain workload, current-plan
+and forced-scan baselines, selectivity/allocation/materialization evidence, an operationally meaningful
+threshold, structured plan diagnostics, and randomized mutation equivalence before any future access
+plan is accepted. Candidate workloads remain explicitly hypotheses until measured.
+
 The existing range benchmark gives a useful precedent:
 
 ```text
