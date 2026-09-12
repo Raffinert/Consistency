@@ -58,6 +58,7 @@ that each member currently equals its reported final new value.
 - Policy-driven dependency severity, independent of scan/hash access planning
 - Exact source-scoped derived invalidation backed by bidirectional relation membership
 - Unified relation-impact snapshots for delta, semantic, and access propagation
+- Focused member/relation/derived/invariant/policy dependency-graph propagation
 - Source lifecycle cleanup for derived, invariant, and materialized relation state
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
@@ -71,7 +72,7 @@ that each member currently equals its reported final new value.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- Focused dependency-graph propagation
+- Collection navigation
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.

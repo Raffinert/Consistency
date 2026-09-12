@@ -540,6 +540,13 @@ should be rejected or explicitly defined.
 
 # 8. P1 — Refactor propagation into a focused dependency graph
 
+**Status:** Implemented.
+
+Source-scoped propagation is now owned by a focused `DependencyGraphRuntime` with derived and invariant
+nodes, member-path dependency edges, relation-impact inputs, and policy-action outputs. `RelationRuntime`
+commits navigation and relation state, then hands impacts to this graph instead of maintaining custom
+top-level derived/invariant loops.
+
 `RelationRuntime` is increasingly becoming the central orchestrator for:
 
 ```text

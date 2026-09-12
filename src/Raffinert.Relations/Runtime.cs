@@ -112,7 +112,7 @@ public sealed class RelationRuntime
     private readonly IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> _derivedStates;
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
     private readonly IReadOnlyList<ISourceLifecycleParticipant> _sourceLifecycleParticipants;
-    private readonly IDependencyImpactPolicy _dependencyImpactPolicy;
+    private readonly DependencyGraphRuntime _dependencyGraph;
 
     internal RelationRuntime(
         IReadOnlyList<IObjectSetDefinition> sets,
@@ -121,7 +121,7 @@ public sealed class RelationRuntime
         IReadOnlyList<IInvariantDefinition> invariants,
         IDependencyImpactPolicy? dependencyImpactPolicy = null)
     {
-        _dependencyImpactPolicy = dependencyImpactPolicy ?? DefaultDependencyImpactPolicy.Instance;
+        var impactPolicy = dependencyImpactPolicy ?? DefaultDependencyImpactPolicy.Instance;
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
         foreach (var relation in derivedStates.Select(derived => derived.Relation).Distinct())
@@ -137,6 +137,13 @@ public sealed class RelationRuntime
         _sourceLifecycleParticipants = _derivedStates.Values.Cast<ISourceLifecycleParticipant>()
             .Concat(_invariants.Values)
             .ToArray();
+        _dependencyGraph = new DependencyGraphRuntime(
+            _sets,
+            _relations,
+            _navigation,
+            _derivedStates,
+            _invariants,
+            impactPolicy);
     }
 
     public void Add<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -170,7 +177,7 @@ public sealed class RelationRuntime
         foreach (var relation in leftRelations)
             MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
         var policyActions = new RuntimePolicyActions();
-        ApplyRelationImpacts(
+        _dependencyGraph.ApplyRelationImpacts(
             deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
             [],
             policyActions);
@@ -209,7 +216,7 @@ public sealed class RelationRuntime
         NotifySourceRemoved(definition, instance);
         var removed = state.Remove(instance);
         var policyActions = new RuntimePolicyActions();
-        ApplyRelationImpacts(
+        _dependencyGraph.ApplyRelationImpacts(
             deltas.ToDictionary(pair => pair.Key, pair => RelationImpact.FromDelta(pair.Key, pair.Value)),
             [],
             policyActions);
@@ -328,7 +335,7 @@ public sealed class RelationRuntime
         foreach (var change in changes)
             impact.MergeFrom(_impactResolver.Resolve(change));
 
-        foreach (var (rootSet, root) in ResolveNavigationRoots(impact, changes))
+        foreach (var (rootSet, root) in _dependencyGraph.ResolveNavigationRoots(impact, changes))
             _navigation.RefreshRoot(rootSet, root);
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
@@ -339,7 +346,7 @@ public sealed class RelationRuntime
         var relationDeltas = ResolveRelationDeltas(impact);
         var relationImpacts = impact.CreateRelationImpacts(_relations, relationDeltas);
         var policyActions = new RuntimePolicyActions();
-        ApplyDerivedAndInvariantImpact(relationImpacts, changes, policyActions);
+        _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
         return new RuntimeApplyResult(impact.ToPublic(), policyActions);
     }
 
@@ -358,163 +365,6 @@ public sealed class RelationRuntime
             deltas.Add(relation, delta);
         }
         return deltas;
-    }
-
-    private IEnumerable<(IObjectSetDefinition Set, object Root)> ResolveNavigationRoots(
-        ResolvedChangeImpact impact,
-        IReadOnlyList<PropertyChange> changes)
-    {
-        var rootsBySet = _sets.Keys.ToDictionary(
-            set => set,
-            _ => new HashSet<object>(ReferenceEqualityComparer.Instance));
-        foreach (var (set, root) in impact.AffectedRoots)
-            rootsBySet[set].Add(root);
-
-        foreach (var derived in _derivedStates.Keys)
-        {
-            AddRoots(
-                derived.SourceSet,
-                derived.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource));
-            AddRoots(
-                derived.Relation.RightSet,
-                derived.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.RelationItem));
-        }
-        foreach (var invariant in _invariants.Keys)
-            AddRoots(
-                invariant.Derived.SourceSet,
-                invariant.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource));
-
-        return rootsBySet.SelectMany(pair => pair.Value.Select(root => (pair.Key, root))).ToArray();
-
-        void AddRoots(IObjectSetDefinition rootSet, IEnumerable<TrackedExpressionDependency> dependencies)
-        {
-            foreach (var dependency in dependencies)
-                foreach (var change in changes)
-                    rootsBySet[rootSet].UnionWith(
-                        _navigation.ResolveRoots(rootSet, dependency.Path, change.Instance, change.Member));
-        }
-    }
-
-    private void ApplyDerivedAndInvariantImpact(
-        IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
-        IReadOnlyList<PropertyChange> changes,
-        RuntimePolicyActions policyActions)
-    {
-        var affectedDerived = new Dictionary<IDerivedDefinition, (HashSet<object> Invalid, HashSet<object> Dirty)>();
-        foreach (var pair in _derivedStates)
-        {
-            relationImpacts.TryGetValue(pair.Key.Relation, out var relationImpact);
-            var membershipRoots = pair.Key.Analysis.HasRelationMembershipDependency
-                ? relationImpact?.AffectedLefts ?? []
-                : [];
-            var sourceRoots = ResolveDependencyRoots(
-                pair.Key.SourceSet,
-                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource),
-                changes);
-            var itemRoots = ResolveDependencyRoots(
-                pair.Key.Relation.RightSet,
-                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.RelationItem),
-                changes);
-            var relationState = _relations[pair.Key.Relation];
-            var itemSources = relationState.GetLeftsForRights(itemRoots);
-            var membershipIsInvalid = membershipRoots.Count > 0 &&
-                _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    relationImpact!,
-                    pair.Key,
-                    changes)) ==
-                DependencyImpactKind.Invalid;
-            var invalidSources = membershipIsInvalid
-                ? new HashSet<object>(membershipRoots, ReferenceEqualityComparer.Instance)
-                : new HashSet<object>(ReferenceEqualityComparer.Instance);
-            var dirtySources = new HashSet<object>(sourceRoots, ReferenceEqualityComparer.Instance);
-            dirtySources.UnionWith(itemSources);
-            if (!membershipIsInvalid)
-                dirtySources.UnionWith(membershipRoots);
-            dirtySources.ExceptWith(invalidSources);
-            if (invalidSources.Count > 0)
-                pair.Value.ApplyImpact(invalidSources, DependencyImpactKind.Invalid);
-            if (dirtySources.Count > 0)
-                pair.Value.ApplyImpact(dirtySources, DependencyImpactKind.Dirty);
-            if (invalidSources.Count > 0 || dirtySources.Count > 0)
-            {
-                affectedDerived[pair.Key] = (invalidSources, dirtySources);
-            }
-        }
-
-        foreach (var pair in _invariants)
-        {
-            if (affectedDerived.TryGetValue(pair.Key.Derived, out var inherited))
-            {
-                if (inherited.Invalid.Count > 0)
-                    pair.Value.ApplyImpact(
-                        inherited.Invalid,
-                        DependencyImpactKind.Invalid,
-                        policyActions);
-                if (inherited.Dirty.Count > 0)
-                    pair.Value.ApplyImpact(
-                        inherited.Dirty,
-                        DependencyImpactKind.Dirty,
-                        policyActions);
-            }
-
-            var invariantRoots = ResolveDependencyRoots(
-                pair.Key.Derived.SourceSet,
-                pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
-                changes);
-            if (invariantRoots.Count > 0)
-                pair.Value.ApplyImpact(
-                    invariantRoots,
-                    DependencyImpactKind.Dirty,
-                    policyActions);
-        }
-    }
-
-    private HashSet<object> ResolveDependencyRoots(
-        IObjectSetDefinition rootSet,
-        IEnumerable<TrackedExpressionDependency> dependencies,
-        IReadOnlyList<PropertyChange> changes)
-    {
-        var roots = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        foreach (var dependency in dependencies)
-            foreach (var change in changes)
-                roots.UnionWith(_navigation.ResolveRoots(rootSet, dependency.Path, change.Instance, change.Member));
-        return roots;
-    }
-
-    private void ApplyRelationImpacts(
-        IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
-        IReadOnlyList<PropertyChange> changes,
-        RuntimePolicyActions policyActions)
-    {
-        var affectedDerived = _derivedStates
-            .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
-                relationImpacts.TryGetValue(pair.Key.Relation, out var relationImpact) &&
-                relationImpact.AffectedLefts.Count > 0)
-            .Select(pair =>
-            {
-                var sources = relationImpacts[pair.Key.Relation].AffectedLefts
-                    .Where(_sets[pair.Key.SourceSet].Contains)
-                    .ToHashSet(ReferenceEqualityComparer.Instance);
-                return (Definition: pair.Key, Sources: sources);
-            })
-            .Where(impact => impact.Sources.Count > 0)
-            .ToDictionary(
-                impact => impact.Definition,
-                impact => (
-                    Severity: _dependencyImpactPolicy.Classify(new RelationMembershipDependencyImpact(
-                        relationImpacts[impact.Definition.Relation],
-                        impact.Definition,
-                        changes)),
-                    impact.Sources));
-        foreach (var pair in affectedDerived)
-            _derivedStates[pair.Key].ApplyImpact(pair.Value.Sources, pair.Value.Severity);
-        foreach (var pair in _invariants)
-        {
-            if (affectedDerived.TryGetValue(pair.Key.Derived, out var impact))
-            {
-                pair.Value.ApplyImpact(impact.Sources, impact.Severity, policyActions);
-            }
-        }
     }
 
     private static void MergeDelta(
