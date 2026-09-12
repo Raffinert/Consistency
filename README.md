@@ -45,6 +45,7 @@ owner/item reverse navigation so later item-property changes resolve affected ow
 ## Implemented
 
 - Typed object sets with stable keys
+- Separate mutable object-set builders and stable `ObjectSet<T>` runtime handles
 - Binary relations whose original compiled predicate remains the semantic authority
 - Dependency and nested member-path analysis
 - Automatic single and composite hash indexes for safe equality joins

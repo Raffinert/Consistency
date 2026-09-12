@@ -869,8 +869,8 @@ public sealed class DerivedStateTests
     }
 
     private static RelationModelBuilder CreateQuantityModel(
-        out ObjectSetBuilder<DerivedSourceRecord> sources,
-        out ObjectSetBuilder<DerivedItemRecord> items,
+        out ObjectSet<DerivedSourceRecord> sources,
+        out ObjectSet<DerivedItemRecord> items,
         out Derived<DerivedSourceRecord, DerivedItemRecord, decimal> derived,
         System.Linq.Expressions.Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, decimal>> computation,
         bool forceScan = false)
@@ -929,8 +929,8 @@ public sealed class DerivedStateTests
 
     private sealed record QuantityScenario(
         RelationRuntime Runtime,
-        ObjectSetBuilder<DerivedSourceRecord> Sources,
-        ObjectSetBuilder<DerivedItemRecord> Items,
+        ObjectSet<DerivedSourceRecord> Sources,
+        ObjectSet<DerivedItemRecord> Items,
         Derived<DerivedSourceRecord, DerivedItemRecord, decimal> Derived,
         DerivedSourceRecord Source,
         DerivedItemRecord Item);

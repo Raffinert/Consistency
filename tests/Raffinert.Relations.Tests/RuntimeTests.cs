@@ -512,8 +512,8 @@ public sealed class RuntimeTests
     }
 
     private static RelationModelBuilder CreateLineModel(
-        out ObjectSetBuilder<InvoiceLine> invoices,
-        out ObjectSetBuilder<PurchaseOrderLine> poLines,
+        out ObjectSet<InvoiceLine> invoices,
+        out ObjectSet<PurchaseOrderLine> poLines,
         out Relation<InvoiceLine, PurchaseOrderLine> relation)
     {
         var model = new RelationModelBuilder();

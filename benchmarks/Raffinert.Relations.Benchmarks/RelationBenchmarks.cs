@@ -6,7 +6,7 @@ namespace Raffinert.Relations.Benchmarks;
 public class RelationBenchmarks
 {
     private RelationRuntime _singleRuntime = null!;
-    private ObjectSetBuilder<BenchItem> _singleRight = null!;
+    private ObjectSet<BenchItem> _singleRight = null!;
     private Relation<BenchItem, BenchItem> _singleRelation = null!;
     private BenchItem _singleSource = null!;
     private BenchItem _scalarTarget = null!;
@@ -18,7 +18,7 @@ public class RelationBenchmarks
     private RelationRuntime _navigationRuntime = null!;
     private Relation<BenchItem, BenchItem> _navigationRelation = null!;
     private BenchItem _navigationSource = null!;
-    private ObjectSetBuilder<BenchItem> _navigationRight = null!;
+    private ObjectSet<BenchItem> _navigationRight = null!;
     private BenchItem _navigationTarget = null!;
     private BenchOrder _firstOrder = null!;
     private BenchOrder _secondOrder = null!;

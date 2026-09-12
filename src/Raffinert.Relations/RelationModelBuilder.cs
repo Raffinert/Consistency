@@ -31,8 +31,8 @@ public sealed class RelationModelBuilder
     }
 
     public RelationBuilder<TLeft, TRight> Relation<TLeft, TRight>(
-        ObjectSetBuilder<TLeft> left,
-        ObjectSetBuilder<TRight> right)
+        ObjectSet<TLeft> left,
+        ObjectSet<TRight> right)
         where TLeft : class
         where TRight : class
     {
@@ -44,7 +44,7 @@ public sealed class RelationModelBuilder
         return new RelationBuilder<TLeft, TRight>(this, left, right);
     }
 
-    public DerivedBuilder<TSource> Derived<TSource>(ObjectSetBuilder<TSource> source) where TSource : class
+    public DerivedBuilder<TSource> Derived<TSource>(ObjectSet<TSource> source) where TSource : class
     {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(source);
@@ -52,7 +52,7 @@ public sealed class RelationModelBuilder
         return new DerivedBuilder<TSource>(this, source);
     }
 
-    public InvariantBuilder<TSource> Invariant<TSource>(ObjectSetBuilder<TSource> source) where TSource : class
+    public InvariantBuilder<TSource> Invariant<TSource>(ObjectSet<TSource> source) where TSource : class
     {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(source);
@@ -135,13 +135,15 @@ public sealed class ObjectSetBuilder<T> where T : class
     {
         ModelIdentity = modelIdentity;
         Definition = new ObjectSetDefinition<T>(id);
+        Set = new ObjectSet<T>(modelIdentity, Definition);
         _ensureMutable = ensureMutable;
     }
 
     internal object ModelIdentity { get; }
     internal ObjectSetDefinition<T> Definition { get; }
+    public ObjectSet<T> Set { get; }
 
-    public ObjectSetBuilder<T> Key<TKey>(Expression<Func<T, TKey>> key)
+    public ObjectSet<T> Key<TKey>(Expression<Func<T, TKey>> key)
     {
         _ensureMutable();
         ArgumentNullException.ThrowIfNull(key);
@@ -150,8 +152,23 @@ public sealed class ObjectSetBuilder<T> where T : class
 
         var compiled = key.Compile();
         Definition.SetKey(key, value => compiled(value));
-        return this;
+        return Set;
     }
+
+    public override string ToString() => $"ObjectSet {typeof(T).Name}";
+}
+
+/// <summary>A stable typed identity handle for an object set.</summary>
+public sealed class ObjectSet<T> where T : class
+{
+    internal ObjectSet(object modelIdentity, ObjectSetDefinition<T> definition)
+    {
+        ModelIdentity = modelIdentity;
+        Definition = definition;
+    }
+
+    internal object ModelIdentity { get; }
+    internal ObjectSetDefinition<T> Definition { get; }
 
     public override string ToString() => $"ObjectSet {typeof(T).Name}";
 }

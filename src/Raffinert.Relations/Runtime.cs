@@ -146,7 +146,7 @@ public sealed class RelationRuntime
             impactPolicy);
     }
 
-    public void Add<T>(ObjectSetBuilder<T> set, T instance) where T : class
+    public void Add<T>(ObjectSet<T> set, T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(instance);
@@ -184,7 +184,7 @@ public sealed class RelationRuntime
         policyActions.Dispatch();
     }
 
-    public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
+    public bool Remove<T>(ObjectSet<T> set, T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(instance);

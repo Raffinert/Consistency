@@ -701,6 +701,12 @@ A SaveChanges interceptor can later provide convenience, but must remain in the 
 
 # 11. P2 — Stabilize the public object-set API
 
+**Status:** Implemented.
+
+`ObjectSetBuilder<T>` now exists only during mutable model construction, while `Key(...)` returns a stable
+`ObjectSet<T>` identity handle used by relations, derived state, changes, runtimes, adapters, and benchmarks.
+Compiled metadata remains internal and immutable.
+
 `ObjectSetBuilder<T>` still serves both as build-time fluent configuration and runtime identity handle.
 
 Before public alpha, separate those roles.

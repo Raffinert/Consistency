@@ -28,10 +28,11 @@ public sealed class ModelValidationTests
     public void Compiled_model_metadata_is_immutable()
     {
         var model = new RelationModelBuilder();
-        var set = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var builder = model.Objects<InvoiceLine>();
+        builder.Key(x => x.Id);
         model.Build();
 
-        Assert.Throws<InvalidOperationException>(() => set.Key(x => x.PurchaseOrderNumber));
+        Assert.Throws<InvalidOperationException>(() => builder.Key(x => x.PurchaseOrderNumber));
     }
 
     [Fact]

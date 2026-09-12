@@ -21,7 +21,7 @@ public static class Change
 
     /// <summary>Describes a reflected change for a specific object set.</summary>
     public static PropertyChange Property<T>(
-        ObjectSetBuilder<T> set,
+        ObjectSet<T> set,
         T instance,
         MemberInfo member,
         object? oldValue,
@@ -37,7 +37,7 @@ public static class Change
 
     /// <summary>Describes a property change that has already been made on the domain object.</summary>
     public static PropertyChange Property<T, TValue>(
-        ObjectSetBuilder<T> set,
+        ObjectSet<T> set,
         T instance,
         Expression<Func<T, TValue>> property,
         TValue oldValue,
@@ -68,7 +68,7 @@ public static class Change
         CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Add, item);
 
     public static CollectionChange CollectionAdd<TOwner, TItem>(
-        ObjectSetBuilder<TOwner> set,
+        ObjectSet<TOwner> set,
         TOwner owner,
         Expression<Func<TOwner, IEnumerable<TItem>>> collection,
         TItem item) where TOwner : class where TItem : class =>
@@ -82,7 +82,7 @@ public static class Change
         CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Remove, item);
 
     public static CollectionChange CollectionRemove<TOwner, TItem>(
-        ObjectSetBuilder<TOwner> set,
+        ObjectSet<TOwner> set,
         TOwner owner,
         Expression<Func<TOwner, IEnumerable<TItem>>> collection,
         TItem item) where TOwner : class where TItem : class =>
@@ -95,7 +95,7 @@ public static class Change
         CollectionChange.Create(null, owner, GetDirectMember(collection), CollectionChangeKind.Reset, null);
 
     public static CollectionChange CollectionReset<TOwner, TItem>(
-        ObjectSetBuilder<TOwner> set,
+        ObjectSet<TOwner> set,
         TOwner owner,
         Expression<Func<TOwner, IEnumerable<TItem>>> collection) where TOwner : class where TItem : class =>
         CollectionChange.Create(set?.Definition ?? throw new ArgumentNullException(nameof(set)), owner,

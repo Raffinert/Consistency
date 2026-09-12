@@ -7,11 +7,11 @@ public sealed class RelationBuilder<TLeft, TRight>
     where TRight : class
 {
     private readonly RelationModelBuilder _model;
-    private readonly ObjectSetBuilder<TLeft> _left;
-    private readonly ObjectSetBuilder<TRight> _right;
+    private readonly ObjectSet<TLeft> _left;
+    private readonly ObjectSet<TRight> _right;
     private bool _defined;
 
-    internal RelationBuilder(RelationModelBuilder model, ObjectSetBuilder<TLeft> left, ObjectSetBuilder<TRight> right)
+    internal RelationBuilder(RelationModelBuilder model, ObjectSet<TLeft> left, ObjectSet<TRight> right)
     {
         _model = model;
         _left = left;

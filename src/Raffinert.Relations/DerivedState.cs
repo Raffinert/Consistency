@@ -40,9 +40,9 @@ public enum InvariantReaction
 public sealed class DerivedBuilder<TSource> where TSource : class
 {
     private readonly RelationModelBuilder _model;
-    private readonly ObjectSetBuilder<TSource> _source;
+    private readonly ObjectSet<TSource> _source;
 
-    internal DerivedBuilder(RelationModelBuilder model, ObjectSetBuilder<TSource> source)
+    internal DerivedBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
     {
         _model = model;
         _source = source;
@@ -64,12 +64,12 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     where TItem : class
 {
     private readonly RelationModelBuilder _model;
-    private readonly ObjectSetBuilder<TSource> _source;
+    private readonly ObjectSet<TSource> _source;
     private readonly Relation<TSource, TItem> _relation;
 
     internal DerivedUsingBuilder(
         RelationModelBuilder model,
-        ObjectSetBuilder<TSource> source,
+        ObjectSet<TSource> source,
         Relation<TSource, TItem> relation)
     {
         _model = model;
@@ -102,9 +102,9 @@ public sealed class Derived<TSource, TItem, TValue>
 public sealed class InvariantBuilder<TSource> where TSource : class
 {
     private readonly RelationModelBuilder _model;
-    private readonly ObjectSetBuilder<TSource> _source;
+    private readonly ObjectSet<TSource> _source;
 
-    internal InvariantBuilder(RelationModelBuilder model, ObjectSetBuilder<TSource> source)
+    internal InvariantBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
     {
         _model = model;
         _source = source;

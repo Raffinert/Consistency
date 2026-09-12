@@ -10,7 +10,7 @@ public sealed class RelationUnitOfWorkMappings
     private readonly List<IEntitySetMapping> _mappings = [];
 
     public RelationUnitOfWorkMappings Map<TEntity>(
-        ObjectSetBuilder<TEntity> set,
+        ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector = null) where TEntity : class
     {
         ArgumentNullException.ThrowIfNull(set);
@@ -37,7 +37,7 @@ public sealed class RelationUnitOfWorkMappings
     }
 
     private sealed class EntitySetMapping<TEntity>(
-        ObjectSetBuilder<TEntity> set,
+        ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector) : IEntitySetMapping where TEntity : class
     {
         public bool Matches(EntityEntry entry) =>

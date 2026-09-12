@@ -46,7 +46,7 @@ public class ReversePropagationBenchmarks
 
     private sealed class Scenario(
         RelationRuntime runtime,
-        ObjectSetBuilder<BenchItem> items,
+        ObjectSet<BenchItem> items,
         BenchItem item)
     {
         public ChangeImpact ToggleCode()
