@@ -789,6 +789,80 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Public_impact_policy_can_invalidate_removed_membership()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Impact(policy => policy
+                .MembershipAdded(DependencySeverity.Dirty)
+                .MembershipRemoved(DependencySeverity.Invalid))
+            .Compute((source, matches) => matches.Count);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(1, runtime.Get(count, source));
+
+        runtime.Remove(items, item);
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
+    }
+
+    [Fact]
+    public void Public_impact_policy_can_invalidate_item_changes()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var total = model.Derived(sources).Using(relation)
+            .Impact(policy => policy.ItemChanged(DependencySeverity.Invalid))
+            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        var item = Item("A", 1m);
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(1m, runtime.Get(total, source));
+
+        item.Quantity = 2m;
+        runtime.Apply(Change.Property(items, item, x => x.Quantity, 1m, 2m));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(total, source));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Public_impact_policy_is_independent_of_access_plan(bool forceScan)
+    {
+        var model = new RelationModelBuilder();
+        if (forceScan)
+            model.UseScanPlansForTesting();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Impact(policy => policy.MembershipAdded(DependencySeverity.Invalid))
+            .Compute((source, matches) => matches.Count);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(0, runtime.Get(count, source));
+
+        item.Code = "A";
+        runtime.Apply(Change.Property(items, item, x => x.Code, "B", "A"));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
+    }
+
+    [Fact]
     public void Prepared_mutation_dispatches_callbacks_only_after_explicit_dispatch()
     {
         var scheduled = new List<CodeHolder>();

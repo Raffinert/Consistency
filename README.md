@@ -75,6 +75,21 @@ opaque because their original predicate is evaluated on every query. Deliberate 
 `AllowIncompleteDependencies()` on the affected relation, derived value, or invariant; `DebugView` then
 labels the weaker guarantee explicitly, and cached freshness must not be treated as fully tracked.
 
+Derived definitions can express domain correctness severity independently of query optimization:
+
+```csharp
+var received = model.Derived(poLines)
+    .Using(receipts)
+    .Impact(policy => policy
+        .MembershipAdded(DependencySeverity.Dirty)
+        .MembershipRemoved(DependencySeverity.Invalid)
+        .ItemChanged(DependencySeverity.Invalid))
+    .Compute((line, matches) => matches.Sum(receipt => receipt.Quantity));
+```
+
+`Dirty` means the cached result must be recomputed when freshness matters; `Invalid` means it must not
+be relied upon before recomputation. The same policy has identical semantics for scan and hash plans.
+
 ## Implemented
 
 - Typed object sets with stable keys
@@ -96,7 +111,7 @@ labels the weaker guarantee explicitly, and cached freshness must not be treated
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
-- Policy-driven dependency severity, independent of scan/hash access planning
+- Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
 - Exact source-scoped derived invalidation backed by bidirectional relation membership
 - Unified relation-impact snapshots for delta, semantic, and access propagation
 - Focused member/relation/derived/invariant/policy dependency-graph propagation

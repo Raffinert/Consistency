@@ -66,6 +66,11 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     private readonly RelationModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Relation<TSource, TItem> _relation;
+    private DerivedImpactPolicy _impactPolicy = new(
+        DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
+        false);
 
     internal DerivedUsingBuilder(
         RelationModelBuilder model,
@@ -77,6 +82,16 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         _relation = relation;
     }
 
+    /// <summary>Configures semantic severity independently of the relation's access plan.</summary>
+    public DerivedUsingBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new DerivedImpactPolicyBuilder();
+        configure(builder);
+        _impactPolicy = builder.Build();
+        return this;
+    }
+
     public Derived<TSource, TItem, TValue> Compute<TValue>(
         Expression<Func<TSource, IReadOnlyList<TItem>, TValue>> computation)
     {
@@ -85,7 +100,8 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             _source.Definition,
             _relation.Definition,
             computation,
-            computation.Compile());
+            computation.Compile(),
+            _impactPolicy);
         _model.AddDerived(definition);
         return new Derived<TSource, TItem, TValue>(definition, _model.EnsureMutable);
     }
@@ -213,6 +229,7 @@ internal interface IDerivedDefinition
     IRelationDefinition Relation { get; }
     LambdaExpression ComputationExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
+    DerivedImpactPolicy ImpactPolicy { get; }
     bool AllowIncompleteDependencies { get; }
     IDerivedRuntimeState CreateState(IRelationRuntimeState relationState);
 }
@@ -221,7 +238,8 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
     RelationDefinition<TSource, TItem> relation,
     LambdaExpression computationExpression,
-    Func<TSource, IReadOnlyList<TItem>, TValue> computation) : IDerivedDefinition
+    Func<TSource, IReadOnlyList<TItem>, TValue> computation,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
     where TSource : class
     where TItem : class
 {
@@ -233,6 +251,7 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public LambdaExpression ComputationExpression { get; } = computationExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
         ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(IRelationRuntimeState relationState) =>

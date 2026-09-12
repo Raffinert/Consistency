@@ -347,6 +347,13 @@ After successful `Prepare`, runtime commit should not discover ordinary model-va
 
 # 4. P0 — Expose dependency severity as a real public semantic policy
 
+**Status:** Implemented.
+
+`DerivedUsingBuilder.Impact(...)` exposes domain-level severity configuration for membership additions,
+membership removals, and changes to related items. `DependencySeverity.Dirty` and `Invalid` map to the
+existing monotonic cache-state transitions, mixed deltas select the strongest severity, and tests prove
+the behavior is identical for hash and scan access plans. The internal low-level policy remains private.
+
 `Dirty` vs `Invalid` has correctly been decoupled from hash/join/access-plan mechanics.
 
 Today, however, the dependency impact policy is internal and the default relation-membership impact is `Dirty`.

@@ -82,6 +82,8 @@ public sealed class CompiledRelationModel
                 derived.AllowIncompleteDependencies,
                 cached: true)}");
             lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
+            lines.Add($"  Impact policy: membership added={derived.ImpactPolicy.MembershipAdded}, " +
+                $"removed={derived.ImpactPolicy.MembershipRemoved}, item changed={derived.ImpactPolicy.ItemChanged}");
             lines.Add($"  LINQ semantics: {derived.Analysis.LinqSemantics}");
             foreach (var dependency in derived.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");

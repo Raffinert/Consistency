@@ -82,12 +82,20 @@ internal sealed class DependencyGraphRuntime
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
             var itemRoots = ResolveRoots(node.Definition.Relation.RightSet, node.ItemDependencies, changes);
             var itemSources = _relations[node.Definition.Relation].GetLeftsForRights(itemRoots);
-            var membershipIsInvalid = membershipRoots.Length > 0 &&
-                _impactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    relationImpact!,
-                    node.Definition,
-                    changes)) == DependencyImpactKind.Invalid;
-            node.Apply(sourceRoots, itemSources, membershipRoots, membershipIsInvalid);
+            var membershipSeverity = DependencyImpactKind.Dirty;
+            if (membershipRoots.Length > 0)
+                membershipSeverity = node.Definition.ImpactPolicy.IsConfigured
+                    ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact!)
+                    : _impactPolicy.Classify(new RelationMembershipDependencyImpact(
+                        relationImpact!,
+                        node.Definition,
+                        changes));
+            node.Apply(
+                sourceRoots,
+                itemSources,
+                membershipRoots,
+                membershipSeverity,
+                node.Definition.ImpactPolicy.ItemChanged.ToKind());
         }
 
         foreach (var node in _invariantNodes)
@@ -119,10 +127,12 @@ internal sealed class DependencyGraphRuntime
                 .ToHashSet(ReferenceEqualityComparer.Instance);
             if (sources.Count == 0)
                 continue;
-            var severity = _impactPolicy.Classify(new RelationMembershipDependencyImpact(
-                relationImpact,
-                node.Definition,
-                changes));
+            var severity = node.Definition.ImpactPolicy.IsConfigured
+                ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact)
+                : _impactPolicy.Classify(new RelationMembershipDependencyImpact(
+                    relationImpact,
+                    node.Definition,
+                    changes));
             node.Apply(sources, severity);
         }
 
@@ -167,12 +177,18 @@ internal sealed class DependencyGraphRuntime
             IEnumerable<object> sourceRoots,
             IEnumerable<object> itemSources,
             IEnumerable<object> membershipRoots,
-            bool membershipIsInvalid)
+            DependencyImpactKind membershipSeverity,
+            DependencyImpactKind itemSeverity)
         {
-            InvalidSources = membershipIsInvalid ? NewSet(membershipRoots) : NewSet();
+            InvalidSources = membershipSeverity == DependencyImpactKind.Invalid
+                ? NewSet(membershipRoots)
+                : NewSet();
+            if (itemSeverity == DependencyImpactKind.Invalid)
+                InvalidSources.UnionWith(itemSources);
             DirtySources = NewSet(sourceRoots);
-            DirtySources.UnionWith(itemSources);
-            if (!membershipIsInvalid)
+            if (itemSeverity == DependencyImpactKind.Dirty)
+                DirtySources.UnionWith(itemSources);
+            if (membershipSeverity == DependencyImpactKind.Dirty)
                 DirtySources.UnionWith(membershipRoots);
             DirtySources.ExceptWith(InvalidSources);
             if (InvalidSources.Count > 0)
