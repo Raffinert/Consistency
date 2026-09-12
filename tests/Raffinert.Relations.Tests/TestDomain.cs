@@ -68,11 +68,13 @@ internal sealed class DerivedItemRecord
     public Guid Id { get; init; }
     public string Code { get; set; } = "";
     public decimal Quantity { get; set; }
+    public bool Enabled { get; set; }
     public DerivedItemDetails? Details { get; set; }
 }
 
 internal sealed class DerivedItemDetails
 {
+    public string Code { get; set; } = "";
     public decimal Quantity { get; set; }
 }
 

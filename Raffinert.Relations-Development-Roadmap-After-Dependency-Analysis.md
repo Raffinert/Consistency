@@ -27,6 +27,10 @@ The next phase should **not** primarily add more expression syntax. The engine n
 
 # 1. P0 — Exact relation deltas and selective derived invalidation
 
+**Status:** Implemented.
+
+Relations consumed by derived state now maintain internal bidirectional membership, produce added/removed pair deltas, and propagate membership and relation-item changes only to affected source roots. Coverage includes additions, removals, lost/gained membership, residual changes, and a 10,000-source precision regression.
+
 This is the highest-priority next feature.
 
 The current engine can determine that a relation or a relation item was affected, but relation-item changes can still conservatively invalidate every cached source value for a derived definition.

@@ -117,6 +117,8 @@ public sealed class RelationRuntime
     {
         _sets = sets.ToDictionary(set => set, set => new ObjectSetRuntime(set));
         _relations = relations.ToDictionary(relation => relation, relation => relation.CreateState(_sets));
+        foreach (var relation in derivedStates.Select(derived => derived.Relation).Distinct())
+            _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
         _derivedStates = derivedStates.ToDictionary(
@@ -147,12 +149,18 @@ public sealed class RelationRuntime
         var state = GetSet(definition);
         state.Add(instance);
         _navigation.AddRoot(definition, instance);
-        var affectedRelations = _relations
+        var rightRelations = _relations
             .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
             .ToArray();
-        foreach (var relation in affectedRelations.Select(pair => pair.Value))
-            relation.AddRight(instance);
-        InvalidateForRelationMutations(affectedRelations.Select(pair => pair.Key));
+        var leftRelations = _relations
+            .Where(pair => ReferenceEquals(pair.Value.LeftSet, definition))
+            .ToArray();
+        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        foreach (var relation in rightRelations)
+            deltas[relation.Key] = relation.Value.AddRight(instance);
+        foreach (var relation in leftRelations)
+            MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
+        InvalidateForRelationMutations(deltas);
     }
 
     public bool Remove<T>(ObjectSetBuilder<T> set, T instance) where T : class
@@ -172,14 +180,20 @@ public sealed class RelationRuntime
     {
         var state = GetSet(definition);
         if (!state.Contains(instance)) return false;
-        var affectedRelations = _relations
+        var rightRelations = _relations
             .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
             .ToArray();
-        foreach (var relation in affectedRelations.Select(pair => pair.Value))
-            relation.RemoveRight(instance);
+        var leftRelations = _relations
+            .Where(pair => ReferenceEquals(pair.Value.LeftSet, definition))
+            .ToArray();
+        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        foreach (var relation in rightRelations)
+            deltas[relation.Key] = relation.Value.RemoveRight(instance);
+        foreach (var relation in leftRelations)
+            MergeDelta(deltas, relation.Key, relation.Value.RemoveLeft(instance));
         _navigation.RemoveRoot(definition, instance);
         var removed = state.Remove(instance);
-        InvalidateForRelationMutations(affectedRelations.Select(pair => pair.Key));
+        InvalidateForRelationMutations(deltas);
         return removed;
     }
 
@@ -274,8 +288,26 @@ public sealed class RelationRuntime
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
                 pair.Key.ReindexRight(root);
-        ApplyDerivedAndInvariantImpact(impact, changes);
+        var relationDeltas = ResolveRelationDeltas(impact);
+        ApplyDerivedAndInvariantImpact(impact, relationDeltas, changes);
         return impact.ToPublic();
+    }
+
+    private IReadOnlyDictionary<IRelationDefinition, RelationDelta> ResolveRelationDeltas(
+        ResolvedChangeImpact impact)
+    {
+        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        foreach (var relation in impact.AffectedRelations)
+        {
+            var state = _relations[relation];
+            if (!state.HasExactPropagation)
+                continue;
+            var delta = state.RefreshMembership(
+                impact.GetAffectedRoots(relation, relation.LeftSet),
+                impact.GetAffectedRoots(relation, relation.RightSet));
+            deltas.Add(relation, delta);
+        }
+        return deltas;
     }
 
     private IEnumerable<(IObjectSetDefinition Set, object Root)> ResolveNavigationRoots(
@@ -315,13 +347,16 @@ public sealed class RelationRuntime
 
     private void ApplyDerivedAndInvariantImpact(
         ResolvedChangeImpact impact,
+        IReadOnlyDictionary<IRelationDefinition, RelationDelta> relationDeltas,
         IReadOnlyList<PropertyChange> changes)
     {
-        var affectedDerived = new Dictionary<IDerivedDefinition, (bool Invalid, IReadOnlyCollection<object>? Sources)>();
+        var affectedDerived = new Dictionary<IDerivedDefinition, (HashSet<object> Invalid, HashSet<object> Dirty)>();
         foreach (var pair in _derivedStates)
         {
-            var relationAffected = pair.Key.Analysis.HasRelationMembershipDependency &&
-                impact.AffectedRelations.Contains(pair.Key.Relation);
+            relationDeltas.TryGetValue(pair.Key.Relation, out var relationDelta);
+            var membershipRoots = pair.Key.Analysis.HasRelationMembershipDependency
+                ? relationDelta?.AffectedLefts ?? []
+                : [];
             var sourceRoots = ResolveDependencyRoots(
                 pair.Key.SourceSet,
                 pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource),
@@ -331,17 +366,24 @@ public sealed class RelationRuntime
                 pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.RelationItem),
                 changes);
             var relationState = _relations[pair.Key.Relation];
-            var invalid = relationAffected &&
-                impact.ReindexRoots.TryGetValue(relationState, out var roots) && roots.Count > 0;
-            if (relationAffected || itemRoots.Count > 0)
+            var itemSources = relationState.GetLeftsForRights(itemRoots);
+            var membershipIsInvalid = membershipRoots.Count > 0 &&
+                impact.InvalidatingRelations.Contains(pair.Key.Relation);
+            var invalidSources = membershipIsInvalid
+                ? new HashSet<object>(membershipRoots, ReferenceEqualityComparer.Instance)
+                : new HashSet<object>(ReferenceEqualityComparer.Instance);
+            var dirtySources = new HashSet<object>(sourceRoots, ReferenceEqualityComparer.Instance);
+            dirtySources.UnionWith(itemSources);
+            if (!membershipIsInvalid)
+                dirtySources.UnionWith(membershipRoots);
+            dirtySources.ExceptWith(invalidSources);
+            if (invalidSources.Count > 0)
+                pair.Value.Invalidate(invalidSources, invalid: true);
+            if (dirtySources.Count > 0)
+                pair.Value.Invalidate(dirtySources, invalid: false);
+            if (invalidSources.Count > 0 || dirtySources.Count > 0)
             {
-                pair.Value.Invalidate(invalid);
-                affectedDerived[pair.Key] = (invalid, null);
-            }
-            else if (sourceRoots.Count > 0)
-            {
-                pair.Value.Invalidate(sourceRoots, invalid: false);
-                affectedDerived[pair.Key] = (false, sourceRoots);
+                affectedDerived[pair.Key] = (invalidSources, dirtySources);
             }
         }
 
@@ -349,18 +391,17 @@ public sealed class RelationRuntime
         {
             if (affectedDerived.TryGetValue(pair.Key.Derived, out var inherited))
             {
-                if (inherited.Sources is null)
-                    pair.Value.OnDependencyChanged(inherited.Invalid);
-                else
-                    pair.Value.OnDependencyChanged(inherited.Sources, inherited.Invalid);
+                if (inherited.Invalid.Count > 0)
+                    pair.Value.OnDependencyChanged(inherited.Invalid, invalid: true);
+                if (inherited.Dirty.Count > 0)
+                    pair.Value.OnDependencyChanged(inherited.Dirty, invalid: false);
             }
 
             var invariantRoots = ResolveDependencyRoots(
                 pair.Key.Derived.SourceSet,
                 pair.Key.Analysis.Dependencies.Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
                 changes);
-            if (invariantRoots.Count > 0 &&
-                (!affectedDerived.TryGetValue(pair.Key.Derived, out inherited) || inherited.Sources is not null))
+            if (invariantRoots.Count > 0)
                 pair.Value.OnDependencyChanged(invariantRoots, invalid: false);
         }
     }
@@ -377,19 +418,31 @@ public sealed class RelationRuntime
         return roots;
     }
 
-    private void InvalidateForRelationMutations(IEnumerable<IRelationDefinition> relations)
+    private void InvalidateForRelationMutations(
+        IReadOnlyDictionary<IRelationDefinition, RelationDelta> deltas)
     {
-        var affectedRelations = relations.ToHashSet();
-        if (affectedRelations.Count == 0)
-            return;
         var affectedDerived = _derivedStates
-            .Where(pair => affectedRelations.Contains(pair.Key.Relation))
-            .ToArray();
+            .Where(pair => pair.Key.Analysis.HasRelationMembershipDependency &&
+                deltas.TryGetValue(pair.Key.Relation, out var delta) && delta.AffectedLefts.Count > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
         foreach (var pair in affectedDerived)
-            pair.Value.Invalidate(invalid: true);
+            pair.Value.Invalidate(deltas[pair.Key.Relation].AffectedLefts, invalid: true);
         foreach (var pair in _invariants)
-            if (affectedDerived.Any(derived => ReferenceEquals(derived.Key, pair.Key.Derived)))
-                pair.Value.OnDependencyChanged(invalid: true);
+        {
+            if (affectedDerived.ContainsKey(pair.Key.Derived))
+                pair.Value.OnDependencyChanged(deltas[pair.Key.Derived.Relation].AffectedLefts, invalid: true);
+        }
+    }
+
+    private static void MergeDelta(
+        IDictionary<IRelationDefinition, RelationDelta> deltas,
+        IRelationDefinition relation,
+        RelationDelta delta)
+    {
+        if (deltas.TryGetValue(relation, out var existing))
+            existing.MergeFrom(delta);
+        else
+            deltas.Add(relation, delta);
     }
 
     private PropertyChange ValidateChange(PropertyChange change)
@@ -473,10 +526,49 @@ internal sealed class ObjectSetRuntime
 
 internal interface IRelationRuntimeState
 {
+    IObjectSetDefinition LeftSet { get; }
     IObjectSetDefinition RightSet { get; }
-    void AddRight(object instance);
-    void RemoveRight(object instance);
+    bool HasExactPropagation { get; }
+    void EnableExactPropagation();
+    RelationDelta AddLeft(object instance);
+    RelationDelta RemoveLeft(object instance);
+    RelationDelta AddRight(object instance);
+    RelationDelta RemoveRight(object instance);
     void ReindexRight(object instance);
+    RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
+    IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
+}
+
+internal sealed record RelationPair(object Left, object Right);
+
+internal sealed class RelationDelta
+{
+    private readonly List<RelationPair> _addedPairs = [];
+    private readonly List<RelationPair> _removedPairs = [];
+    private readonly HashSet<object> _affectedLefts = new(ReferenceEqualityComparer.Instance);
+
+    public IReadOnlyList<RelationPair> AddedPairs => _addedPairs;
+    public IReadOnlyList<RelationPair> RemovedPairs => _removedPairs;
+    public IReadOnlyCollection<object> AffectedLefts => _affectedLefts;
+
+    public void Add(object left, object right)
+    {
+        _addedPairs.Add(new RelationPair(left, right));
+        _affectedLefts.Add(left);
+    }
+
+    public void Remove(object left, object right)
+    {
+        _removedPairs.Add(new RelationPair(left, right));
+        _affectedLefts.Add(left);
+    }
+
+    public void MergeFrom(RelationDelta other)
+    {
+        _addedPairs.AddRange(other._addedPairs);
+        _removedPairs.AddRange(other._removedPairs);
+        _affectedLefts.UnionWith(other._affectedLefts);
+    }
 }
 
 internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState
@@ -487,6 +579,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     private readonly ObjectSetRuntime _rightObjects;
     private readonly Dictionary<CompositeKey, HashSet<TRight>> _index = [];
     private readonly Dictionary<TRight, CompositeKey> _keys = new(ReferenceEqualityComparer<TRight>.Instance);
+    private readonly Dictionary<TLeft, HashSet<TRight>> _rightsByLeft = new(ReferenceEqualityComparer<TLeft>.Instance);
+    private readonly Dictionary<TRight, HashSet<TLeft>> _leftsByRight = new(ReferenceEqualityComparer<TRight>.Instance);
+    private bool _hasExactPropagation;
 
     public RelationRuntimeState(
         RelationDefinition<TLeft, TRight> definition,
@@ -498,24 +593,64 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         _rightObjects = rightObjects;
     }
 
+    public IObjectSetDefinition LeftSet => _definition.Left;
     public IObjectSetDefinition RightSet => _definition.Right;
+    public bool HasExactPropagation => _hasExactPropagation;
 
-    public void AddRight(object instance)
+    public void EnableExactPropagation() => _hasExactPropagation = true;
+
+    public RelationDelta AddLeft(object instance)
     {
-        var right = (TRight)instance;
-        if (_definition.AccessPlan is HashJoinAccessPlan hashPlan)
-        {
-            var key = ReadRightKey(hashPlan, right);
-            if (!_index.TryGetValue(key, out var bucket)) _index.Add(key, bucket = new(ReferenceEqualityComparer<TRight>.Instance));
-            bucket.Add(right);
-            _keys[right] = key;
-        }
+        var delta = new RelationDelta();
+        if (!_hasExactPropagation)
+            return delta;
+        var left = (TLeft)instance;
+        foreach (var right in Related(left))
+            AddPair(left, right, delta);
+        return delta;
     }
 
-    public void RemoveRight(object instance)
+    public RelationDelta RemoveLeft(object instance)
     {
+        var delta = new RelationDelta();
+        if (!_hasExactPropagation)
+            return delta;
+        var left = (TLeft)instance;
+        if (!_rightsByLeft.Remove(left, out var rights))
+            return delta;
+        foreach (var right in rights)
+        {
+            RemoveReversePair(left, right);
+            delta.Remove(left, right);
+        }
+        return delta;
+    }
+
+    public RelationDelta AddRight(object instance)
+    {
+        var delta = new RelationDelta();
         var right = (TRight)instance;
+        AddToIndex(right);
+        if (_hasExactPropagation)
+            foreach (var left in _leftObjects.Instances.Cast<TLeft>().Where(left => _definition.Predicate(left, right)))
+                AddPair(left, right, delta);
+        return delta;
+    }
+
+    public RelationDelta RemoveRight(object instance)
+    {
+        var delta = new RelationDelta();
+        var right = (TRight)instance;
+        if (_hasExactPropagation && _leftsByRight.Remove(right, out var lefts))
+            foreach (var left in lefts)
+            {
+                _rightsByLeft[left].Remove(right);
+                if (_rightsByLeft[left].Count == 0)
+                    _rightsByLeft.Remove(left);
+                delta.Remove(left, right);
+            }
         RemoveFromIndex(right);
+        return delta;
     }
 
     public IReadOnlyList<TRight> Related(TLeft left)
@@ -534,10 +669,68 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public void ReindexRight(object instance) => Reindex((TRight)instance);
 
+    public RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights)
+    {
+        var delta = new RelationDelta();
+        if (!_hasExactPropagation)
+            return delta;
+
+        var typedLefts = lefts.Cast<TLeft>().ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
+        var typedRights = rights.Cast<TRight>().ToHashSet(ReferenceEqualityComparer<TRight>.Instance);
+        foreach (var left in typedLefts)
+        {
+            var oldRights = _rightsByLeft.TryGetValue(left, out var existing)
+                ? existing.ToHashSet(ReferenceEqualityComparer<TRight>.Instance)
+                : new HashSet<TRight>(ReferenceEqualityComparer<TRight>.Instance);
+            var newRights = Related(left).ToHashSet(ReferenceEqualityComparer<TRight>.Instance);
+            foreach (var right in oldRights.Except(newRights, ReferenceEqualityComparer<TRight>.Instance).ToArray())
+                RemovePair(left, right, delta);
+            foreach (var right in newRights.Except(oldRights, ReferenceEqualityComparer<TRight>.Instance))
+                AddPair(left, right, delta);
+        }
+
+        foreach (var right in typedRights)
+        {
+            var oldLefts = _leftsByRight.TryGetValue(right, out var existing)
+                ? existing.ToHashSet(ReferenceEqualityComparer<TLeft>.Instance)
+                : new HashSet<TLeft>(ReferenceEqualityComparer<TLeft>.Instance);
+            var newLefts = _leftObjects.Instances.Cast<TLeft>()
+                .Where(left => _definition.Predicate(left, right))
+                .ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
+            foreach (var left in oldLefts.Except(newLefts, ReferenceEqualityComparer<TLeft>.Instance).ToArray())
+                RemovePair(left, right, delta);
+            foreach (var left in newLefts.Except(oldLefts, ReferenceEqualityComparer<TLeft>.Instance))
+                AddPair(left, right, delta);
+        }
+        return delta;
+    }
+
+    public IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights)
+    {
+        var lefts = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        if (!_hasExactPropagation)
+            return lefts;
+        foreach (var right in rights.Cast<TRight>())
+            if (_leftsByRight.TryGetValue(right, out var related))
+                lefts.UnionWith(related);
+        return lefts;
+    }
+
     private void Reindex(TRight right)
     {
         RemoveFromIndex(right);
-        AddRight(right);
+        AddToIndex(right);
+    }
+
+    private void AddToIndex(TRight right)
+    {
+        if (_definition.AccessPlan is not HashJoinAccessPlan hashPlan)
+            return;
+        var key = ReadRightKey(hashPlan, right);
+        if (!_index.TryGetValue(key, out var bucket))
+            _index.Add(key, bucket = new HashSet<TRight>(ReferenceEqualityComparer<TRight>.Instance));
+        bucket.Add(right);
+        _keys[right] = key;
     }
 
     private void RemoveFromIndex(TRight right)
@@ -548,6 +741,37 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             bucket.Remove(right);
             if (bucket.Count == 0) _index.Remove(key);
         }
+    }
+
+    private void AddPair(TLeft left, TRight right, RelationDelta delta)
+    {
+        if (!_rightsByLeft.TryGetValue(left, out var rights))
+            _rightsByLeft.Add(left, rights = new HashSet<TRight>(ReferenceEqualityComparer<TRight>.Instance));
+        if (!rights.Add(right))
+            return;
+        if (!_leftsByRight.TryGetValue(right, out var lefts))
+            _leftsByRight.Add(right, lefts = new HashSet<TLeft>(ReferenceEqualityComparer<TLeft>.Instance));
+        lefts.Add(left);
+        delta.Add(left, right);
+    }
+
+    private void RemovePair(TLeft left, TRight right, RelationDelta delta)
+    {
+        if (!_rightsByLeft.TryGetValue(left, out var rights) || !rights.Remove(right))
+            return;
+        if (rights.Count == 0)
+            _rightsByLeft.Remove(left);
+        RemoveReversePair(left, right);
+        delta.Remove(left, right);
+    }
+
+    private void RemoveReversePair(TLeft left, TRight right)
+    {
+        if (!_leftsByRight.TryGetValue(right, out var lefts))
+            return;
+        lefts.Remove(left);
+        if (lefts.Count == 0)
+            _leftsByRight.Remove(right);
     }
 
     private IEnumerable<TRight> ReadHashCandidates(HashJoinAccessPlan plan, TLeft left)

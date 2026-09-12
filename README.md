@@ -47,6 +47,7 @@ remove and re-add the object when its identity genuinely needs to change.
 - Atomic property `ChangeSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
+- Exact source-scoped derived invalidation backed by bidirectional relation membership
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
 - Invariant evaluation with immediate, dirty, and invalidation policies
@@ -58,7 +59,7 @@ remove and re-add the object when its identity genuinely needs to change.
 
 - Collection navigation
 - Range access plans (range expressions are currently diagnostic metadata)
-- Selective rather than conservative derived-state invalidation
+- Source-removal lifecycle cleanup for derived and invariant state
 - Scheduling and domain-specific repair policies
 
 The core package has no EF Core or dependency-injection dependency.

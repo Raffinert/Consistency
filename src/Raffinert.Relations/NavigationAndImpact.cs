@@ -230,12 +230,22 @@ internal sealed class ResolvedChangeImpact
 {
     private readonly Dictionary<IRelationRuntimeState, HashSet<object>> _reindexRoots = [];
     private readonly HashSet<IRelationDefinition> _affectedRelations = [];
+    private readonly HashSet<IRelationDefinition> _invalidatingRelations = [];
     private readonly Dictionary<IObjectSetDefinition, HashSet<object>> _affectedRoots = [];
+    private readonly Dictionary<IRelationDefinition, Dictionary<IObjectSetDefinition, HashSet<object>>> _relationRoots = [];
 
     public IReadOnlyDictionary<IRelationRuntimeState, HashSet<object>> ReindexRoots => _reindexRoots;
     public IReadOnlyCollection<IRelationDefinition> AffectedRelations => _affectedRelations;
+    public IReadOnlyCollection<IRelationDefinition> InvalidatingRelations => _invalidatingRelations;
     public IEnumerable<(IObjectSetDefinition Set, object Root)> AffectedRoots =>
         _affectedRoots.SelectMany(pair => pair.Value.Select(root => (pair.Key, root)));
+
+    public IReadOnlyCollection<object> GetAffectedRoots(
+        IRelationDefinition relation,
+        IObjectSetDefinition set) =>
+        _relationRoots.TryGetValue(relation, out var bySet) && bySet.TryGetValue(set, out var roots)
+            ? roots
+            : [];
 
     public void AddSemantic(IRelationDefinition relation, IObjectSetDefinition set, IEnumerable<object> roots)
     {
@@ -246,6 +256,11 @@ internal sealed class ResolvedChangeImpact
         if (!_affectedRoots.TryGetValue(set, out var affected))
             _affectedRoots.Add(set, affected = new HashSet<object>(ReferenceEqualityComparer.Instance));
         affected.UnionWith(materialized);
+        if (!_relationRoots.TryGetValue(relation, out var bySet))
+            _relationRoots.Add(relation, bySet = []);
+        if (!bySet.TryGetValue(set, out var relationAffected))
+            bySet.Add(set, relationAffected = new HashSet<object>(ReferenceEqualityComparer.Instance));
+        relationAffected.UnionWith(materialized);
     }
 
     public void AddAccess(IRelationRuntimeState relation, IEnumerable<object> roots)
@@ -255,15 +270,31 @@ internal sealed class ResolvedChangeImpact
         affected.UnionWith(roots);
     }
 
+    public void AddInvalidatingRelation(IRelationDefinition relation) =>
+        _invalidatingRelations.Add(relation);
+
     public void MergeFrom(ResolvedChangeImpact other)
     {
         foreach (var relation in other._affectedRelations)
             _affectedRelations.Add(relation);
+        foreach (var relation in other._invalidatingRelations)
+            _invalidatingRelations.Add(relation);
         foreach (var pair in other._affectedRoots)
         {
             if (!_affectedRoots.TryGetValue(pair.Key, out var roots))
                 _affectedRoots.Add(pair.Key, roots = new HashSet<object>(ReferenceEqualityComparer.Instance));
             roots.UnionWith(pair.Value);
+        }
+        foreach (var relation in other._relationRoots)
+        {
+            if (!_relationRoots.TryGetValue(relation.Key, out var bySet))
+                _relationRoots.Add(relation.Key, bySet = []);
+            foreach (var pair in relation.Value)
+            {
+                if (!bySet.TryGetValue(pair.Key, out var roots))
+                    bySet.Add(pair.Key, roots = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                roots.UnionWith(pair.Value);
+            }
         }
         foreach (var pair in other._reindexRoots)
         {
@@ -306,6 +337,8 @@ internal sealed class ImpactResolver(
                 var rootSet = path.RootParameterIndex == 0 ? relation.LeftSet : relation.RightSet;
                 var roots = navigation.ResolveRoots(rootSet, path, change.Instance, change.Member);
                 impact.AddSemantic(relation, rootSet, roots);
+                if (roots.Count > 0 && IsJoinKeyPath(relation, path))
+                    impact.AddInvalidatingRelation(relation);
             }
 
             if (relation.AccessPlan is not HashJoinAccessPlan hashPlan)
@@ -320,4 +353,9 @@ internal sealed class ImpactResolver(
         }
         return impact;
     }
+
+    private static bool IsJoinKeyPath(IRelationDefinition relation, DependencyPath path) =>
+        relation.Analysis.JoinKeyParts.Any(part =>
+            path.RootParameterIndex == 0 && path.Segments.Select(segment => segment.Member).SequenceEqual(part.Left.Members) ||
+            path.RootParameterIndex == 1 && path.Segments.Select(segment => segment.Member).SequenceEqual(part.Right.Members));
 }

@@ -249,6 +249,181 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Item_value_change_dirties_only_sources_currently_containing_the_item()
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var matching = Source("A");
+        var unrelated = Source("B");
+        var item = Item("A", quantity: 2m);
+        runtime.Add(sources, matching);
+        runtime.Add(sources, unrelated);
+        runtime.Add(items, item);
+        Assert.Equal(2m, runtime.Get(quantity, matching));
+        Assert.Equal(0m, runtime.Get(quantity, unrelated));
+
+        item.Quantity = 3m;
+        runtime.Apply(Change.Property(items, item, x => x.Quantity, 2m, 3m));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, matching));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Item_join_key_change_invalidates_sources_that_lose_and_gain_membership(bool forceScan)
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity),
+            forceScan);
+        var runtime = model.Build().CreateRuntime();
+        var losing = Source("A");
+        var gaining = Source("B");
+        var unrelated = Source("C");
+        var item = Item("A", quantity: 2m);
+        foreach (var source in new[] { losing, gaining, unrelated })
+            runtime.Add(sources, source);
+        runtime.Add(items, item);
+        foreach (var source in new[] { losing, gaining, unrelated })
+            runtime.Get(quantity, source);
+
+        item.Code = "B";
+        runtime.Apply(Change.Property(items, item, x => x.Code, "A", "B"));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, gaining));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
+        Assert.Equal(0m, runtime.Get(quantity, losing));
+        Assert.Equal(2m, runtime.Get(quantity, gaining));
+    }
+
+    [Fact]
+    public void Nested_join_key_change_invalidates_sources_that_lose_and_gain_membership()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.Code == item.Details!.Code);
+        var quantity = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var losing = Source("A");
+        var gaining = Source("B");
+        var details = new DerivedItemDetails { Code = "A" };
+        var item = Item("unused", quantity: 2m, details: details);
+        runtime.Add(sources, losing);
+        runtime.Add(sources, gaining);
+        runtime.Add(items, item);
+        runtime.Get(quantity, losing);
+        runtime.Get(quantity, gaining);
+
+        details.Code = "B";
+        runtime.Apply(Change.Property(details, x => x.Code, "A", "B"));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, gaining));
+        Assert.Equal(0m, runtime.Get(quantity, losing));
+        Assert.Equal(2m, runtime.Get(quantity, gaining));
+    }
+
+    [Fact]
+    public void Residual_predicate_change_dirties_only_source_that_loses_membership()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) =>
+            source.Code == item.Code && item.Enabled);
+        var quantity = model.Derived(sources).Using(relation)
+            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var losing = Source("A");
+        var unrelated = Source("B");
+        var item = Item("A", quantity: 2m);
+        item.Enabled = true;
+        runtime.Add(sources, losing);
+        runtime.Add(sources, unrelated);
+        runtime.Add(items, item);
+        runtime.Get(quantity, losing);
+        runtime.Get(quantity, unrelated);
+
+        item.Enabled = false;
+        runtime.Apply(Change.Property(items, item, x => x.Enabled, true, false));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
+    }
+
+    [Fact]
+    public void Item_addition_and_removal_invalidate_only_matching_sources()
+    {
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var matching = Source("A");
+        var unrelated = Source("B");
+        var item = Item("A", quantity: 2m);
+        runtime.Add(sources, matching);
+        runtime.Add(sources, unrelated);
+        runtime.Get(quantity, matching);
+        runtime.Get(quantity, unrelated);
+
+        runtime.Add(items, item);
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, matching));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
+        runtime.Get(quantity, matching);
+
+        runtime.Remove(items, item);
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, matching));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
+    }
+
+    [Fact]
+    public void One_item_mutation_leaves_ten_thousand_unrelated_source_caches_fresh()
+    {
+        const int unrelatedCount = 10_000;
+        var model = CreateQuantityModel(
+            out var sources,
+            out var items,
+            out var quantity,
+            (source, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var affected = Source("MATCH");
+        var unrelated = Enumerable.Range(0, unrelatedCount)
+            .Select(index => Source($"U-{index}"))
+            .ToArray();
+        runtime.Add(sources, affected);
+        foreach (var source in unrelated)
+            runtime.Add(sources, source);
+        var item = Item("MATCH", quantity: 1m);
+        runtime.Add(items, item);
+        runtime.Get(quantity, affected);
+        foreach (var source in unrelated)
+            runtime.Get(quantity, source);
+
+        item.Quantity = 2m;
+        runtime.Apply(Change.Property(items, item, x => x.Quantity, 1m, 2m));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, affected));
+        Assert.All(unrelated, source =>
+            Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, source)));
+    }
+
+    [Fact]
     public void Direct_source_change_marks_a_cached_derived_computation_dirty()
     {
         var model = new RelationModelBuilder();
