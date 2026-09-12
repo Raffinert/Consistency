@@ -910,6 +910,15 @@ Do not auto-publish every `main` commit.
 
 # 14. P2 — Documentation cleanup and one end-to-end domain example
 
+**Status:** Implemented.
+
+The README backlog and feature summary are current and now route detailed material to `docs/`.
+`docs/architecture.md` describes compilation, mutation phases, exact materialization, dependency policy,
+diagnostics, and the EF transaction boundary. `docs/purchase-order-example.md` presents the complete PO
+line/goods-receipt quantity flow with explicit `MutationSet`/structured repair handling and the EF adapter.
+Executable end-to-end tests prove quantity update, cancellation, exact source impact, invalidation/repair,
+and equivalent EF-driven propagation.
+
 The current README `Further work` still lists collection navigation although collection navigation is implemented.
 
 Clean stale roadmap text before alpha.

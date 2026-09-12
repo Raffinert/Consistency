@@ -193,6 +193,12 @@ last `ResetDiagnostics()` call.
 
 The core package has no EF Core or dependency-injection dependency.
 
+## Documentation
+
+- [Architecture and runtime contracts](docs/architecture.md)
+- [End-to-end purchase order and goods receipt example](docs/purchase-order-example.md)
+- [Release and versioning process](RELEASING.md)
+
 The EF Core adapter captures and prepares a `RelationUnitOfWork` before `SaveChanges`, then commits its
 mutations as one atomic runtime batch and dispatches callbacks only after the database operation succeeds.
 `SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering. Manual integrations can call the

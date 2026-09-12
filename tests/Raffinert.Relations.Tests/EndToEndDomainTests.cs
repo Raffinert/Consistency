@@ -1,0 +1,162 @@
+using Microsoft.EntityFrameworkCore;
+using Raffinert.Relations.EntityFrameworkCore;
+
+namespace Raffinert.Relations.Tests;
+
+public sealed class EndToEndDomainTests
+{
+    [Fact]
+    public void Goods_receipt_update_and_cancellation_affect_only_matching_purchase_order_line()
+    {
+        var repairs = new List<PurchaseLine>();
+        var scenario = BuildScenario(repairs);
+        var runtime = scenario.Model.CreateRuntime();
+        var firstLine = new PurchaseLine
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-1",
+            ItemNumber = "A",
+            OrderedQuantity = 5m
+        };
+        var otherLine = new PurchaseLine
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-2",
+            ItemNumber = "A",
+            OrderedQuantity = 5m
+        };
+        var receipt = new GoodsReceipt
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-1",
+            ItemNumber = "A",
+            Quantity = 2m
+        };
+        runtime.Apply(MutationSet.Create(
+            Change.Add(scenario.Lines, firstLine),
+            Change.Add(scenario.Lines, otherLine),
+            Change.Add(scenario.Receipts, receipt)));
+        Assert.Equal(2m, runtime.Get(scenario.Received, firstLine));
+        Assert.Equal(0m, runtime.Get(scenario.Received, otherLine));
+        Assert.True(runtime.Evaluate(scenario.QuantityInvariant, firstLine));
+        repairs.Clear();
+
+        receipt.Quantity = 6m;
+        var update = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(scenario.Receipts, receipt, value => value.Quantity, 2m, 6m)));
+
+        Assert.Equal([firstLine], Assert.Single(update.DerivedImpacts).Sources);
+        Assert.Equal(DependencySeverity.Invalid, Assert.Single(update.DerivedImpacts).Severity);
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Received, firstLine));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Received, otherLine));
+        Assert.Single(update.RepairRequests);
+        update.DispatchPolicies();
+        Assert.Equal([firstLine], repairs);
+        Assert.Equal(6m, runtime.Get(scenario.Received, firstLine));
+        Assert.False(runtime.Evaluate(scenario.QuantityInvariant, firstLine));
+
+        receipt.Cancelled = true;
+        runtime.Apply(Change.Property(
+            scenario.Receipts, receipt, value => value.Cancelled, false, true));
+
+        Assert.Empty(runtime.Related(scenario.Matches, firstLine));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Received, firstLine));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Received, otherLine));
+    }
+
+    [Fact]
+    public void Ef_adapter_drives_the_same_goods_receipt_dependency_flow()
+    {
+        var repairs = new List<PurchaseLine>();
+        var scenario = BuildScenario(repairs);
+        var runtime = scenario.Model.CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings()
+            .Map(scenario.Lines)
+            .Map(scenario.Receipts);
+        using var context = new PurchasingContext();
+        var line = new PurchaseLine
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-1",
+            ItemNumber = "A",
+            OrderedQuantity = 5m
+        };
+        var receipt = new GoodsReceipt
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-1",
+            ItemNumber = "A",
+            Quantity = 2m
+        };
+        context.AddRange(line, receipt);
+        context.SaveChangesAndApply(runtime, mappings);
+        Assert.Equal(2m, runtime.Get(scenario.Received, line));
+        Assert.True(runtime.Evaluate(scenario.QuantityInvariant, line));
+        repairs.Clear();
+
+        receipt.Quantity = 6m;
+        context.SaveChangesAndApply(runtime, mappings);
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Received, line));
+        Assert.Equal([line], repairs);
+    }
+
+    private static Scenario BuildScenario(List<PurchaseLine> repairs)
+    {
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<PurchaseLine>().Key(value => value.Id);
+        var receipts = model.Objects<GoodsReceipt>().Key(value => value.Id);
+        var matches = model.Relation(lines, receipts).Where((line, receipt) =>
+            line.OrderNumber == receipt.OrderNumber &&
+            line.ItemNumber == receipt.ItemNumber &&
+            !receipt.Cancelled);
+        var received = model.Derived(lines).Using(matches)
+            .Impact(policy => policy
+                .MembershipAdded(DependencySeverity.Dirty)
+                .MembershipRemoved(DependencySeverity.Invalid)
+                .ItemChanged(DependencySeverity.Invalid))
+            .Incrementally()
+            .Compute((line, related) => related.Sum(receipt => receipt.Quantity));
+        var invariant = model.Invariant(lines).Using(received)
+            .Must((line, quantity) => quantity <= line.OrderedQuantity)
+            .ScheduleRepairWith(repairs.Add);
+        return new Scenario(model.Build(), lines, receipts, matches, received, invariant);
+    }
+
+    private sealed record Scenario(
+        CompiledRelationModel Model,
+        ObjectSet<PurchaseLine> Lines,
+        ObjectSet<GoodsReceipt> Receipts,
+        Relation<PurchaseLine, GoodsReceipt> Matches,
+        Derived<PurchaseLine, GoodsReceipt, decimal> Received,
+        Invariant<PurchaseLine, GoodsReceipt, decimal> QuantityInvariant);
+
+    private sealed class PurchasingContext : DbContext
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder options) =>
+            options.UseInMemoryDatabase($"purchasing-{Guid.NewGuid()}");
+
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            model.Entity<PurchaseLine>();
+            model.Entity<GoodsReceipt>();
+        }
+    }
+
+    private sealed class PurchaseLine
+    {
+        public Guid Id { get; init; }
+        public string OrderNumber { get; set; } = "";
+        public string ItemNumber { get; set; } = "";
+        public decimal OrderedQuantity { get; set; }
+    }
+
+    private sealed class GoodsReceipt
+    {
+        public Guid Id { get; init; }
+        public string OrderNumber { get; set; } = "";
+        public string ItemNumber { get; set; } = "";
+        public decimal Quantity { get; set; }
+        public bool Cancelled { get; set; }
+    }
+}
