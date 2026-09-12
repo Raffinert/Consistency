@@ -50,6 +50,19 @@ runtime.Apply(MutationSet.Create(
 
 The runtime validates the complete mutation set before updating runtime-owned state, commits it as one
 logical operation, and dispatches dependency policy callbacks only after the final state is committed.
+External unit-of-work integrations can split those phases explicitly:
+
+```csharp
+var prepared = runtime.Prepare(mutations, ChangeValidationMode.StrictNewValue);
+await database.SaveChangesAsync();
+runtime.Commit(prepared);
+runtime.Dispatch(prepared);
+```
+
+Preparation performs ordinary mutation validation without changing runtime-owned state. A prepared
+mutation records `runtime.Version`; commit rejects it as stale if another runtime mutation committed in
+the meantime. Commit updates runtime state but never invokes application callbacks, which remain isolated
+in the dispatch phase.
 
 Collection navigation is explicit: mutate the domain collection first, then report it with
 `Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
@@ -94,7 +107,7 @@ labels the weaker guarantee explicitly, and cached freshness must not be treated
 - Invariant evaluation with immediate, dirty, and invalidation policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
 - A separate EF Core change-tracker adapter package
-- EF Core unit-of-work capture with entity lifecycle, relationship resets, explicit set mapping, and post-save apply
+- EF Core unit-of-work capture with prepare-before-save, versioned commit-after-success, relationship resets, and explicit set mapping
 - A BenchmarkDotNet benchmark project
 - Propagation precision diagnostics and 1/10/100-change benchmarks at 10k/100k scale
 - Measured range-planning benchmark (current equality-prefix strategy retained)
@@ -110,13 +123,15 @@ labels the weaker guarantee explicitly, and cached freshness must not be treated
 
 The core package has no EF Core or dependency-injection dependency.
 
-The EF Core adapter captures a `RelationUnitOfWork` before `SaveChanges`, then applies its mutations as
-one atomic runtime batch only after the
-database operation succeeds. `SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering.
+The EF Core adapter captures and prepares a `RelationUnitOfWork` before `SaveChanges`, then commits its
+mutations as one atomic runtime batch and dispatches callbacks only after the database operation succeeds.
+`SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering. Manual integrations can call the
+unit of work's `Prepare`, `Commit`, and `Dispatch` methods directly.
 Added and deleted entities require a `RelationUnitOfWorkMappings` entry; selectors disambiguate CLR types
 used by multiple object sets. Modified scalars, references, owned entries, and collection resets are
-translated through the same core change contracts. Runtime application failure after database success
-is surfaced and requires application-level reconciliation; it cannot roll back the database transaction.
+translated through the same core change contracts. A stale prepared mutation is rejected if runtime state
+advances between preparation and commit and requires application-level reconciliation; it cannot roll back
+the database transaction.
 
 `RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
 

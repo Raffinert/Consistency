@@ -64,20 +64,65 @@ public sealed class RelationUnitOfWorkMappings
 public sealed class RelationUnitOfWork
 {
     private readonly MutationSet? _mutations;
-    private bool _applied;
+    private PreparedMutation? _prepared;
+    private bool _isPrepared;
+    private bool _emptyCommitted;
+    private bool _emptyDispatched;
 
     internal RelationUnitOfWork(MutationSet? mutations) => _mutations = mutations;
 
     public bool HasChanges => _mutations is not null;
 
-    public void Apply(RelationRuntime runtime)
+    /// <summary>Validates all captured mutations before the database operation begins.</summary>
+    public void Prepare(RelationRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        if (_applied)
-            throw new InvalidOperationException("This unit of work has already been applied.");
-        _applied = true;
-        if (_mutations is not null)
-            runtime.Apply(_mutations, ChangeValidationMode.StrictNewValue);
+        if (_isPrepared)
+            throw new InvalidOperationException("This unit of work has already been prepared.");
+        _prepared = _mutations is null
+            ? null
+            : runtime.Prepare(_mutations, ChangeValidationMode.StrictNewValue);
+        _isPrepared = true;
+    }
+
+    /// <summary>Commits prepared runtime state after the database operation succeeds.</summary>
+    public ChangeImpact? Commit(RelationRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (!_isPrepared)
+            throw new InvalidOperationException("This unit of work must be prepared before it is committed.");
+        if (_mutations is null)
+        {
+            if (_emptyCommitted)
+                throw new InvalidOperationException("This unit of work has already been committed.");
+            _emptyCommitted = true;
+            return null;
+        }
+        return runtime.Commit(_prepared!);
+    }
+
+    /// <summary>Dispatches post-commit policy callbacks.</summary>
+    public void Dispatch(RelationRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (_mutations is null)
+        {
+            if (!_emptyCommitted)
+                throw new InvalidOperationException("This unit of work must be committed before it is dispatched.");
+            if (_emptyDispatched)
+                throw new InvalidOperationException("This unit of work has already been dispatched.");
+            _emptyDispatched = true;
+            return;
+        }
+        runtime.Dispatch(_prepared!);
+    }
+
+    /// <summary>Prepares, commits, and dispatches the captured mutations.</summary>
+    public void Apply(RelationRuntime runtime)
+    {
+        Prepare(runtime);
+        Commit(runtime);
+        Dispatch(runtime);
     }
 }
 
@@ -147,8 +192,10 @@ public static class ChangeTrackerAdapter
         RelationUnitOfWorkMappings mappings)
     {
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unitOfWork.Prepare(runtime);
         var result = context.SaveChanges();
-        unitOfWork.Apply(runtime);
+        unitOfWork.Commit(runtime);
+        unitOfWork.Dispatch(runtime);
         return result;
     }
 
@@ -159,8 +206,10 @@ public static class ChangeTrackerAdapter
         CancellationToken cancellationToken = default)
     {
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unitOfWork.Prepare(runtime);
         var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        unitOfWork.Apply(runtime);
+        unitOfWork.Commit(runtime);
+        unitOfWork.Dispatch(runtime);
         return result;
     }
 

@@ -13,6 +13,47 @@ internal sealed record RuntimeApplyResult(
     ChangeImpact Impact,
     RuntimePolicyActions PolicyActions);
 
+/// <summary>
+/// A validated runtime mutation awaiting commit. Prepared mutations are bound to the runtime version
+/// at which they were created and can be committed and dispatched only once.
+/// </summary>
+public sealed class PreparedMutation
+{
+    internal PreparedMutation(
+        RelationRuntime runtime,
+        long baseVersion,
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        Runtime = runtime;
+        BaseVersion = baseVersion;
+        LifecycleMutations = lifecycleMutations;
+        Changes = changes;
+    }
+
+    internal RelationRuntime Runtime { get; }
+    internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
+    internal IReadOnlyList<PropertyChange> Changes { get; }
+    internal RuntimePolicyActions? PolicyActions { get; private set; }
+
+    /// <summary>The runtime version against which this mutation was validated.</summary>
+    public long BaseVersion { get; }
+
+    /// <summary>Whether the prepared mutation has been committed.</summary>
+    public bool IsCommitted { get; private set; }
+
+    /// <summary>Whether post-commit policy actions have been dispatched.</summary>
+    public bool IsDispatched { get; private set; }
+
+    internal void MarkCommitted(RuntimePolicyActions policyActions)
+    {
+        PolicyActions = policyActions;
+        IsCommitted = true;
+    }
+
+    internal void MarkDispatched() => IsDispatched = true;
+}
+
 internal sealed class RuntimePolicyActions
 {
     private readonly List<ImmediateInvariantEvaluation> _immediateEvaluations = [];

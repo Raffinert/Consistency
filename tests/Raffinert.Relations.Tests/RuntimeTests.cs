@@ -91,6 +91,42 @@ public sealed class RuntimeTests
     }
 
     [Fact]
+    public void Prepared_mutation_does_not_change_state_until_commit()
+    {
+        var model = CreateLineModel(out _, out var lines, out _);
+        var runtime = model.Build().CreateRuntime();
+        var line = Line("PO", "A");
+
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Add(lines, line)));
+
+        Assert.Equal(0, runtime.Version);
+        Assert.False(prepared.IsCommitted);
+        Assert.False(runtime.Remove(lines, line));
+
+        runtime.Commit(prepared);
+
+        Assert.Equal(1, runtime.Version);
+        Assert.True(prepared.IsCommitted);
+        Assert.True(runtime.Remove(lines, line));
+    }
+
+    [Fact]
+    public void Prepared_mutation_is_rejected_when_runtime_version_has_advanced()
+    {
+        var model = CreateLineModel(out _, out var lines, out _);
+        var runtime = model.Build().CreateRuntime();
+        var preparedLine = Line("PO", "A");
+        var interveningLine = Line("PO", "B");
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Add(lines, preparedLine)));
+        runtime.Add(lines, interveningLine);
+
+        var error = Assert.Throws<InvalidOperationException>(() => runtime.Commit(prepared));
+
+        Assert.Contains("stale", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(runtime.Remove(lines, preparedLine));
+    }
+
+    [Fact]
     public void Opaque_predicate_falls_back_to_a_semantically_correct_scan()
     {
         var model = new RelationModelBuilder();

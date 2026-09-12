@@ -141,6 +141,10 @@ public sealed class RelationRuntime
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
     private readonly IReadOnlyList<ISourceLifecycleParticipant> _sourceLifecycleParticipants;
     private readonly DependencyGraphRuntime _dependencyGraph;
+    private long _version;
+
+    /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
+    public long Version => _version;
 
     internal IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts { get; private set; } =
         new Dictionary<IRelationDefinition, RelationImpact>();
@@ -340,27 +344,80 @@ public sealed class RelationRuntime
     /// </summary>
     public ChangeImpact Apply(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
+        var prepared = Prepare(mutationSet, validationMode);
+        var impact = Commit(prepared);
+        Dispatch(prepared);
+        return impact;
+    }
+
+    /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
+    public PreparedMutation Prepare(MutationSet mutationSet) =>
+        Prepare(mutationSet, ChangeValidationMode.Default);
+
+    /// <summary>
+    /// Validates and normalizes a mutation batch without changing runtime-owned state. The returned
+    /// mutation can be committed only while this runtime remains at the same version.
+    /// </summary>
+    public PreparedMutation Prepare(MutationSet mutationSet, ChangeValidationMode validationMode)
+    {
         ArgumentNullException.ThrowIfNull(mutationSet);
         if (!Enum.IsDefined(validationMode))
             throw new ArgumentOutOfRangeException(nameof(validationMode));
         var batch = ValidateMutations(mutationSet.Mutations, validationMode);
-        var result = CommitMutations(batch);
-        result.PolicyActions.Dispatch();
+        return new PreparedMutation(this, Version, batch.LifecycleMutations, batch.Changes);
+    }
+
+    /// <summary>
+    /// Commits a prepared mutation to runtime-owned state without invoking application callbacks.
+    /// </summary>
+    public ChangeImpact Commit(PreparedMutation prepared)
+    {
+        ValidatePreparedMutation(prepared);
+        var result = CommitMutations(prepared.LifecycleMutations, prepared.Changes);
+        _version++;
+        prepared.MarkCommitted(result.PolicyActions);
         return result.Impact;
     }
 
-    private RuntimeApplyResult CommitMutations(ValidatedMutationBatch batch)
+    /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
+    public void Dispatch(PreparedMutation prepared)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        if (!ReferenceEquals(prepared.Runtime, this))
+            throw new ArgumentException("The prepared mutation belongs to a different runtime.", nameof(prepared));
+        if (!prepared.IsCommitted)
+            throw new InvalidOperationException("The prepared mutation has not been committed.");
+        if (prepared.IsDispatched)
+            throw new InvalidOperationException("The prepared mutation's policy actions have already been dispatched.");
+        prepared.MarkDispatched();
+        prepared.PolicyActions!.Dispatch();
+    }
+
+    private void ValidatePreparedMutation(PreparedMutation prepared)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        if (!ReferenceEquals(prepared.Runtime, this))
+            throw new ArgumentException("The prepared mutation belongs to a different runtime.", nameof(prepared));
+        if (prepared.IsCommitted)
+            throw new InvalidOperationException("The prepared mutation has already been committed.");
+        if (prepared.BaseVersion != Version)
+            throw new InvalidOperationException(
+                $"The prepared mutation is stale: it was prepared at runtime version {prepared.BaseVersion}, " +
+                $"but the current version is {Version}. Prepare the mutation again.");
+    }
+
+    private RuntimeApplyResult CommitMutations(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes)
     {
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
-        foreach (var mutation in batch.LifecycleMutations)
+        foreach (var mutation in lifecycleMutations)
         {
             if (mutation is ObjectAdded added)
                 CommitAdd(added, relationDeltas);
             else
                 CommitRemove((ObjectRemoved)mutation, relationDeltas);
         }
-
-        var changes = batch.Changes;
         var impact = new ResolvedChangeImpact();
         foreach (var change in changes)
             impact.MergeFrom(_impactResolver.Resolve(change));

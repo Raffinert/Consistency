@@ -789,6 +789,40 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Prepared_mutation_dispatches_callbacks_only_after_explicit_dispatch()
+    {
+        var scheduled = new List<CodeHolder>();
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        model.Invariant(sources).Using(count).Must((source, value) => value <= 1)
+            .ScheduleRepairWith(scheduled.Add);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var first = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var second = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, first);
+        runtime.Add(items, second);
+        scheduled.Clear();
+        second.Code = "A";
+        var prepared = runtime.Prepare(MutationSet.Create(
+            Change.Property(items, second, x => x.Code, "B", "A")));
+
+        runtime.Commit(prepared);
+
+        Assert.Empty(scheduled);
+        Assert.Equal([first, second], runtime.Related(relation, source));
+
+        runtime.Dispatch(prepared);
+
+        Assert.Equal([source], scheduled);
+        Assert.True(prepared.IsDispatched);
+    }
+
+    [Fact]
     public void Throwing_repair_callback_observes_committed_state_without_rollback()
     {
         var model = new RelationModelBuilder();

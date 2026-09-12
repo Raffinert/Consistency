@@ -262,6 +262,14 @@ A multi-entity domain operation can be represented and applied to the runtime as
 
 # 3. P0 — Add prepare/commit semantics for external unit-of-work integrations
 
+**Status:** Implemented.
+
+`RelationRuntime.Prepare` performs whole-batch validation without mutating runtime state and returns a
+single-use `PreparedMutation` tied to the current monotonically increasing runtime version. `Commit`
+rejects stale or foreign preparations, advances runtime state without application callbacks, and
+`Dispatch` runs those callbacks afterward. The EF sync and async save helpers now prepare before the
+database call, commit only after success, and then dispatch.
+
 The EF adapter correctly captures changes before `SaveChanges` and applies them only after database success.
 
 However, post-database runtime application can still fail because of:

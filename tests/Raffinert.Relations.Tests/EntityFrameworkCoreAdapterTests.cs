@@ -97,6 +97,24 @@ public sealed class EntityFrameworkCoreAdapterTests
         Assert.False(runtime.Remove(objects, added));
     }
 
+    [Fact]
+    public void Save_helper_prepares_runtime_before_invoking_database_save()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Key(value => value.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new SaveProbeDbContext();
+        var absentRemoval = new CodeHolder { Id = Guid.NewGuid(), Code = "REMOVE" };
+        context.Attach(absentRemoval);
+        context.Remove(absentRemoval);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            context.SaveChangesAndApply(runtime, mappings));
+
+        Assert.False(context.SaveWasCalled);
+    }
+
     private class TestDbContext : DbContext
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>
@@ -111,5 +129,16 @@ public sealed class EntityFrameworkCoreAdapterTests
     private sealed class FailingDbContext : TestDbContext
     {
         public override int SaveChanges() => throw new InvalidOperationException("Database failure.");
+    }
+
+    private sealed class SaveProbeDbContext : TestDbContext
+    {
+        public bool SaveWasCalled { get; private set; }
+
+        public override int SaveChanges()
+        {
+            SaveWasCalled = true;
+            return base.SaveChanges();
+        }
     }
 }
