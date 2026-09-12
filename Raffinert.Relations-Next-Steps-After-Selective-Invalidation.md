@@ -804,6 +804,13 @@ Unsupported cases should remain marked opaque rather than guessed.
 
 # 14. P2 — Range planning only after measurement
 
+**Status:** Evaluated; no dedicated range index added.
+
+A 10k/100k BenchmarkDotNet workload now compares the existing equality hash prefix plus residual date
+range against a full scan. The prefix plan measured about 147x and 180x faster respectively on the
+recorded machine, so the evidence does not justify interval-tree complexity. Results and the rerun command
+are committed under `benchmarks/RangePlanning-Results.md`.
+
 Range expressions are already recognized diagnostically.
 
 Do not introduce interval trees prematurely.
