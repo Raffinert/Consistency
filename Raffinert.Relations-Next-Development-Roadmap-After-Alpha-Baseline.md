@@ -172,6 +172,14 @@ or intentionally not guaranteed
 
 # 2. P0 — Unify all runtime mutations into one batch model
 
+**Status:** Implemented.
+
+`MutationSet` now unifies object additions/removals, property changes, and collection changes. The
+runtime validates and normalizes the entire set before changing runtime-owned state, commits relation
+and navigation updates as one logical operation, and performs one dependency/policy propagation pass
+after the final state is available. The EF adapter also applies each captured unit of work through one
+strictly validated mutation batch.
+
 `ChangeSet` currently batches property changes, while:
 
 ```text

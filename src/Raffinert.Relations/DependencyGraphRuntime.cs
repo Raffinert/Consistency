@@ -75,12 +75,14 @@ internal sealed class DependencyGraphRuntime
         {
             relationImpacts.TryGetValue(node.Definition.Relation, out var relationImpact);
             var membershipRoots = node.Definition.Analysis.HasRelationMembershipDependency
-                ? relationImpact?.AffectedLefts ?? []
+                ? relationImpact?.AffectedLefts
+                    .Where(_sets[node.Definition.SourceSet].Contains)
+                    .ToArray() ?? []
                 : [];
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
             var itemRoots = ResolveRoots(node.Definition.Relation.RightSet, node.ItemDependencies, changes);
             var itemSources = _relations[node.Definition.Relation].GetLeftsForRights(itemRoots);
-            var membershipIsInvalid = membershipRoots.Count > 0 &&
+            var membershipIsInvalid = membershipRoots.Length > 0 &&
                 _impactPolicy.Classify(new RelationMembershipDependencyImpact(
                     relationImpact!,
                     node.Definition,

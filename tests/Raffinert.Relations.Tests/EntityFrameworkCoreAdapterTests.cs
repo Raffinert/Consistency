@@ -77,6 +77,26 @@ public sealed class EntityFrameworkCoreAdapterTests
             ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings));
     }
 
+    [Fact]
+    public void Captured_unit_of_work_is_validated_before_any_runtime_mutation_is_applied()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Key(value => value.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new TestDbContext();
+        var added = new CodeHolder { Id = Guid.NewGuid(), Code = "ADD" };
+        var absentRemoval = new CodeHolder { Id = Guid.NewGuid(), Code = "REMOVE" };
+        context.Add(added);
+        context.Attach(absentRemoval);
+        context.Remove(absentRemoval);
+        var unitOfWork = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+
+        Assert.Throws<InvalidOperationException>(() => unitOfWork.Apply(runtime));
+
+        Assert.False(runtime.Remove(objects, added));
+    }
+
     private class TestDbContext : DbContext
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>

@@ -56,6 +56,41 @@ public sealed class RuntimeTests
     }
 
     [Fact]
+    public void Mutation_set_applies_lifecycle_and_property_changes_as_one_operation()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO-2", "B");
+        var line = Line("PO-1", "A");
+        line.PurchaseOrderNumber = "PO-2";
+        line.ItemNumber = "B";
+
+        runtime.Apply(MutationSet.Create(
+            Change.Add(invoices, invoice),
+            Change.Add(lines, line),
+            Change.Property(lines, line, x => x.PurchaseOrderNumber, "PO-1", "PO-2"),
+            Change.Property(lines, line, x => x.ItemNumber, "A", "B")),
+            ChangeValidationMode.StrictNewValue);
+
+        Assert.Equal([line], runtime.Related(relation, invoice));
+    }
+
+    [Fact]
+    public void Invalid_mutation_rejects_the_whole_batch_before_runtime_updates()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out _);
+        var runtime = model.Build().CreateRuntime();
+        var added = Line("PO", "A");
+        var absent = Invoice("PO", "A");
+
+        Assert.Throws<InvalidOperationException>(() => runtime.Apply(MutationSet.Create(
+            Change.Add(lines, added),
+            Change.Remove(invoices, absent))));
+
+        Assert.False(runtime.Remove(lines, added));
+    }
+
+    [Fact]
     public void Opaque_predicate_falls_back_to_a_semantically_correct_scan()
     {
         var model = new RelationModelBuilder();

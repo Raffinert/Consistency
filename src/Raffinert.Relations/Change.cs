@@ -5,6 +5,20 @@ namespace Raffinert.Relations;
 
 public static class Change
 {
+    public static ObjectAdded Add<T>(ObjectSet<T> set, T instance) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(instance);
+        return new ObjectAdded(set.Definition, instance);
+    }
+
+    public static ObjectRemoved Remove<T>(ObjectSet<T> set, T instance) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(instance);
+        return new ObjectRemoved(set.Definition, instance);
+    }
+
     /// <summary>Describes a reflected property or field change, primarily for change-tracking adapters.</summary>
     public static PropertyChange Property(
         object instance,
@@ -128,7 +142,7 @@ public enum CollectionChangeKind
 }
 
 /// <summary>Describes an explicit collection mutation that has already occurred.</summary>
-public sealed class CollectionChange
+public sealed class CollectionChange : RuntimeMutation
 {
     private CollectionChange(
         IObjectSetDefinition? set,
@@ -164,7 +178,7 @@ public sealed class CollectionChange
     }
 }
 
-public sealed class PropertyChange
+public sealed class PropertyChange : RuntimeMutation
 {
     internal PropertyChange(IObjectSetDefinition? set, object instance, MemberInfo member, object? oldValue, object? newValue)
     {
@@ -182,6 +196,58 @@ public sealed class PropertyChange
     public object? NewValue { get; }
 
     internal PropertyChange WithSet(IObjectSetDefinition set) => new(set, Instance, Member, OldValue, NewValue);
+}
+
+/// <summary>A mutation that can participate in an atomic runtime mutation batch.</summary>
+public abstract class RuntimeMutation
+{
+    private protected RuntimeMutation()
+    {
+    }
+}
+
+/// <summary>Describes adding an object to a runtime object set.</summary>
+public sealed class ObjectAdded : RuntimeMutation
+{
+    internal ObjectAdded(IObjectSetDefinition set, object instance)
+    {
+        Set = set;
+        Instance = instance;
+    }
+
+    internal IObjectSetDefinition Set { get; }
+    public object Instance { get; }
+}
+
+/// <summary>Describes removing an object from a runtime object set.</summary>
+public sealed class ObjectRemoved : RuntimeMutation
+{
+    internal ObjectRemoved(IObjectSetDefinition set, object instance)
+    {
+        Set = set;
+        Instance = instance;
+    }
+
+    internal IObjectSetDefinition Set { get; }
+    public object Instance { get; }
+}
+
+/// <summary>An immutable batch of lifecycle, property, and collection mutations.</summary>
+public sealed class MutationSet
+{
+    private MutationSet(IReadOnlyList<RuntimeMutation> mutations) => Mutations = mutations;
+
+    internal IReadOnlyList<RuntimeMutation> Mutations { get; }
+
+    public static MutationSet Create(params RuntimeMutation[] mutations)
+    {
+        ArgumentNullException.ThrowIfNull(mutations);
+        if (mutations.Length == 0)
+            throw new ArgumentException("A mutation set must contain at least one mutation.", nameof(mutations));
+        if (mutations.Any(mutation => mutation is null))
+            throw new ArgumentException("A mutation set cannot contain null mutations.", nameof(mutations));
+        return new MutationSet(mutations.ToArray());
+    }
 }
 
 /// <summary>

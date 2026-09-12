@@ -31,8 +31,8 @@ public sealed class RelationUnitOfWorkMappings
     internal interface IEntitySetMapping
     {
         bool Matches(EntityEntry entry);
-        void Add(RelationRuntime runtime, object entity);
-        void Remove(RelationRuntime runtime, object entity);
+        ObjectAdded Add(object entity);
+        ObjectRemoved Remove(object entity);
         PropertyChange Property(object entity, MemberInfo member, object? oldValue, object? newValue);
     }
 
@@ -44,9 +44,9 @@ public sealed class RelationUnitOfWorkMappings
             entry.Entity is TEntity entity &&
             (selector is null || selector(entry.Context.Entry(entity)));
 
-        public void Add(RelationRuntime runtime, object entity) => runtime.Add(set, (TEntity)entity);
+        public ObjectAdded Add(object entity) => Change.Add(set, (TEntity)entity);
 
-        public void Remove(RelationRuntime runtime, object entity) => runtime.Remove(set, (TEntity)entity);
+        public ObjectRemoved Remove(object entity) => Change.Remove(set, (TEntity)entity);
 
         public PropertyChange Property(
             object entity,
@@ -63,26 +63,12 @@ public sealed class RelationUnitOfWorkMappings
 /// </summary>
 public sealed class RelationUnitOfWork
 {
-    private readonly IReadOnlyList<Action<RelationRuntime>> _additions;
-    private readonly ChangeSet? _changes;
-    private readonly IReadOnlyList<CollectionChange> _collectionChanges;
-    private readonly IReadOnlyList<Action<RelationRuntime>> _removals;
+    private readonly MutationSet? _mutations;
     private bool _applied;
 
-    internal RelationUnitOfWork(
-        IReadOnlyList<Action<RelationRuntime>> additions,
-        ChangeSet? changes,
-        IReadOnlyList<CollectionChange> collectionChanges,
-        IReadOnlyList<Action<RelationRuntime>> removals)
-    {
-        _additions = additions;
-        _changes = changes;
-        _collectionChanges = collectionChanges;
-        _removals = removals;
-    }
+    internal RelationUnitOfWork(MutationSet? mutations) => _mutations = mutations;
 
-    public bool HasChanges =>
-        _additions.Count > 0 || _changes is not null || _collectionChanges.Count > 0 || _removals.Count > 0;
+    public bool HasChanges => _mutations is not null;
 
     public void Apply(RelationRuntime runtime)
     {
@@ -90,14 +76,8 @@ public sealed class RelationUnitOfWork
         if (_applied)
             throw new InvalidOperationException("This unit of work has already been applied.");
         _applied = true;
-        foreach (var add in _additions)
-            add(runtime);
-        if (_changes is not null)
-            runtime.Apply(_changes, ChangeValidationMode.StrictNewValue);
-        foreach (var collectionChange in _collectionChanges)
-            runtime.Apply(collectionChange);
-        foreach (var remove in _removals)
-            remove(runtime);
+        if (_mutations is not null)
+            runtime.Apply(_mutations, ChangeValidationMode.StrictNewValue);
     }
 }
 
@@ -119,18 +99,18 @@ public static class ChangeTrackerAdapter
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
         changeTracker.DetectChanges();
-        var additions = new List<Action<RelationRuntime>>();
-        var removals = new List<Action<RelationRuntime>>();
-        var collectionChanges = new List<CollectionChange>();
+        var additions = new List<RuntimeMutation>();
+        var removals = new List<RuntimeMutation>();
+        var collectionChanges = new List<RuntimeMutation>();
         foreach (var entry in changeTracker.Entries())
         {
             var mapping = mappings.Resolve(entry);
             if (mapping is not null)
             {
                 if (entry.State == EntityState.Added)
-                    additions.Add(runtime => mapping.Add(runtime, entry.Entity));
+                    additions.Add(mapping.Add(entry.Entity));
                 else if (entry.State == EntityState.Deleted)
-                    removals.Add(runtime => mapping.Remove(runtime, entry.Entity));
+                    removals.Add(mapping.Remove(entry.Entity));
             }
 
             if (entry.State == EntityState.Modified)
@@ -145,11 +125,12 @@ public static class ChangeTrackerAdapter
         }
 
         var propertyChanges = ReadModifiedProperties(changeTracker, mappings);
-        return new RelationUnitOfWork(
-            additions,
-            propertyChanges.Count == 0 ? null : ChangeSet.Create(propertyChanges.ToArray()),
-            collectionChanges,
-            removals);
+        var mutations = additions
+            .Concat(propertyChanges)
+            .Concat(collectionChanges)
+            .Concat(removals)
+            .ToArray();
+        return new RelationUnitOfWork(mutations.Length == 0 ? null : MutationSet.Create(mutations));
     }
 
     public static ChangeImpact? ApplyTrackedChanges(this RelationRuntime runtime, DbContext context)

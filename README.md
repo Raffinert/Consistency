@@ -38,6 +38,19 @@ are normalized to their net effect; conflicting chains are rejected. Domain muta
 and is not transactional. Pass `ChangeValidationMode.StrictNewValue` to `Apply` to additionally verify
 that each member currently equals its reported final new value.
 
+Use `MutationSet` when one domain operation includes object lifecycle, property, and collection changes:
+
+```csharp
+runtime.Apply(MutationSet.Create(
+    Change.Add(poLines, addedLine),
+    Change.Property(invoices, invoice, x => x.ItemNumber, oldItem, invoice.ItemNumber),
+    Change.CollectionReset(order, x => x.Lines),
+    Change.Remove(poLines, removedLine)));
+```
+
+The runtime validates the complete mutation set before updating runtime-owned state, commits it as one
+logical operation, and dispatches dependency policy callbacks only after the final state is committed.
+
 Collection navigation is explicit: mutate the domain collection first, then report it with
 `Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
 owner/item reverse navigation so later item-property changes resolve affected owners incrementally.
@@ -66,7 +79,7 @@ labels the weaker guarantee explicitly, and cached freshness must not be treated
 - Shared arbitrary-depth reverse navigation for nested paths
 - Compiled null-safe member-path and cached single-member readers
 - Access-impact and semantic-impact reporting
-- Deterministic, atomically validated property `ChangeSet` application
+- Deterministic, atomically validated `ChangeSet` and unified lifecycle/property/collection `MutationSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
@@ -97,7 +110,8 @@ labels the weaker guarantee explicitly, and cached freshness must not be treated
 
 The core package has no EF Core or dependency-injection dependency.
 
-The EF Core adapter captures a `RelationUnitOfWork` before `SaveChanges`, then applies it only after the
+The EF Core adapter captures a `RelationUnitOfWork` before `SaveChanges`, then applies its mutations as
+one atomic runtime batch only after the
 database operation succeeds. `SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering.
 Added and deleted entities require a `RelationUnitOfWorkMappings` entry; selectors disambiguate CLR types
 used by multiple object sets. Modified scalars, references, owned entries, and collection resets are

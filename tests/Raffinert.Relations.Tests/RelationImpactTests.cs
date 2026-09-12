@@ -3,6 +3,28 @@ namespace Raffinert.Relations.Tests;
 public sealed class RelationImpactTests
 {
     [Fact]
+    public void Mutation_batch_classifies_final_membership_impact_once()
+    {
+        var policy = new RecordingImpactPolicy();
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        var runtime = model.Build().CreateRuntime(policy);
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+
+        runtime.Apply(MutationSet.Create(
+            Change.Add(sources, source),
+            Change.Add(items, item)));
+
+        var impact = Assert.Single(policy.Impacts);
+        Assert.Equal([(source, item)], impact.RelationImpact.AddedPairs
+            .Select(pair => (pair.Left, pair.Right)));
+    }
+
+    [Fact]
     public void Relation_impact_unifies_delta_semantic_and_access_roots()
     {
         var policy = new RecordingImpactPolicy();

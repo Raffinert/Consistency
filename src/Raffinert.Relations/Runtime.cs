@@ -196,84 +196,34 @@ public sealed class RelationRuntime
     {
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(instance);
-        Add(set.Definition, instance);
+        Apply(MutationSet.Create(Change.Add(set, instance)));
     }
 
     public void Add<T>(T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(instance);
-        Add(FindUniqueSet<T>(), instance);
-    }
-
-    private void Add<T>(ObjectSetDefinition<T> definition, T instance) where T : class
-    {
-        var state = GetSet(definition);
-        state.Add(instance);
-        NotifySourceAdded(definition, instance);
-        _navigation.AddRoot(definition, instance);
-        var rightRelations = _relations
-            .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
-            .ToArray();
-        var leftRelations = _relations
-            .Where(pair => ReferenceEquals(pair.Value.LeftSet, definition))
-            .ToArray();
-        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
-        foreach (var relation in rightRelations)
-            deltas[relation.Key] = relation.Value.AddRight(instance);
-        foreach (var relation in leftRelations)
-            MergeDelta(deltas, relation.Key, relation.Value.AddLeft(instance));
-        var policyActions = new RuntimePolicyActions();
-        LastRelationImpacts = deltas.ToDictionary(
-            pair => pair.Key,
-            pair => RelationImpact.FromDelta(pair.Key, pair.Value));
-        _dependencyGraph.ApplyRelationImpacts(
-            LastRelationImpacts,
-            [],
-            policyActions);
-        policyActions.Dispatch();
+        var definition = FindUniqueSet<T>();
+        Apply(MutationSet.Create(new ObjectAdded(definition, instance)));
     }
 
     public bool Remove<T>(ObjectSet<T> set, T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(set);
         ArgumentNullException.ThrowIfNull(instance);
-        return Remove(set.Definition, instance);
+        if (!GetSet(set.Definition).Contains(instance))
+            return false;
+        Apply(MutationSet.Create(Change.Remove(set, instance)));
+        return true;
     }
 
     public bool Remove<T>(T instance) where T : class
     {
         ArgumentNullException.ThrowIfNull(instance);
-        return Remove(FindUniqueSet<T>(), instance);
-    }
-
-    private bool Remove<T>(ObjectSetDefinition<T> definition, T instance) where T : class
-    {
-        var state = GetSet(definition);
-        if (!state.Contains(instance)) return false;
-        var rightRelations = _relations
-            .Where(pair => ReferenceEquals(pair.Value.RightSet, definition))
-            .ToArray();
-        var leftRelations = _relations
-            .Where(pair => ReferenceEquals(pair.Value.LeftSet, definition))
-            .ToArray();
-        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
-        foreach (var relation in rightRelations)
-            deltas[relation.Key] = relation.Value.RemoveRight(instance);
-        foreach (var relation in leftRelations)
-            MergeDelta(deltas, relation.Key, relation.Value.RemoveLeft(instance));
-        _navigation.RemoveRoot(definition, instance);
-        NotifySourceRemoved(definition, instance);
-        var removed = state.Remove(instance);
-        var policyActions = new RuntimePolicyActions();
-        LastRelationImpacts = deltas.ToDictionary(
-            pair => pair.Key,
-            pair => RelationImpact.FromDelta(pair.Key, pair.Value));
-        _dependencyGraph.ApplyRelationImpacts(
-            LastRelationImpacts,
-            [],
-            policyActions);
-        policyActions.Dispatch();
-        return removed;
+        var definition = FindUniqueSet<T>();
+        if (!GetSet(definition).Contains(instance))
+            return false;
+        Apply(MutationSet.Create(new ObjectRemoved(definition, instance)));
+        return true;
     }
 
     public IReadOnlyList<TRight> Related<TLeft, TRight>(Relation<TLeft, TRight> relation, TLeft left)
@@ -363,10 +313,7 @@ public sealed class RelationRuntime
     public ChangeImpact Apply(CollectionChange change)
     {
         ArgumentNullException.ThrowIfNull(change);
-        var propertyChange = ValidateCollectionChange(change);
-        var result = CommitChanges([propertyChange]);
-        result.PolicyActions.Dispatch();
-        return result.Impact;
+        return Apply(MutationSet.Create(change));
     }
 
     public ChangeImpact Apply(ChangeSet changeSet)
@@ -380,18 +327,40 @@ public sealed class RelationRuntime
     public ChangeImpact Apply(ChangeSet changeSet, ChangeValidationMode validationMode)
     {
         ArgumentNullException.ThrowIfNull(changeSet);
+        return Apply(MutationSet.Create(changeSet.Changes.Cast<RuntimeMutation>().ToArray()), validationMode);
+    }
+
+    public ChangeImpact Apply(MutationSet mutationSet)
+        => Apply(mutationSet, ChangeValidationMode.Default);
+
+    /// <summary>
+    /// Validates and applies lifecycle, property, and collection mutations as one logical runtime
+    /// operation, then dispatches policy callbacks once after all runtime-owned state is committed.
+    /// Domain mutations must already have occurred and are never rolled back by this operation.
+    /// </summary>
+    public ChangeImpact Apply(MutationSet mutationSet, ChangeValidationMode validationMode)
+    {
+        ArgumentNullException.ThrowIfNull(mutationSet);
         if (!Enum.IsDefined(validationMode))
             throw new ArgumentOutOfRangeException(nameof(validationMode));
-        var changes = NormalizeChanges(changeSet.Changes.Select(ValidateChange).ToArray());
-        if (validationMode == ChangeValidationMode.StrictNewValue)
-            ValidateCurrentValues(changes);
-        var result = CommitChanges(changes);
+        var batch = ValidateMutations(mutationSet.Mutations, validationMode);
+        var result = CommitMutations(batch);
         result.PolicyActions.Dispatch();
         return result.Impact;
     }
 
-    private RuntimeApplyResult CommitChanges(IReadOnlyList<PropertyChange> changes)
+    private RuntimeApplyResult CommitMutations(ValidatedMutationBatch batch)
     {
+        var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        foreach (var mutation in batch.LifecycleMutations)
+        {
+            if (mutation is ObjectAdded added)
+                CommitAdd(added, relationDeltas);
+            else
+                CommitRemove((ObjectRemoved)mutation, relationDeltas);
+        }
+
+        var changes = batch.Changes;
         var impact = new ResolvedChangeImpact();
         foreach (var change in changes)
             impact.MergeFrom(_impactResolver.Resolve(change));
@@ -404,12 +373,44 @@ public sealed class RelationRuntime
         foreach (var pair in impact.ReindexLeftRoots)
             foreach (var root in pair.Value)
                 pair.Key.ReindexLeft(root);
-        var relationDeltas = ResolveRelationDeltas(impact);
-        var relationImpacts = impact.CreateRelationImpacts(_relations, relationDeltas);
+        foreach (var pair in ResolveRelationDeltas(impact))
+            MergeDelta(relationDeltas, pair.Key, pair.Value);
+        var relationImpacts = new Dictionary<IRelationDefinition, RelationImpact>(
+            impact.CreateRelationImpacts(_relations, relationDeltas));
+        foreach (var pair in relationDeltas)
+            if (!relationImpacts.ContainsKey(pair.Key))
+                relationImpacts.Add(pair.Key, RelationImpact.FromDelta(pair.Key, pair.Value));
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
         _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
         return new RuntimeApplyResult(impact.ToPublic(), policyActions);
+    }
+
+    private void CommitAdd(
+        ObjectAdded mutation,
+        IDictionary<IRelationDefinition, RelationDelta> deltas)
+    {
+        var state = GetSet(mutation.Set);
+        state.Add(mutation.Instance);
+        NotifySourceAdded(mutation.Set, mutation.Instance);
+        _navigation.AddRoot(mutation.Set, mutation.Instance);
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.RightSet, mutation.Set)))
+            MergeDelta(deltas, pair.Key, pair.Value.AddRight(mutation.Instance));
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, mutation.Set)))
+            MergeDelta(deltas, pair.Key, pair.Value.AddLeft(mutation.Instance));
+    }
+
+    private void CommitRemove(
+        ObjectRemoved mutation,
+        IDictionary<IRelationDefinition, RelationDelta> deltas)
+    {
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.RightSet, mutation.Set)))
+            MergeDelta(deltas, pair.Key, pair.Value.RemoveRight(mutation.Instance));
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, mutation.Set)))
+            MergeDelta(deltas, pair.Key, pair.Value.RemoveLeft(mutation.Instance));
+        _navigation.RemoveRoot(mutation.Set, mutation.Instance);
+        NotifySourceRemoved(mutation.Set, mutation.Instance);
+        GetSet(mutation.Set).Remove(mutation.Instance);
     }
 
     private IReadOnlyDictionary<IRelationDefinition, RelationDelta> ResolveRelationDeltas(
@@ -462,6 +463,98 @@ public sealed class RelationRuntime
 
     internal int MaterializedRelationPairCount =>
         _relations.Values.Sum(state => state.MaterializedPairCount);
+
+    private ValidatedMutationBatch ValidateMutations(
+        IReadOnlyList<RuntimeMutation> mutations,
+        ChangeValidationMode validationMode)
+    {
+        var lifecycle = mutations
+            .Where(mutation => mutation is ObjectAdded or ObjectRemoved)
+            .ToArray();
+        var simulations = _sets.ToDictionary(
+            pair => pair.Key,
+            pair => new ObjectSetSimulation(pair.Key, pair.Value));
+        foreach (var mutation in lifecycle)
+        {
+            var set = mutation switch
+            {
+                ObjectAdded added => added.Set,
+                ObjectRemoved removed => removed.Set,
+                _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+            };
+            if (!simulations.TryGetValue(set, out var simulation))
+                throw new ArgumentException("The object set does not belong to this compiled model.");
+            if (mutation is ObjectAdded addition)
+                simulation.Add(addition.Instance);
+            else
+                simulation.Remove(((ObjectRemoved)mutation).Instance);
+        }
+
+        var lifecycleTargets = lifecycle.Select(mutation => mutation switch
+        {
+            ObjectAdded added => new SetInstance(added.Set, added.Instance),
+            ObjectRemoved removed => new SetInstance(removed.Set, removed.Instance),
+            _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+        }).ToHashSet();
+        var properties = NormalizeChanges(mutations.OfType<PropertyChange>()
+            .Select(change => ValidateBatchChange(change, lifecycleTargets))
+            .ToArray());
+        var collections = NormalizeCollectionChanges(mutations.OfType<CollectionChange>().ToArray())
+            .Select(change => IsLifecycleTarget(change.Set, change.Owner, lifecycleTargets)
+                ? new PropertyChange(change.Set, change.Owner, change.Member, null, null)
+                : ValidateCollectionChange(change))
+            .ToArray();
+        var changes = properties
+            .Concat(collections)
+            .Where(change => change.Set is null ||
+                !lifecycleTargets.Contains(new SetInstance(change.Set, change.Instance)))
+            .ToArray();
+        if (validationMode == ChangeValidationMode.StrictNewValue)
+            ValidateCurrentValues(properties);
+        return new ValidatedMutationBatch(lifecycle, changes);
+    }
+
+    private PropertyChange ValidateBatchChange(
+        PropertyChange change,
+        IReadOnlySet<SetInstance> lifecycleTargets)
+    {
+        if (change.Set is not null && IsLifecycleTarget(change.Set, change.Instance, lifecycleTargets))
+        {
+            GetSet(change.Set);
+            return change;
+        }
+        return ValidateChange(change);
+    }
+
+    private static bool IsLifecycleTarget(
+        IObjectSetDefinition? set,
+        object instance,
+        IReadOnlySet<SetInstance> lifecycleTargets) =>
+        set is not null && lifecycleTargets.Contains(new SetInstance(set, instance));
+
+    private static IReadOnlyList<CollectionChange> NormalizeCollectionChanges(
+        IReadOnlyList<CollectionChange> changes)
+    {
+        var normalized = new List<CollectionChange>();
+        foreach (var group in changes.GroupBy(
+                     change => new ChangedMember(change.Owner, change.Member)))
+        {
+            var groupChanges = group.ToArray();
+            var set = groupChanges[0].Set;
+            if (groupChanges.Any(change => !ReferenceEquals(change.Set, set)))
+                throw new InvalidOperationException(
+                    $"Conflicting object sets were reported for collection '{groupChanges[0].Member.Name}'.");
+            normalized.Add(groupChanges.Length == 1
+                ? groupChanges[0]
+                : CollectionChange.Create(
+                    set,
+                    groupChanges[0].Owner,
+                    groupChanges[0].Member,
+                    CollectionChangeKind.Reset,
+                    null));
+        }
+        return normalized;
+    }
 
     private PropertyChange ValidateChange(PropertyChange change)
     {
@@ -573,6 +666,73 @@ public sealed class RelationRuntime
             _member);
     }
 
+    private readonly struct SetInstance : IEquatable<SetInstance>
+    {
+        private readonly IObjectSetDefinition _set;
+        private readonly object _instance;
+
+        public SetInstance(IObjectSetDefinition set, object instance)
+        {
+            _set = set;
+            _instance = instance;
+        }
+
+        public bool Equals(SetInstance other) =>
+            ReferenceEquals(_set, other._set) && ReferenceEquals(_instance, other._instance);
+
+        public override bool Equals(object? obj) => obj is SetInstance other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(
+            RuntimeHelpers.GetHashCode(_set),
+            RuntimeHelpers.GetHashCode(_instance));
+    }
+
+    private sealed class ObjectSetSimulation
+    {
+        private readonly IObjectSetDefinition _definition;
+        private readonly HashSet<object> _instances;
+        private readonly Dictionary<object, object> _keyOwners;
+        private readonly Dictionary<object, object> _registeredKeys;
+
+        public ObjectSetSimulation(IObjectSetDefinition definition, ObjectSetRuntime state)
+        {
+            _definition = definition;
+            _instances = state.Instances.ToHashSet(ReferenceEqualityComparer.Instance);
+            _registeredKeys = state.RegisteredEntries.ToDictionary(
+                pair => pair.Instance,
+                pair => pair.Key,
+                ReferenceEqualityComparer.Instance);
+            _keyOwners = state.RegisteredEntries.ToDictionary(pair => pair.Key, pair => pair.Instance);
+        }
+
+        public void Add(object instance)
+        {
+            if (!_definition.ObjectType.IsInstanceOfType(instance))
+                throw new ArgumentException($"Expected an instance of '{_definition.ObjectType.Name}'.");
+            if (!_instances.Add(instance))
+                throw new InvalidOperationException("The object instance is already registered in this object set.");
+            var key = _definition.ReadKey(instance) ?? throw new InvalidOperationException("Object keys cannot be null.");
+            if (_keyOwners.ContainsKey(key))
+                throw new InvalidOperationException(
+                    $"An object with key '{key}' is already registered in '{_definition.ObjectType.Name}'.");
+            _keyOwners.Add(key, instance);
+            _registeredKeys.Add(instance, key);
+        }
+
+        public void Remove(object instance)
+        {
+            if (!_instances.Remove(instance))
+                throw new InvalidOperationException("The removed instance is not registered in the specified object set.");
+            var key = _registeredKeys[instance];
+            _registeredKeys.Remove(instance);
+            _keyOwners.Remove(key);
+        }
+    }
+
+    private sealed record ValidatedMutationBatch(
+        IReadOnlyList<RuntimeMutation> LifecycleMutations,
+        IReadOnlyList<PropertyChange> Changes);
+
     private ObjectSetDefinition<T> FindUniqueSet<T>() where T : class
     {
         var matches = _sets.Keys.OfType<ObjectSetDefinition<T>>().ToArray();
@@ -598,6 +758,8 @@ internal sealed class ObjectSetRuntime
 
     public ObjectSetRuntime(IObjectSetDefinition definition) => _definition = definition;
     public IEnumerable<object> Instances => _instances;
+    public IEnumerable<(object Instance, object Key)> RegisteredEntries =>
+        _registeredKeys.Select(pair => (pair.Key, pair.Value));
     public bool Contains(object instance) => _instances.Contains(instance);
 
     public void Add(object instance)
