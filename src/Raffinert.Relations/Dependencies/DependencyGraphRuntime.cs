@@ -152,9 +152,15 @@ internal sealed class DependencyGraphRuntime
 
     private void ExpandDownstream(HashSet<DerivedNode> nodes)
     {
-        foreach (var node in _derivedNodes)
-            if (_derivedByUpstream.TryGetValue(node, out var downstream) && nodes.Contains(node))
-                nodes.UnionWith(downstream);
+        var pending = new Queue<DerivedNode>(_derivedNodes.Where(nodes.Contains));
+        while (pending.TryDequeue(out var node))
+        {
+            if (!_derivedByUpstream.TryGetValue(node, out var downstream))
+                continue;
+            foreach (var candidate in downstream)
+                if (nodes.Add(candidate))
+                    pending.Enqueue(candidate);
+        }
     }
 
     public void RestoreState(object snapshot)
@@ -186,8 +192,10 @@ internal sealed class DependencyGraphRuntime
         ExpandDownstream(currentDerived);
         foreach (var node in _previousDerived.Except(currentDerived))
             node.ClearImpact();
-        foreach (var node in currentDerived)
+        foreach (var node in _derivedNodes)
         {
+            if (!currentDerived.Contains(node))
+                continue;
             RelationImpact? relationImpact = null;
             if (node.Relation is not null)
                 relationImpacts.TryGetValue(node.Relation, out relationImpact);
@@ -234,8 +242,10 @@ internal sealed class DependencyGraphRuntime
                 currentInvariants.UnionWith(nodes);
         foreach (var node in _previousInvariants.Except(currentInvariants))
             node.ClearImpact();
-        foreach (var node in currentInvariants)
+        foreach (var node in _invariantNodes)
         {
+            if (!currentInvariants.Contains(node))
+                continue;
             node.ApplyInherited(policyActions);
             var invariantRoots = ResolveRoots(
                 node.Definition.Derived.SourceSet,
@@ -244,54 +254,6 @@ internal sealed class DependencyGraphRuntime
             if (invariantRoots.Count > 0)
                 node.ApplyDirect(invariantRoots, policyActions);
         }
-        _previousDerived = currentDerived;
-        _previousInvariants = currentInvariants;
-    }
-
-    public void ApplyRelationImpacts(
-        IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
-        IReadOnlyList<PropertyChange> changes,
-        RuntimePolicyActions policyActions)
-    {
-        var currentDerived = new HashSet<DerivedNode>();
-        foreach (var relation in relationImpacts.Keys)
-            if (_derivedByRelation.TryGetValue(relation, out var nodes))
-                currentDerived.UnionWith(nodes);
-        foreach (var node in _previousDerived.Except(currentDerived))
-            node.ClearImpact();
-        foreach (var node in currentDerived)
-        {
-            node.ClearImpact();
-            if (!node.Definition.Analysis.HasRelationMembershipDependency ||
-                node.Relation is null ||
-                !relationImpacts.TryGetValue(node.Relation, out var relationImpact) ||
-                relationImpact.AffectedLefts.Count == 0)
-                continue;
-            var sources = relationImpact.AffectedLefts
-                .Where(_sets[node.Definition.SourceSet].Contains)
-                .ToHashSet(ReferenceEqualityComparer.Instance);
-            if (sources.Count == 0)
-                continue;
-            var fallbackSeverity = !node.Definition.ImpactPolicy.IsConfigured
-                ? _impactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    relationImpact, node.Definition, changes))
-                : DependencyImpactKind.Dirty;
-            var invalid = sources.Where(source =>
-                    node.Definition.ImpactPolicy.IsConfigured
-                        ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact, source) == DependencyImpactKind.Invalid
-                        : fallbackSeverity == DependencyImpactKind.Invalid)
-                .ToArray();
-            node.Apply(sources.Except(invalid, ReferenceEqualityComparer.Instance), invalid);
-        }
-
-        var currentInvariants = new HashSet<InvariantNode>();
-        foreach (var derived in currentDerived)
-            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
-                currentInvariants.UnionWith(nodes);
-        foreach (var node in _previousInvariants.Except(currentInvariants))
-            node.ClearImpact();
-        foreach (var node in currentInvariants)
-            node.ApplyInherited(policyActions);
         _previousDerived = currentDerived;
         _previousInvariants = currentInvariants;
     }

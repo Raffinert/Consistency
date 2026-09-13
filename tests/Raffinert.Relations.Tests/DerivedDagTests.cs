@@ -78,6 +78,23 @@ public sealed class DerivedDagTests
     }
 
     [Fact]
+    public void Mutation_declaration_order_does_not_change_topological_impacts()
+    {
+        var upstreamFirst = ApplyOrderedBatch(upstreamFirst: true);
+        var downstreamFirst = ApplyOrderedBatch(upstreamFirst: false);
+
+        Assert.Equal(upstreamFirst, downstreamFirst);
+        Assert.Equal(
+            [
+                (0, DependencySeverity.Invalid),
+                (1, DependencySeverity.Invalid),
+                (2, DependencySeverity.Invalid),
+                (3, DependencySeverity.Invalid)
+            ],
+            upstreamFirst);
+    }
+
+    [Fact]
     public void Multi_input_invariant_merges_upstreams_and_schedules_once_per_source()
     {
         var repairs = new List<Line>();
@@ -137,6 +154,35 @@ public sealed class DerivedDagTests
         public Guid Id { get; init; }
         public decimal Ordered { get; set; }
         public decimal Received { get; set; }
+    }
+
+    private static (int Id, DependencySeverity Severity)[] ApplyOrderedBatch(bool upstreamFirst)
+    {
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<Line>().Key(line => line.Id);
+        var basis = model.Derived(lines)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(line => line.Ordered);
+        var doubled = model.Derived(lines).Using(basis).Compute((_, value) => value * 2m);
+        var reduced = model.Derived(lines).Using(basis).Compute((line, value) => value - line.Received);
+        var combined = model.Derived(lines).Using(doubled, reduced)
+            .Compute((_, left, right) => left + right);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
+        runtime.Add(lines, line);
+        Assert.Equal(28m, runtime.Get(combined, line));
+        line.Ordered = 12m;
+        line.Received = 3m;
+        var upstream = Change.Property(lines, line, value => value.Ordered, 10m, 12m);
+        var downstream = Change.Property(lines, line, value => value.Received, 2m, 3m);
+
+        var result = runtime.ApplyDetailed(upstreamFirst
+            ? MutationSet.Create(upstream, downstream)
+            : MutationSet.Create(downstream, upstream)).Result;
+
+        return result.DerivedImpacts
+            .Select(impact => (impact.DerivedId, Assert.Single(impact.Sources).Severity))
+            .ToArray();
     }
 
     private sealed class Item
