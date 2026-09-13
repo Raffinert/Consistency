@@ -311,9 +311,15 @@ public sealed class RelationRuntime
             _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
-        _derivedStates = derivedStates.ToDictionary(
-            definition => definition,
-            definition => definition.CreateState(_relations));
+        var mutableDerivedStates = new Dictionary<IDerivedDefinition, IDerivedRuntimeState>();
+        foreach (var node in compiledDependencyGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived))
+        {
+            var definition = (IDerivedDefinition)node.Definition;
+            mutableDerivedStates.Add(definition, definition.CreateState(
+                _relations,
+                upstream => mutableDerivedStates[upstream]));
+        }
+        _derivedStates = mutableDerivedStates;
         _invariants = invariants.ToDictionary(
             definition => definition,
             definition => definition.CreateState(_derivedStates[definition.Derived]));

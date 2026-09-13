@@ -74,6 +74,29 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return new DerivedUsingBuilder<TSource, TItem>(_model, _source, relation);
     }
 
+    public DerivedUpstreamBuilder<TSource, TValue> Using<TValue>(Derived<TSource, TValue> upstream)
+    {
+        ArgumentNullException.ThrowIfNull(upstream);
+        _model.EnsureDerived(upstream.Definition);
+        if (!ReferenceEquals(upstream.Definition.SourceSet, _source.Definition))
+            throw new ArgumentException("The upstream source set must match the derived source set.", nameof(upstream));
+        return new DerivedUpstreamBuilder<TSource, TValue>(_model, _source, upstream);
+    }
+
+    public DerivedUpstreamBuilder<TSource, TValue1, TValue2> Using<TValue1, TValue2>(
+        Derived<TSource, TValue1> first,
+        Derived<TSource, TValue2> second)
+    {
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(second);
+        _model.EnsureDerived(first.Definition);
+        _model.EnsureDerived(second.Definition);
+        if (!ReferenceEquals(first.Definition.SourceSet, _source.Definition) ||
+            !ReferenceEquals(second.Definition.SourceSet, _source.Definition))
+            throw new ArgumentException("All upstream source sets must match the derived source set.");
+        return new DerivedUpstreamBuilder<TSource, TValue1, TValue2>(_model, _source, first, second);
+    }
+
     /// <summary>Defines a value computed directly from the source object.</summary>
     public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TValue>> computation)
     {
@@ -83,6 +106,47 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             computation,
             computation.Compile(),
             _impactPolicy);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+    }
+}
+
+public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : class
+{
+    private readonly RelationModelBuilder _model;
+    private readonly ObjectSet<TSource> _source;
+    private readonly Derived<TSource, TUpstream> _upstream;
+
+    internal DerivedUpstreamBuilder(RelationModelBuilder model, ObjectSet<TSource> source,
+        Derived<TSource, TUpstream> upstream) => (_model, _source, _upstream) = (model, source, upstream);
+
+    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TUpstream, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new ComposedDerivedDefinition<TSource, TUpstream, TValue>(
+            _source.Definition, _upstream.Definition, computation, computation.Compile());
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+    }
+}
+
+public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSource : class
+{
+    private readonly RelationModelBuilder _model;
+    private readonly ObjectSet<TSource> _source;
+    private readonly Derived<TSource, TFirst> _first;
+    private readonly Derived<TSource, TSecond> _second;
+
+    internal DerivedUpstreamBuilder(RelationModelBuilder model, ObjectSet<TSource> source,
+        Derived<TSource, TFirst> first, Derived<TSource, TSecond> second) =>
+        (_model, _source, _first, _second) = (model, source, first, second);
+
+    public Derived<TSource, TValue> Compute<TValue>(
+        Expression<Func<TSource, TFirst, TSecond, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(
+            _source.Definition, _first.Definition, _second.Definition, computation, computation.Compile());
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
     }
@@ -289,7 +353,9 @@ internal interface IDerivedDefinition
     DerivedImpactPolicy ImpactPolicy { get; }
     string ComputationPlanName { get; }
     bool AllowIncompleteDependencies { get; set; }
-    IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations);
+    IDerivedRuntimeState CreateState(
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived);
     IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate);
 }
 
@@ -322,7 +388,8 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public string ComputationPlanName => IncrementalPlan?.DisplayName ?? "FullRecompute";
     public bool AllowIncompleteDependencies { get; set; }
 
-    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations) =>
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relations[RelationDefinition]);
 
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
@@ -350,7 +417,8 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations) =>
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, computation);
 
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
@@ -358,6 +426,59 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
             this,
             predicate,
             (Func<TSource, TValue, bool>)compiledPredicate);
+}
+
+internal sealed class ComposedDerivedDefinition<TSource, TUpstream, TValue>(
+    ObjectSetDefinition<TSource> sourceSet,
+    IDerivedDefinition upstream,
+    Expression<Func<TSource, TUpstream, TValue>> expression,
+    Func<TSource, TUpstream, TValue> computation) : IDerivedDefinition where TSource : class
+{
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs { get; } = [new(null, upstream)];
+    public LambdaExpression ComputationExpression => expression;
+    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+    public DerivedImpactPolicy ImpactPolicy { get; } = DefaultImpact;
+    public string ComputationPlanName => "DependencyFullRecompute";
+    public bool AllowIncompleteDependencies { get; set; }
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
+        new SourceDerivedRuntimeState<TSource, TValue>(this,
+            source => computation(source, (TUpstream)resolveDerived(upstream).GetValue(source)!));
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+    private static DerivedImpactPolicy DefaultImpact { get; } = new(
+        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
+        DependencySeverity.Dirty, false);
+}
+
+internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(
+    ObjectSetDefinition<TSource> sourceSet,
+    IDerivedDefinition first,
+    IDerivedDefinition second,
+    Expression<Func<TSource, TFirst, TSecond, TValue>> expression,
+    Func<TSource, TFirst, TSecond, TValue> computation) : IDerivedDefinition where TSource : class
+{
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs { get; } = [new(null, first), new(null, second)];
+    public LambdaExpression ComputationExpression => expression;
+    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+    public DerivedImpactPolicy ImpactPolicy { get; } = DefaultImpact;
+    public string ComputationPlanName => "DependencyFullRecompute";
+    public bool AllowIncompleteDependencies { get; set; }
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
+        new SourceDerivedRuntimeState<TSource, TValue>(this, source => computation(
+            source,
+            (TFirst)resolveDerived(first).GetValue(source)!,
+            (TSecond)resolveDerived(second).GetValue(source)!));
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+    private static DerivedImpactPolicy DefaultImpact { get; } = new(
+        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
+        DependencySeverity.Dirty, false);
 }
 
 internal sealed class SourceDerivedRuntimeState<TSource, TValue>(

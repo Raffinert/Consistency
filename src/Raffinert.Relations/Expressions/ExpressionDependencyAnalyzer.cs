@@ -78,6 +78,12 @@ internal static class ExpressionDependencyAnalyzer
         return Analyze(expression.Body, parameters);
     }
 
+    public static ExpressionDependencyAnalysis AnalyzeSourceDerived(LambdaExpression expression) =>
+        Analyze(expression.Body, new Dictionary<ParameterExpression, ExpressionParameterRole>
+        {
+            [expression.Parameters[0]] = ExpressionParameterRole.DerivedSource
+        });
+
     public static ExpressionDependencyAnalysis AnalyzeInvariant(LambdaExpression expression) =>
         Analyze(
             expression.Body,

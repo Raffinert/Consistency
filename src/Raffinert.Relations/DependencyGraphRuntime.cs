@@ -29,6 +29,8 @@ internal sealed class DependencyGraphRuntime
     private readonly IReadOnlyDictionary<IRelationDefinition, IReadOnlyList<DerivedNode>> _derivedByRelation;
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<DerivedNode>> _derivedByMember;
     private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<InvariantNode>> _invariantsByDerived;
+    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<DerivedNode>> _derivedByUpstream;
+    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<DerivedNode>> _upstreamsByDerived;
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<InvariantNode>> _invariantsByMember;
     private HashSet<DerivedNode> _previousDerived = [];
     private HashSet<InvariantNode> _previousInvariants = [];
@@ -67,6 +69,12 @@ internal sealed class DependencyGraphRuntime
                 .SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
         _invariantsByDerived = Group(_invariantNodes.Select(node => (node.Derived, node)));
+        _derivedByUpstream = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
+            .Select(input => input.Upstream).OfType<IDerivedDefinition>()
+            .Select(upstream => (derivedByDefinition[upstream], node))));
+        _upstreamsByDerived = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
+            .Select(input => input.Upstream).OfType<IDerivedDefinition>()
+            .Select(upstream => (node, derivedByDefinition[upstream]))));
         _invariantsByMember = Group(_invariantNodes.SelectMany(node =>
             node.SourceDependencies.SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
@@ -128,6 +136,7 @@ internal sealed class DependencyGraphRuntime
         foreach (var relation in affectedRelations)
             if (_derivedByRelation.TryGetValue(relation, out var nodes))
                 derived.UnionWith(nodes);
+        ExpandDownstream(derived);
         var invariants = new HashSet<InvariantNode>(_previousInvariants);
         invariants.UnionWith(Candidates(changes, _invariantsByMember));
         foreach (var node in derived)
@@ -138,6 +147,13 @@ internal sealed class DependencyGraphRuntime
         invariants.ToDictionary(node => node, node => node.CaptureState()),
         _previousDerived.ToArray(),
         _previousInvariants.ToArray());
+    }
+
+    private void ExpandDownstream(HashSet<DerivedNode> nodes)
+    {
+        foreach (var node in _derivedNodes)
+            if (_derivedByUpstream.TryGetValue(node, out var downstream) && nodes.Contains(node))
+                nodes.UnionWith(downstream);
     }
 
     public void RestoreState(object snapshot)
@@ -166,6 +182,7 @@ internal sealed class DependencyGraphRuntime
         foreach (var relation in relationImpacts.Keys)
             if (_derivedByRelation.TryGetValue(relation, out var nodes))
                 currentDerived.UnionWith(nodes);
+        ExpandDownstream(currentDerived);
         foreach (var node in _previousDerived.Except(currentDerived))
             node.ClearImpact();
         foreach (var node in currentDerived)
@@ -206,6 +223,8 @@ internal sealed class DependencyGraphRuntime
                 node.Definition.ImpactPolicy.ItemChanged.ToKind(),
                 relationImpact,
                 changes);
+            if (_upstreamsByDerived.TryGetValue(node, out var upstreams))
+                node.ApplyInherited(upstreams);
         }
 
         var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
@@ -395,6 +414,23 @@ internal sealed class DependencyGraphRuntime
                 State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
             if (DirtySources.Count > 0)
                 State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
+        }
+
+        public void ApplyInherited(IEnumerable<DerivedNode> upstreams)
+        {
+            var inheritedInvalid = NewSet(upstreams.SelectMany(upstream => upstream.InvalidSources));
+            var inheritedDirty = NewSet(upstreams.SelectMany(upstream => upstream.DirtySources));
+            inheritedDirty.ExceptWith(inheritedInvalid);
+            var newInvalid = inheritedInvalid.Except(InvalidSources, ReferenceEqualityComparer.Instance).ToArray();
+            var newDirty = inheritedDirty.Except(DirtySources, ReferenceEqualityComparer.Instance)
+                .Where(source => !InvalidSources.Contains(source)).ToArray();
+            InvalidSources.UnionWith(inheritedInvalid);
+            DirtySources.UnionWith(inheritedDirty);
+            DirtySources.ExceptWith(InvalidSources);
+            if (newInvalid.Length > 0)
+                State.ApplyImpact(newInvalid, DependencyImpactKind.Invalid);
+            if (newDirty.Length > 0)
+                State.ApplyImpact(newDirty, DependencyImpactKind.Dirty);
         }
 
         public void ClearImpact()
