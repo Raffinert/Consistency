@@ -61,7 +61,9 @@ public sealed class CompiledRelationModel
                 lines.Add($"    {key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})");
             lines.Add($"  Access plan: {relation.AccessPlan.DisplayName}");
             lines.Add($"  Reverse access plan: {relation.ReverseAccessPlan?.DisplayName ?? "Disabled"}");
-            lines.Add($"  Relation materialization: {(relation.ReverseAccessPlan is null ? "None" : "ExactPropagation")}");
+            lines.Add($"  Propagation plan: {relation.PropagationPlan}");
+            lines.Add($"  Pair membership retained: {relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized}");
+            lines.Add($"  Relation materialization: {(relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized ? "ExactPropagation" : "None")}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
             var materialized = _derivedStates.Any(derived =>
                 derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation)));
@@ -149,7 +151,7 @@ public sealed class CompiledRelationModel
                     $"{key.Left.DisplayName} <-> {key.Right.DisplayName} ({key.EqualitySemantics})").ToArray(),
                 ToPublicAccessPlan(relation.AccessPlan),
                 relation.ReverseAccessPlan is null ? null : ToPublicAccessPlan(relation.ReverseAccessPlan),
-                relation.ReverseAccessPlan is null
+                relation.PropagationPlan != RelationPropagationPlan.ExactMaterialized
                     ? RelationMaterializationMode.None
                     : RelationMaterializationMode.ExactPropagation,
                 ToPublicCompleteness(relation.Analysis.DependencyAnalysis),
@@ -313,8 +315,8 @@ public sealed class RelationRuntime
             .ToDictionary(pair => pair.definition, pair => pair.id);
         _invariantIds = invariants.Select((definition, id) => (definition, id))
             .ToDictionary(pair => pair.definition, pair => pair.id);
-        foreach (var relation in derivedStates.SelectMany(derived => derived.Inputs)
-                     .Select(input => input.Relation).OfType<IRelationDefinition>().Distinct())
+        foreach (var relation in relations.Where(relation =>
+                     relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized))
             _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);

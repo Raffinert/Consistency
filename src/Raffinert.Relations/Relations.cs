@@ -2,6 +2,13 @@ using System.Linq.Expressions;
 
 namespace Raffinert.Relations;
 
+internal enum RelationPropagationPlan
+{
+    None,
+    ExactMaterialized,
+    ConservativeInvalidation
+}
+
 public sealed class RelationBuilder<TLeft, TRight>
     where TLeft : class
     where TRight : class
@@ -83,8 +90,10 @@ internal interface IRelationDefinition
     Expressions.RelationAnalysis Analysis { get; }
     Expressions.RelationAccessPlan AccessPlan { get; }
     Expressions.RelationAccessPlan? ReverseAccessPlan { get; }
+    RelationPropagationPlan PropagationPlan { get; }
     bool AllowIncompleteDependencies { get; }
     void RequireExactPropagation();
+    void UseConservativePropagation();
     IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets);
 }
 
@@ -120,10 +129,22 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
     public Expressions.RelationAnalysis Analysis { get; }
     public Expressions.RelationAccessPlan AccessPlan { get; }
     public Expressions.RelationAccessPlan? ReverseAccessPlan { get; private set; }
+    public RelationPropagationPlan PropagationPlan { get; private set; }
     public bool AllowIncompleteDependencies { get; set; }
 
-    public void RequireExactPropagation() =>
+    public void RequireExactPropagation()
+    {
+        PropagationPlan = RelationPropagationPlan.ExactMaterialized;
         ReverseAccessPlan ??= Expressions.RelationPlanner.PlanReverse(Analysis, _forceScanPlans);
+    }
+
+    public void UseConservativePropagation()
+    {
+        if (PropagationPlan == RelationPropagationPlan.ExactMaterialized)
+            return;
+        PropagationPlan = RelationPropagationPlan.ConservativeInvalidation;
+        ReverseAccessPlan ??= Expressions.RelationPlanner.PlanReverse(Analysis, _forceScanPlans);
+    }
 
     public IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets) =>
         new RelationRuntimeState<TLeft, TRight>(this, sets[Left], sets[Right]);
