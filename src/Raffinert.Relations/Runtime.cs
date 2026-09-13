@@ -242,6 +242,7 @@ public sealed class RelationRuntime
     private long _relationPairsAdded;
     private long _relationPairsRemoved;
     private long _policyRequestsEmitted;
+    private bool _rollbackSnapshotsEnabled = true;
 
     /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
     public long Version => _version;
@@ -540,7 +541,7 @@ public sealed class RelationRuntime
     {
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
-        var snapshot = CaptureState();
+        var snapshot = _rollbackSnapshotsEnabled ? CaptureState() : null;
         try
         {
             var result = CommitMutations(prepared.LifecycleMutations, prepared.Changes);
@@ -550,9 +551,17 @@ public sealed class RelationRuntime
         }
         catch
         {
-            RestoreState(snapshot);
+            if (snapshot is not null)
+                RestoreState(snapshot);
             throw;
         }
+    }
+
+    /// <summary>Disables commit snapshots for benchmark comparisons only.</summary>
+    internal RelationRuntime DisableRollbackSnapshotsForBenchmarking()
+    {
+        _rollbackSnapshotsEnabled = false;
+        return this;
     }
 
     private RuntimeStateSnapshot CaptureState() => new(
