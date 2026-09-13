@@ -284,6 +284,8 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
     long FullRecomputationCount { get; }
     long IncrementalUpdateCount { get; }
     void ResetDiagnostics();
+    object CaptureState();
+    void RestoreState(object snapshot);
     void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
     IReadOnlyCollection<object> ApplyIncremental(
         IEnumerable<object> sources,
@@ -355,6 +357,24 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
         IncrementalUpdateCount = 0;
     }
 
+    public object CaptureState() => new State(
+        _cache.ToDictionary(
+            pair => pair.Key,
+            pair => new CacheEntry(pair.Value.Value, pair.Value.State),
+            ReferenceEqualityComparer<TSource>.Instance),
+        FullRecomputationCount,
+        IncrementalUpdateCount);
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        _cache.Clear();
+        foreach (var pair in state.Cache)
+            _cache.Add(pair.Key, pair.Value);
+        FullRecomputationCount = state.FullRecomputationCount;
+        IncrementalUpdateCount = state.IncrementalUpdateCount;
+    }
+
     public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
 
     public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
@@ -364,6 +384,11 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
         public TValue Value { get; set; } = value;
         public DerivedValueState State { get; set; } = state;
     }
+
+    private sealed record State(
+        Dictionary<TSource, CacheEntry> Cache,
+        long FullRecomputationCount,
+        long IncrementalUpdateCount);
 }
 
 internal interface IInvariantDefinition
@@ -406,6 +431,8 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
 {
     IInvariantDefinition Definition { get; }
     int SourceStateEntryCount { get; }
+    object CaptureState();
+    void RestoreState(object snapshot);
     void ApplyImpact(
         IEnumerable<object> sources,
         DependencyImpactKind impact,
@@ -434,6 +461,17 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
 
     public InvariantEvaluationState GetState(TSource source) =>
         _states.TryGetValue(source, out var state) ? state : InvariantEvaluationState.Unknown;
+
+    public object CaptureState() => new Dictionary<TSource, InvariantEvaluationState>(
+        _states,
+        ReferenceEqualityComparer<TSource>.Instance);
+
+    public void RestoreState(object snapshot)
+    {
+        _states.Clear();
+        foreach (var pair in (Dictionary<TSource, InvariantEvaluationState>)snapshot)
+            _states.Add(pair.Key, pair.Value);
+    }
 
     public void ApplyImpact(
         IEnumerable<object> sources,

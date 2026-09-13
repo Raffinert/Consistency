@@ -11,6 +11,8 @@ internal interface INavigationIndex
     void RemoveOwner(object owner);
     IReadOnlyCollection<object> GetOwners(object target);
     IReadOnlyCollection<object> GetTargets(object owner);
+    object CaptureState();
+    void RestoreState(object snapshot);
 }
 
 internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
@@ -59,6 +61,35 @@ internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
 
     public IReadOnlyCollection<object> GetTargets(object owner) =>
         _forward.TryGetValue(owner, out var entry) && entry.Target is not null ? [entry.Target] : [];
+
+    public object CaptureState() => new State(
+        _forward.ToDictionary(
+            pair => pair.Key,
+            pair => new ForwardEntry(pair.Value.Target) { ReferenceCount = pair.Value.ReferenceCount },
+            ReferenceEqualityComparer.Instance),
+        _reverse.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToHashSet(ReferenceEqualityComparer.Instance),
+            ReferenceEqualityComparer.Instance));
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        Replace(_forward, state.Forward);
+        Replace(_reverse, state.Reverse);
+    }
+
+    private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
+        where TKey : notnull
+    {
+        target.Clear();
+        foreach (var pair in source)
+            target.Add(pair.Key, pair.Value);
+    }
+
+    private sealed record State(
+        Dictionary<object, ForwardEntry> Forward,
+        Dictionary<object, HashSet<object>> Reverse);
 
     private sealed class ForwardEntry(object? target)
     {
@@ -112,6 +143,38 @@ internal sealed class CollectionNavigationIndex(MemberInfo member) : INavigation
 
     public IReadOnlyCollection<object> GetTargets(object owner) =>
         _forward.TryGetValue(owner, out var entry) ? entry.Items : [];
+
+    public object CaptureState() => new State(
+        _forward.ToDictionary(
+            pair => pair.Key,
+            pair => new ForwardEntry(pair.Value.Items.ToHashSet(ReferenceEqualityComparer.Instance))
+            {
+                ReferenceCount = pair.Value.ReferenceCount
+            },
+            ReferenceEqualityComparer.Instance),
+        _reverse.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToHashSet(ReferenceEqualityComparer.Instance),
+            ReferenceEqualityComparer.Instance));
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        Replace(_forward, state.Forward);
+        Replace(_reverse, state.Reverse);
+    }
+
+    private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
+        where TKey : notnull
+    {
+        target.Clear();
+        foreach (var pair in source)
+            target.Add(pair.Key, pair.Value);
+    }
+
+    private sealed record State(
+        Dictionary<object, ForwardEntry> Forward,
+        Dictionary<object, HashSet<object>> Reverse);
 
     private IEnumerable<object> ReadItems(object owner)
     {
@@ -238,6 +301,28 @@ internal sealed class NavigationIndexRegistry
         AddRoot(set, root);
     }
 
+    public object CaptureState() => new State(
+        _indexes.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
+        _registrations.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToDictionary(
+                registration => registration.Key,
+                registration => registration.Value,
+                ReferenceEqualityComparer.Instance)));
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        foreach (var pair in state.Indexes)
+            _indexes[pair.Key].RestoreState(pair.Value);
+        foreach (var pair in _registrations)
+        {
+            pair.Value.Clear();
+            foreach (var registration in state.Registrations[pair.Key])
+                pair.Value.Add(registration.Key, registration.Value);
+        }
+    }
+
     public IReadOnlyCollection<object> ResolveRoots(
         IObjectSetDefinition rootSet,
         DependencyPath path,
@@ -307,6 +392,10 @@ internal sealed class NavigationIndexRegistry
         MemberReader.Read(member, instance);
 
     private sealed record NavigationMembership(INavigationIndex Index, object Owner);
+
+    private sealed record State(
+        IReadOnlyDictionary<MemberInfo, object> Indexes,
+        IReadOnlyDictionary<IObjectSetDefinition, Dictionary<object, IReadOnlyList<NavigationMembership>>> Registrations);
 
     private sealed class NavigationMembershipComparer : IEqualityComparer<NavigationMembership>
     {

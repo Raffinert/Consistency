@@ -1,5 +1,9 @@
 namespace Raffinert.Relations;
 
+using System.Collections;
+using System.Reflection;
+using Raffinert.Relations.Expressions;
+
 internal sealed record RepairRequest(
     IInvariantDefinition Invariant,
     object Source,
@@ -100,17 +104,20 @@ public sealed class PreparedMutation
         RelationRuntime runtime,
         long baseVersion,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
-        IReadOnlyList<PropertyChange> changes)
+        IReadOnlyList<PropertyChange> changes,
+        IReadOnlyList<PreparedDomainAssumption> domainAssumptions)
     {
         Runtime = runtime;
         BaseVersion = baseVersion;
         LifecycleMutations = lifecycleMutations;
         Changes = changes;
+        DomainAssumptions = domainAssumptions;
     }
 
     internal RelationRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
     internal IReadOnlyList<PropertyChange> Changes { get; }
+    internal IReadOnlyList<PreparedDomainAssumption> DomainAssumptions { get; }
     internal RuntimePolicyActions? PolicyActions { get; private set; }
 
     /// <summary>The runtime version against which this mutation was validated.</summary>
@@ -129,6 +136,100 @@ public sealed class PreparedMutation
     }
 
     internal void MarkDispatched() => IsDispatched = true;
+
+    internal void ValidateDomainState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets)
+    {
+        foreach (var assumption in DomainAssumptions)
+            assumption.Validate();
+
+        var simulated = sets.ToDictionary(
+            pair => pair.Key,
+            pair => new PreparedSetState(pair.Value));
+        foreach (var mutation in LifecycleMutations)
+        {
+            var set = mutation is ObjectAdded added ? added.Set : ((ObjectRemoved)mutation).Set;
+            if (mutation is ObjectAdded addition)
+                simulated[set].Add(set, addition.Instance);
+            else
+                simulated[set].Remove(((ObjectRemoved)mutation).Instance);
+        }
+    }
+
+    private sealed class PreparedSetState(ObjectSetRuntime runtime)
+    {
+        private readonly HashSet<object> _instances = runtime.Instances.ToHashSet(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<object, object> _keys = runtime.RegisteredEntries
+            .ToDictionary(pair => pair.Key, pair => pair.Instance);
+        private readonly Dictionary<object, object> _registeredKeys = runtime.RegisteredEntries
+            .ToDictionary(pair => pair.Instance, pair => pair.Key, ReferenceEqualityComparer.Instance);
+
+        public void Add(IObjectSetDefinition set, object instance)
+        {
+            if (!_instances.Add(instance))
+                throw new InvalidOperationException("The prepared domain state drifted: an added instance is already registered.");
+            var key = set.ReadKey(instance) ?? throw new InvalidOperationException(
+                "The prepared domain state drifted: an added object's final key is null.");
+            if (_keys.ContainsKey(key))
+                throw new InvalidOperationException(
+                    $"The prepared domain state drifted: key '{key}' is no longer unique.");
+            _keys.Add(key, instance);
+            _registeredKeys.Add(instance, key);
+        }
+
+        public void Remove(object instance)
+        {
+            if (!_instances.Remove(instance) || !_registeredKeys.Remove(instance, out var key))
+                throw new InvalidOperationException(
+                    "The prepared domain state drifted: a removed instance is no longer registered.");
+            _keys.Remove(key);
+        }
+    }
+}
+
+internal sealed class PreparedDomainAssumption
+{
+    private readonly object _instance;
+    private readonly MemberInfo _member;
+    private readonly object? _value;
+    private readonly object[]? _collectionItems;
+
+    private PreparedDomainAssumption(object instance, MemberInfo member, object? value, object[]? collectionItems)
+    {
+        _instance = instance;
+        _member = member;
+        _value = value;
+        _collectionItems = collectionItems;
+    }
+
+    public static PreparedDomainAssumption Capture(PropertyChange change)
+    {
+        var value = MemberReader.Read(change.Member, change.Instance);
+        return value is IEnumerable collection and not string
+            ? new PreparedDomainAssumption(
+                change.Instance,
+                change.Member,
+                null,
+                collection.Cast<object?>().Where(item => item is not null).Cast<object>().ToArray())
+            : new PreparedDomainAssumption(change.Instance, change.Member, value, null);
+    }
+
+    public void Validate()
+    {
+        var current = MemberReader.Read(_member, _instance);
+        var matches = _collectionItems is null
+            ? Equals(current, _value)
+            : current is IEnumerable collection && CollectionMatches(collection);
+        if (!matches)
+            throw new InvalidOperationException(
+                $"The prepared domain state drifted: member '{_member.Name}' changed between Prepare and Commit.");
+    }
+
+    private bool CollectionMatches(IEnumerable collection)
+    {
+        var current = collection.Cast<object?>().Where(item => item is not null).Cast<object>().ToArray();
+        return current.Length == _collectionItems!.Length &&
+               current.Zip(_collectionItems).All(pair => ReferenceEquals(pair.First, pair.Second));
+    }
 }
 
 internal sealed class RuntimePolicyActions

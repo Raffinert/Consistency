@@ -127,6 +127,64 @@ public sealed class RuntimeTests
     }
 
     [Fact]
+    public void Failed_commit_restores_all_runtime_owned_state()
+    {
+        var gate = new ThrowingPredicate();
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items)
+            .Where((source, item) => gate.Match(source, item))
+            .AllowIncompleteDependencies();
+        var count = model.Derived(sources).Using(relation)
+            .Compute((_, matches) => matches.Count)
+            .AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        runtime.Add(sources, source);
+        Assert.Equal(0, runtime.Get(count, source));
+        var version = runtime.Version;
+        var diagnostics = runtime.Diagnostics;
+        gate.Throw = true;
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Add(items, item)));
+
+        Assert.Throws<DeliberateTestException>(() => runtime.Commit(prepared));
+
+        Assert.Equal(version, runtime.Version);
+        Assert.Equal(0, runtime.Get(count, source));
+        Assert.False(runtime.Remove(items, item));
+        Assert.Equal(diagnostics.RelationPairsAdded, runtime.Diagnostics.RelationPairsAdded);
+        gate.Throw = false;
+        runtime.Add(items, item);
+        Assert.Equal([item], runtime.Related(relation, source));
+    }
+
+    [Fact]
+    public void Prepared_mutation_is_rejected_when_domain_member_drifted()
+    {
+        var model = CreateLineModel(out var invoices, out var lines, out var relation);
+        var runtime = model.Build().CreateRuntime();
+        var invoice = Invoice("PO", "A");
+        var line = Line("PO", "A");
+        runtime.Add(invoices, invoice);
+        runtime.Add(lines, line);
+        line.ItemNumber = "B";
+        var prepared = runtime.Prepare(MutationSet.Create(
+            Change.Property(lines, line, value => value.ItemNumber, "A", "B")));
+        line.ItemNumber = "C";
+        var version = runtime.Version;
+
+        var error = Assert.Throws<InvalidOperationException>(() => runtime.Commit(prepared));
+
+        Assert.Contains("domain state drifted", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(version, runtime.Version);
+        line.ItemNumber = "A";
+        runtime.Apply(Change.Property(lines, line, value => value.ItemNumber, "C", "A"));
+        Assert.Equal([line], runtime.Related(relation, invoice));
+    }
+
+    [Fact]
     public void Runtime_diagnostics_distinguish_query_indexes_from_exact_materialization()
     {
         var model = new RelationModelBuilder();
@@ -691,4 +749,14 @@ public sealed class RuntimeTests
     private static bool MatchesPrefix(string value, string prefix) => value.StartsWith(prefix, StringComparison.Ordinal);
 
     private static bool CodesEqual(CodeHolder left, CodeHolder right) => left.Code == right.Code;
+
+    private sealed class ThrowingPredicate
+    {
+        public bool Throw { get; set; }
+
+        public bool Match(CodeHolder source, CodeHolder item) =>
+            Throw ? throw new DeliberateTestException() : source.Code == item.Code;
+    }
+
+    private sealed class DeliberateTestException : Exception;
 }

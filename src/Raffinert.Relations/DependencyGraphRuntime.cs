@@ -86,6 +86,21 @@ internal sealed class DependencyGraphRuntime
             Snapshot(node.Definition, node.InvalidSources, node.DirtySources))
         .ToArray();
 
+    public object CaptureState() => new State(
+        _derivedNodes.Select(node => node.CaptureState()).ToArray(),
+        _invariantNodes.Select(node => node.CaptureState()).ToArray());
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        for (var index = 0; index < _derivedNodes.Count; index++)
+            _derivedNodes[index].RestoreState(state.Derived[index]);
+        for (var index = 0; index < _invariantNodes.Count; index++)
+            _invariantNodes[index].RestoreState(state.Invariants[index]);
+    }
+
+    private sealed record State(IReadOnlyList<object> Derived, IReadOnlyList<object> Invariants);
+
     public void ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
@@ -217,6 +232,24 @@ internal sealed class DependencyGraphRuntime
         public HashSet<object> InvalidSources { get; private set; } = NewSet();
         public HashSet<object> DirtySources { get; private set; } = NewSet();
 
+        public object CaptureState() => new NodeState(
+            State.CaptureState(),
+            NewSet(InvalidSources),
+            NewSet(DirtySources));
+
+        public void RestoreState(object snapshot)
+        {
+            var state = (NodeState)snapshot;
+            State.RestoreState(state.RuntimeState);
+            InvalidSources = state.InvalidSources;
+            DirtySources = state.DirtySources;
+        }
+
+        private sealed record NodeState(
+            object RuntimeState,
+            HashSet<object> InvalidSources,
+            HashSet<object> DirtySources);
+
         public void Apply(
             IEnumerable<object> sourceRoots,
             IEnumerable<object> itemSources,
@@ -291,6 +324,24 @@ internal sealed class DependencyGraphRuntime
         public IReadOnlyList<TrackedExpressionDependency> SourceDependencies { get; }
         public HashSet<object> InvalidSources { get; private set; } = NewSet();
         public HashSet<object> DirtySources { get; private set; } = NewSet();
+
+        public object CaptureState() => new NodeState(
+            State.CaptureState(),
+            NewSet(InvalidSources),
+            NewSet(DirtySources));
+
+        public void RestoreState(object snapshot)
+        {
+            var state = (NodeState)snapshot;
+            State.RestoreState(state.RuntimeState);
+            InvalidSources = state.InvalidSources;
+            DirtySources = state.DirtySources;
+        }
+
+        private sealed record NodeState(
+            object RuntimeState,
+            HashSet<object> InvalidSources,
+            HashSet<object> DirtySources);
 
         public void ApplyInherited(RuntimePolicyActions policyActions)
         {

@@ -519,7 +519,12 @@ public sealed class RelationRuntime
         if (!Enum.IsDefined(validationMode))
             throw new ArgumentOutOfRangeException(nameof(validationMode));
         var batch = ValidateMutations(mutationSet.Mutations, validationMode);
-        return new PreparedMutation(this, Version, batch.LifecycleMutations, batch.Changes);
+        return new PreparedMutation(
+            this,
+            Version,
+            batch.LifecycleMutations,
+            batch.Changes,
+            batch.Changes.Select(PreparedDomainAssumption.Capture).ToArray());
     }
 
     /// <summary>
@@ -528,11 +533,61 @@ public sealed class RelationRuntime
     public ChangeImpact Commit(PreparedMutation prepared)
     {
         ValidatePreparedMutation(prepared);
-        var result = CommitMutations(prepared.LifecycleMutations, prepared.Changes);
-        _version++;
-        prepared.MarkCommitted(result.PolicyActions);
-        return result.Impact;
+        prepared.ValidateDomainState(_sets);
+        var snapshot = CaptureState();
+        try
+        {
+            var result = CommitMutations(prepared.LifecycleMutations, prepared.Changes);
+            _version++;
+            prepared.MarkCommitted(result.PolicyActions);
+            return result.Impact;
+        }
+        catch
+        {
+            RestoreState(snapshot);
+            throw;
+        }
     }
+
+    private RuntimeStateSnapshot CaptureState() => new(
+        _sets.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
+        _relations.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
+        _navigation.CaptureState(),
+        _dependencyGraph.CaptureState(),
+        LastRelationImpacts,
+        _reindexedRoots,
+        _affectedSources,
+        _relationPairsAdded,
+        _relationPairsRemoved,
+        _policyRequestsEmitted);
+
+    private void RestoreState(RuntimeStateSnapshot snapshot)
+    {
+        foreach (var pair in snapshot.Sets)
+            _sets[pair.Key].RestoreState(pair.Value);
+        foreach (var pair in snapshot.Relations)
+            _relations[pair.Key].RestoreState(pair.Value);
+        _navigation.RestoreState(snapshot.Navigation);
+        _dependencyGraph.RestoreState(snapshot.Dependencies);
+        LastRelationImpacts = snapshot.LastRelationImpacts;
+        _reindexedRoots = snapshot.ReindexedRoots;
+        _affectedSources = snapshot.AffectedSources;
+        _relationPairsAdded = snapshot.RelationPairsAdded;
+        _relationPairsRemoved = snapshot.RelationPairsRemoved;
+        _policyRequestsEmitted = snapshot.PolicyRequestsEmitted;
+    }
+
+    private sealed record RuntimeStateSnapshot(
+        IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
+        IReadOnlyDictionary<IRelationDefinition, object> Relations,
+        object Navigation,
+        object Dependencies,
+        IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts,
+        long ReindexedRoots,
+        long AffectedSources,
+        long RelationPairsAdded,
+        long RelationPairsRemoved,
+        long PolicyRequestsEmitted);
 
     /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
     public void Dispatch(PreparedMutation prepared)
@@ -1042,6 +1097,24 @@ internal sealed class ObjectSetRuntime
         _registeredKeys.Select(pair => (pair.Key, pair.Value));
     public bool Contains(object instance) => _instances.Contains(instance);
 
+    public object CaptureState() => new State(
+        _instances.ToArray(),
+        _byKey.ToArray(),
+        _registeredKeys.ToArray());
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        _instances.Clear();
+        _instances.UnionWith(state.Instances);
+        _byKey.Clear();
+        foreach (var pair in state.ByKey)
+            _byKey.Add(pair.Key, pair.Value);
+        _registeredKeys.Clear();
+        foreach (var pair in state.RegisteredKeys)
+            _registeredKeys.Add(pair.Key, pair.Value);
+    }
+
     public void Add(object instance)
     {
         if (!_definition.ObjectType.IsInstanceOfType(instance))
@@ -1065,6 +1138,11 @@ internal sealed class ObjectSetRuntime
             _byKey.Remove(key);
         return true;
     }
+
+    private sealed record State(
+        IReadOnlyList<object> Instances,
+        IReadOnlyList<KeyValuePair<object, object>> ByKey,
+        IReadOnlyList<KeyValuePair<object, object>> RegisteredKeys);
 }
 
 internal interface IRelationRuntimeState
@@ -1076,6 +1154,8 @@ internal interface IRelationRuntimeState
     int ForwardIndexEntryCount { get; }
     int ReverseIndexEntryCount { get; }
     long PredicateEvaluationCount { get; }
+    object CaptureState();
+    void RestoreState(object snapshot);
     void ResetDiagnostics();
     void EnableExactPropagation();
     RelationDelta AddLeft(object instance);
@@ -1122,6 +1202,27 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public long PredicateEvaluationCount => _predicateEvaluationCount;
 
     public void ResetDiagnostics() => _predicateEvaluationCount = 0;
+
+    public object CaptureState() => new State(
+        Copy(_index, ReferenceEqualityComparer<TRight>.Instance),
+        new Dictionary<TRight, CompositeKey>(_keys, ReferenceEqualityComparer<TRight>.Instance),
+        Copy(_leftIndex, ReferenceEqualityComparer<TLeft>.Instance),
+        new Dictionary<TLeft, CompositeKey>(_leftKeys, ReferenceEqualityComparer<TLeft>.Instance),
+        Copy(_rightsByLeft, ReferenceEqualityComparer<TRight>.Instance, ReferenceEqualityComparer<TLeft>.Instance),
+        Copy(_leftsByRight, ReferenceEqualityComparer<TLeft>.Instance, ReferenceEqualityComparer<TRight>.Instance),
+        _predicateEvaluationCount);
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        Replace(_index, state.Index);
+        Replace(_keys, state.Keys);
+        Replace(_leftIndex, state.LeftIndex);
+        Replace(_leftKeys, state.LeftKeys);
+        Replace(_rightsByLeft, state.RightsByLeft);
+        Replace(_leftsByRight, state.LeftsByRight);
+        _predicateEvaluationCount = state.PredicateEvaluationCount;
+    }
 
     public int RelatedCount(TLeft left) =>
         _rightsByLeft.TryGetValue(left, out var rights) ? rights.Count : 0;
@@ -1375,6 +1476,32 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     private static CompositeKey CreateKey(IEnumerable<object?> components, HashJoinAccessPlan plan) =>
         new(components.ToArray(), plan.JoinKeyParts.Select(part => part.Comparer).ToArray());
+
+    private static Dictionary<TKey, HashSet<TValue>> Copy<TKey, TValue>(
+        Dictionary<TKey, HashSet<TValue>> source,
+        IEqualityComparer<TValue> valueComparer,
+        IEqualityComparer<TKey>? keyComparer = null) where TKey : notnull where TValue : class =>
+        source.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToHashSet(valueComparer),
+            keyComparer ?? source.Comparer);
+
+    private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
+        where TKey : notnull
+    {
+        target.Clear();
+        foreach (var pair in source)
+            target.Add(pair.Key, pair.Value);
+    }
+
+    private sealed record State(
+        Dictionary<CompositeKey, HashSet<TRight>> Index,
+        Dictionary<TRight, CompositeKey> Keys,
+        Dictionary<CompositeKey, HashSet<TLeft>> LeftIndex,
+        Dictionary<TLeft, CompositeKey> LeftKeys,
+        Dictionary<TLeft, HashSet<TRight>> RightsByLeft,
+        Dictionary<TRight, HashSet<TLeft>> LeftsByRight,
+        long PredicateEvaluationCount);
 
 }
 
