@@ -854,9 +854,7 @@ public sealed class RelationRuntime
         var lifecycle = mutations
             .Where(mutation => mutation is ObjectAdded or ObjectRemoved)
             .ToArray();
-        var simulations = _sets.ToDictionary(
-            pair => pair.Key,
-            pair => new ObjectSetSimulation(pair.Key, pair.Value));
+        var simulations = new Dictionary<IObjectSetDefinition, ObjectSetSimulation>();
         foreach (var mutation in lifecycle)
         {
             var set = mutation switch
@@ -866,7 +864,10 @@ public sealed class RelationRuntime
                 _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
             };
             if (!simulations.TryGetValue(set, out var simulation))
-                throw new ArgumentException("The object set does not belong to this compiled model.");
+            {
+                simulation = new ObjectSetSimulation(set, GetSet(set));
+                simulations.Add(set, simulation);
+            }
             if (mutation is ObjectAdded addition)
                 simulation.Add(addition.Instance);
             else

@@ -293,16 +293,21 @@ public sealed class PreparedMutation
         foreach (var assumption in DomainAssumptions)
             assumption.Validate();
 
-        var simulated = sets.ToDictionary(
-            pair => pair.Key,
-            pair => new PreparedSetState(pair.Value));
+        var simulated = new Dictionary<IObjectSetDefinition, PreparedSetState>();
         foreach (var mutation in LifecycleMutations)
         {
             var set = mutation is ObjectAdded added ? added.Set : ((ObjectRemoved)mutation).Set;
+            if (!sets.TryGetValue(set, out var runtime))
+                throw new ArgumentException("The object set does not belong to this compiled model.");
+            if (!simulated.TryGetValue(set, out var state))
+            {
+                state = new PreparedSetState(runtime);
+                simulated.Add(set, state);
+            }
             if (mutation is ObjectAdded addition)
-                simulated[set].Add(set, addition.Instance);
+                state.Add(set, addition.Instance);
             else
-                simulated[set].Remove(((ObjectRemoved)mutation).Instance);
+                state.Remove(((ObjectRemoved)mutation).Instance);
         }
     }
 
