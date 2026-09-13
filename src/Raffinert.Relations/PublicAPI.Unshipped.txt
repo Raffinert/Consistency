@@ -112,12 +112,28 @@ Raffinert.Relations.DerivedValueState
 Raffinert.Relations.DerivedValueState.Dirty = 1 -> Raffinert.Relations.DerivedValueState
 Raffinert.Relations.DerivedValueState.Fresh = 0 -> Raffinert.Relations.DerivedValueState
 Raffinert.Relations.DerivedValueState.Invalid = 2 -> Raffinert.Relations.DerivedValueState
+Raffinert.Relations.DurablePolicyRequestIdentity
+Raffinert.Relations.DurablePolicyRequestIdentity.DefinitionKey.get -> string!
+Raffinert.Relations.DurablePolicyRequestIdentity.DefinitionKey.init -> void
+Raffinert.Relations.DurablePolicyRequestIdentity.DurablePolicyRequestIdentity(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source) -> void
+Raffinert.Relations.DurablePolicyRequestIdentity.Source.get -> Raffinert.Relations.DurableSourceIdentity!
+Raffinert.Relations.DurablePolicyRequestIdentity.Source.init -> void
+Raffinert.Relations.DurableSourceIdentity
+Raffinert.Relations.DurableSourceIdentity.DurableSourceIdentity(string! ObjectSetKey, string! SourceType, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>! KeyParts) -> void
+Raffinert.Relations.DurableSourceIdentity.KeyParts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>!
+Raffinert.Relations.DurableSourceIdentity.KeyParts.init -> void
+Raffinert.Relations.DurableSourceIdentity.ObjectSetKey.get -> string!
+Raffinert.Relations.DurableSourceIdentity.ObjectSetKey.init -> void
+Raffinert.Relations.DurableSourceIdentity.SourceType.get -> string!
+Raffinert.Relations.DurableSourceIdentity.SourceType.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo
 Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.get -> string?
 Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.ImmediateEvaluationRequestInfo(int InvariantId, object! Source) -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.get -> int
 Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.init -> void
+Raffinert.Relations.ImmediateEvaluationRequestInfo.GetDurableIdentity() -> Raffinert.Relations.DurablePolicyRequestIdentity!
+Raffinert.Relations.ImmediateEvaluationRequestInfo.IsDurable.get -> bool
 Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.get -> object!
 Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
@@ -322,6 +338,8 @@ Raffinert.Relations.RepairRequestInfo.DefinitionKey.get -> string?
 Raffinert.Relations.RepairRequestInfo.DefinitionKey.init -> void
 Raffinert.Relations.RepairRequestInfo.InvariantId.get -> int
 Raffinert.Relations.RepairRequestInfo.InvariantId.init -> void
+Raffinert.Relations.RepairRequestInfo.GetDurableIdentity() -> Raffinert.Relations.DurablePolicyRequestIdentity!
+Raffinert.Relations.RepairRequestInfo.IsDurable.get -> bool
 Raffinert.Relations.RepairRequestInfo.Reason.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.RepairRequestInfo.Reason.init -> void
 Raffinert.Relations.RepairRequestInfo.RepairRequestInfo(int InvariantId, object! Source, Raffinert.Relations.DependencySeverity Reason) -> void
@@ -330,6 +348,8 @@ Raffinert.Relations.RepairRequestInfo.Source.init -> void
 Raffinert.Relations.RepairRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
 Raffinert.Relations.RepairRequestInfo.SourceIdentity.init -> void
 Raffinert.Relations.SourceIdentity
+Raffinert.Relations.SourceIdentity.DurableIdentity.get -> Raffinert.Relations.DurableSourceIdentity?
+Raffinert.Relations.SourceIdentity.DurableIdentity.init -> void
 Raffinert.Relations.SourceIdentity.IsDurable.get -> bool
 Raffinert.Relations.SourceIdentity.ObjectSetKey.get -> string?
 Raffinert.Relations.SourceIdentity.ObjectSetKey.init -> void
@@ -338,6 +358,14 @@ Raffinert.Relations.SourceIdentity.SourceKey.get -> object!
 Raffinert.Relations.SourceIdentity.SourceKey.init -> void
 Raffinert.Relations.SourceIdentity.SourceType.get -> System.Type!
 Raffinert.Relations.SourceIdentity.SourceType.init -> void
+Raffinert.Relations.SourceKeyPart
+Raffinert.Relations.SourceKeyPart.Name.get -> string?
+Raffinert.Relations.SourceKeyPart.Name.init -> void
+Raffinert.Relations.SourceKeyPart.SourceKeyPart(string? Name, string! Type, string! Value) -> void
+Raffinert.Relations.SourceKeyPart.Type.get -> string!
+Raffinert.Relations.SourceKeyPart.Type.init -> void
+Raffinert.Relations.SourceKeyPart.Value.get -> string!
+Raffinert.Relations.SourceKeyPart.Value.init -> void
 Raffinert.Relations.SourceDependencyImpact
 Raffinert.Relations.SourceDependencyImpact.Severity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.SourceDependencyImpact.Severity.init -> void

@@ -1,5 +1,8 @@
 namespace Raffinert.Relations.Tests;
 
+using System.Globalization;
+using System.Text.Json;
+
 public sealed class DiagnosticsTests
 {
     [Fact]
@@ -92,6 +95,10 @@ public sealed class DiagnosticsTests
         Assert.Equal("Source", request.SourceIdentity!.ObjectSetKey);
         Assert.Equal(source.Id, request.SourceIdentity.SourceKey);
         Assert.True(request.SourceIdentity.IsDurable);
+        Assert.True(request.IsDurable);
+        var durable = request.GetDurableIdentity();
+        Assert.Equal("Source.ZeroTotal", durable.DefinitionKey);
+        Assert.Equal("Source", durable.Source.ObjectSetKey);
         Assert.Empty(repairs);
 
         result.DispatchPolicies();
@@ -126,6 +133,42 @@ public sealed class DiagnosticsTests
         var error = Assert.Throws<InvalidOperationException>(model.Build);
 
         Assert.Contains("unique", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Durable_source_identity_canonicalizes_scalar_and_composite_keys()
+    {
+        var guid = Guid.Parse("d2719c8b-2231-4ed0-bcc4-34fa03ea9471");
+        var scalar = DurableSourceIdentityFactory.Create("Items", typeof(DerivedItemRecord), guid)!;
+        var composite = DurableSourceIdentityFactory.Create(
+            "Lines",
+            typeof(DerivedSourceRecord),
+            new { OrganizationId = 42, Code = "A" })!;
+
+        Assert.Equal("d2719c8b-2231-4ed0-bcc4-34fa03ea9471", Assert.Single(scalar.KeyParts).Value);
+        Assert.Equal(["OrganizationId", "Code"], composite.KeyParts.Select(part => part.Name));
+        var roundTrip = JsonSerializer.Deserialize<DurableSourceIdentity>(JsonSerializer.Serialize(composite));
+        Assert.Equal(composite.ObjectSetKey, roundTrip!.ObjectSetKey);
+        Assert.Equal(composite.SourceType, roundTrip.SourceType);
+        Assert.Equal(composite.KeyParts, roundTrip.KeyParts);
+    }
+
+    [Fact]
+    public void Durable_source_identity_is_culture_invariant_and_rejects_unsupported_keys()
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("nb-NO");
+            var identity = DurableSourceIdentityFactory.Create("Items", typeof(DerivedItemRecord), 1234567L)!;
+            Assert.Equal("1234567", Assert.Single(identity.KeyParts).Value);
+            Assert.Null(DurableSourceIdentityFactory.Create("Items", typeof(DerivedItemRecord), 1.5m));
+            Assert.Null(DurableSourceIdentityFactory.Create(null, typeof(DerivedItemRecord), 1));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 
     private static CompiledRelationModel BuildWithOrder(bool reverse)

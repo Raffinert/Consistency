@@ -1,7 +1,9 @@
 namespace Raffinert.Relations;
 
 using System.Collections;
+using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Raffinert.Relations.Expressions;
 
 internal sealed record RepairRequest(
@@ -56,10 +58,21 @@ public sealed record InvariantMutationImpact(
 
 /// <summary>A request to schedule repair work for an affected source.</summary>
 /// <summary>A durable logical identity for a source in a named object set.</summary>
+public sealed record SourceKeyPart(string? Name, string Type, string Value);
+
+public sealed record DurableSourceIdentity(
+    string ObjectSetKey,
+    string SourceType,
+    IReadOnlyList<SourceKeyPart> KeyParts);
+
+public sealed record DurablePolicyRequestIdentity(
+    string DefinitionKey,
+    DurableSourceIdentity Source);
+
 public sealed record SourceIdentity(string? ObjectSetKey, Type SourceType, object SourceKey)
 {
-    /// <summary>Whether this identity has an explicit object-set key suitable for external persistence.</summary>
-    public bool IsDurable => ObjectSetKey is not null;
+    public DurableSourceIdentity? DurableIdentity { get; init; }
+    public bool IsDurable => DurableIdentity is not null;
 }
 
 public sealed record RepairRequestInfo(
@@ -69,6 +82,12 @@ public sealed record RepairRequestInfo(
 {
     public string? DefinitionKey { get; init; }
     public SourceIdentity? SourceIdentity { get; init; }
+    public bool IsDurable => DefinitionKey is not null && SourceIdentity?.IsDurable == true;
+
+    public DurablePolicyRequestIdentity GetDurableIdentity() => IsDurable
+        ? new DurablePolicyRequestIdentity(DefinitionKey!, SourceIdentity!.DurableIdentity!)
+        : throw new InvalidOperationException(
+            "The policy request has no durable identity. Name both the invariant and source object set, and use a canonically supported source key.");
 }
 
 /// <summary>A request for an immediate invariant evaluation during policy dispatch.</summary>
@@ -78,6 +97,108 @@ public sealed record ImmediateEvaluationRequestInfo(
 {
     public string? DefinitionKey { get; init; }
     public SourceIdentity? SourceIdentity { get; init; }
+    public bool IsDurable => DefinitionKey is not null && SourceIdentity?.IsDurable == true;
+
+    public DurablePolicyRequestIdentity GetDurableIdentity() => IsDurable
+        ? new DurablePolicyRequestIdentity(DefinitionKey!, SourceIdentity!.DurableIdentity!)
+        : throw new InvalidOperationException(
+            "The policy request has no durable identity. Name both the invariant and source object set, and use a canonically supported source key.");
+}
+
+internal static class DurableSourceIdentityFactory
+{
+    public static DurableSourceIdentity? Create(string? objectSetKey, Type sourceType, object sourceKey)
+    {
+        if (objectSetKey is null || sourceType.FullName is null || !TryParts(sourceKey, out var parts))
+            return null;
+        return new DurableSourceIdentity(objectSetKey, sourceType.FullName, parts);
+    }
+
+    private static bool TryParts(object key, out IReadOnlyList<SourceKeyPart> parts)
+    {
+        if (TryScalar(key, null, out var scalar))
+        {
+            parts = [scalar];
+            return true;
+        }
+
+        if (key is ITuple tuple)
+        {
+            var values = new List<SourceKeyPart>();
+            for (var index = 0; index < tuple.Length; index++)
+            {
+                if (tuple[index] is null || !TryScalar(tuple[index]!, $"Item{index + 1}", out scalar))
+                {
+                    parts = [];
+                    return false;
+                }
+                values.Add(scalar);
+            }
+            parts = values;
+            return values.Count > 0;
+        }
+
+        var keyType = key.GetType();
+        var isAnonymous = keyType.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false) &&
+                          keyType.Name.Contains("AnonymousType", StringComparison.Ordinal);
+        var properties = isAnonymous
+            ? keyType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            : [];
+        if (properties.Length > 0)
+        {
+            var values = new List<SourceKeyPart>();
+            foreach (var property in properties.OrderBy(property => property.MetadataToken))
+            {
+                var value = property.GetValue(key);
+                if (value is null || !TryScalar(value, property.Name, out scalar))
+                {
+                    parts = [];
+                    return false;
+                }
+                values.Add(scalar);
+            }
+            parts = values;
+            return true;
+        }
+
+        parts = [];
+        return false;
+    }
+
+    private static bool TryScalar(object value, string? name, out SourceKeyPart part)
+    {
+        var type = value.GetType();
+        string? token = null;
+        string? formatted = null;
+        if (type.IsEnum)
+        {
+            token = $"enum:{type.FullName}";
+            formatted = Convert.ToUInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            (token, formatted) = value switch
+            {
+                string text => ("string", text),
+                Guid guid => ("guid", guid.ToString("D")),
+                bool boolean => ("bool", boolean ? "true" : "false"),
+                byte number => ("uint8", number.ToString(CultureInfo.InvariantCulture)),
+                sbyte number => ("int8", number.ToString(CultureInfo.InvariantCulture)),
+                short number => ("int16", number.ToString(CultureInfo.InvariantCulture)),
+                ushort number => ("uint16", number.ToString(CultureInfo.InvariantCulture)),
+                int number => ("int32", number.ToString(CultureInfo.InvariantCulture)),
+                uint number => ("uint32", number.ToString(CultureInfo.InvariantCulture)),
+                long number => ("int64", number.ToString(CultureInfo.InvariantCulture)),
+                ulong number => ("uint64", number.ToString(CultureInfo.InvariantCulture)),
+                DateOnly date => ("date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                DateTime date => ("datetime", date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                DateTimeOffset date => ("datetimeoffset", date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                _ => (null, null)
+            };
+        }
+        part = new SourceKeyPart(name, token ?? string.Empty, formatted ?? string.Empty);
+        return token is not null;
+    }
 }
 
 /// <summary>

@@ -729,8 +729,14 @@ public sealed class RelationRuntime
             () => Dispatch(prepared));
     }
 
-    private SourceIdentity CreateSourceIdentity(IObjectSetDefinition set, object source) =>
-        new(set.DefinitionKey, set.ObjectType, _sets[set].GetRegisteredKey(source));
+    private SourceIdentity CreateSourceIdentity(IObjectSetDefinition set, object source)
+    {
+        var key = _sets[set].GetRegisteredKey(source);
+        return new SourceIdentity(set.DefinitionKey, set.ObjectType, key)
+        {
+            DurableIdentity = DurableSourceIdentityFactory.Create(set.DefinitionKey, set.ObjectType, key)
+        };
+    }
 
     private IReadOnlyList<SourceDependencyImpact> CreateSourceImpacts<TSnapshot>(
         IEnumerable<TSnapshot> snapshots,
