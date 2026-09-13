@@ -8,13 +8,13 @@ non-matching keys; read variants then request one affected derived count.
 
 | Sources | Items | Exact pairs | Exact mutation | Conservative mutation | Exact allocation | Conservative allocation |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 10 | 1,000 | 44.32 us | 45.96 us | 217.30 KB | 102.84 KB |
-| 100 | 100 | 10,000 | 95.07 us | 26.93 us | 937.39 KB | 112.10 KB |
-| 1,000 | 10 | 10,000 | 470.70 us | 290.79 us | 1.84 MB | 0.76 MB |
-| 1,000 | 100 | 100,000 | 1.70 ms | 262.70 us | 8.61 MB | 0.77 MB |
+| 100 | 10 | 1,000 | 64.32 us | 27.91 us | 226.10 KB | 107.24 KB |
+| 100 | 100 | 10,000 | 132.53 us | 31.02 us | 946.36 KB | 116.75 KB |
+| 1,000 | 10 | 10,000 | 497.78 us | 227.00 us | 1.92 MB | 0.80 MB |
+| 1,000 | 100 | 100,000 | 1.90 ms | 300.85 us | 8.69 MB | 0.81 MB |
 
-At 1,000 × 100, mutation plus one lazy read measured 1.72 ms / 8.61 MB for exact and
-206.10 us / 0.77 MB for conservative. These results are workload-specific: conservative
+At 1,000 × 100, mutation plus one lazy read measured 1.96 ms / 8.69 MB for exact and
+283.06 us / 0.81 MB for conservative. These results are workload-specific: conservative
 propagation invalidates a safe superset and can move cost to later reads, while exact
 propagation provides precise deltas required by incremental aggregates.
 

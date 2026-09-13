@@ -30,8 +30,9 @@ public class PropagationPrecisionBenchmarks
         model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
         model.Derived(sources).Using(relation).Compute((_, matches) => matches.Sum(item => item.Quantity));
         _runtime = model.Build().CreateRuntime();
-        for (var index = 0; index < Size; index++)
-            _runtime.Add(sources, new PrecisionSource { Id = Guid.NewGuid(), Code = $"C-{index % 100}" });
+        var retainedSources = Enumerable.Range(0, Size)
+            .Select(index => new PrecisionSource { Id = Guid.NewGuid(), Code = $"C-{index % 100}" })
+            .ToArray();
         _changedItems = Enumerable.Range(0, 100)
             .Select(index => new PrecisionItem
             {
@@ -41,8 +42,8 @@ public class PropagationPrecisionBenchmarks
                 Order = CreateOrder("C-0")
             })
             .ToArray();
-        foreach (var item in _changedItems)
-            _runtime.Add(_items, item);
+        _runtime.Apply(MutationSet.Create(retainedSources.Select(source => Change.Add(sources, source))
+            .Concat(_changedItems.Select(item => Change.Add(_items, item))).ToArray()));
     }
 
     [Benchmark]
