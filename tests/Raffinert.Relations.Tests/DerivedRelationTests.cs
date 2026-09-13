@@ -411,8 +411,8 @@ public sealed partial class DerivedStateTests
 
         Assert.True(runtime.Remove(sources, source));
 
-        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
-        Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
+        Assert.Throws<InvalidOperationException>(() => runtime.GetState(quantity, source));
+        Assert.Throws<InvalidOperationException>(() => runtime.GetState(invariant, source));
         Assert.Equal(0, runtime.DerivedStateEntryCount);
         Assert.Equal(0, runtime.InvariantStateEntryCount);
         Assert.Equal(0, runtime.MaterializedRelationPairCount);
