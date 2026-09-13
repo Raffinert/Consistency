@@ -17,6 +17,8 @@ internal sealed record ImmediateInvariantEvaluation(
 
 internal sealed record RuntimeCommitResult(
     ChangeImpact Impact,
+    IReadOnlyDictionary<IRelationDefinition, RelationImpact> RelationImpacts,
+    DependencyPropagationResult DependencyPropagation,
     RuntimePolicyActions PolicyActions);
 
 /// <summary>A relation membership pair reported by a detailed runtime result.</summary>

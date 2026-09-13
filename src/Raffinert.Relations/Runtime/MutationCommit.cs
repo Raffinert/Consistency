@@ -10,6 +10,9 @@ public sealed partial class RelationRuntime
     /// Commits a prepared mutation to runtime-owned state without invoking application callbacks.
     /// </summary>
     public ChangeImpact Commit(PreparedMutation prepared)
+        => CommitWithResult(prepared).Impact;
+
+    private RuntimeCommitResult CommitWithResult(PreparedMutation prepared)
     {
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
@@ -29,7 +32,7 @@ public sealed partial class RelationRuntime
                 navigationRoots);
             _version++;
             prepared.MarkCommitted(result.PolicyActions);
-            return result.Impact;
+            return result;
         }
         catch
         {
@@ -160,22 +163,22 @@ public sealed partial class RelationRuntime
                 relationImpacts.Add(pair.Key, RelationImpact.FromDelta(pair.Key, pair.Value));
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
-        _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
+        var dependencyPropagation = _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
         var publicImpact = impact.ToPublic();
         _reindexedRoots += publicImpact.Access.ReindexedRoots;
-        _affectedSources += _dependencyGraph.GetDerivedImpacts()
+        _affectedSources += dependencyPropagation.DerivedImpacts
             .SelectMany(value => value.Sources)
             .Distinct(ReferenceEqualityComparer.Instance)
             .Count();
         _relationPairsAdded += relationImpacts.Values.Sum(value => value.AddedPairs.Count);
         _relationPairsRemoved += relationImpacts.Values.Sum(value => value.RemovedPairs.Count);
         _policyRequestsEmitted += policyActions.ImmediateEvaluations.Count + policyActions.RepairRequests.Count;
-        return new RuntimeCommitResult(publicImpact, policyActions);
+        return new RuntimeCommitResult(publicImpact, relationImpacts, dependencyPropagation, policyActions);
     }
 
-    private RuntimeApplication CreateDetailedApplication(PreparedMutation prepared, ChangeImpact impact)
+    private RuntimeApplication CreateDetailedApplication(PreparedMutation prepared, RuntimeCommitResult commit)
     {
-        var relationImpacts = LastRelationImpacts
+        var relationImpacts = commit.RelationImpacts
             .OrderBy(pair => _relationIds[pair.Key])
             .Select(pair => new RelationMutationImpact(
                 _relationIds[pair.Key],
@@ -188,7 +191,7 @@ public sealed partial class RelationRuntime
                 Array.AsReadOnly(pair.Value.AffectedLefts.ToArray()))
             { DefinitionKey = pair.Key.DefinitionKey })
             .ToArray();
-        var derivedImpacts = _dependencyGraph.GetDerivedImpacts()
+        var derivedImpacts = commit.DependencyPropagation.DerivedImpacts
             .GroupBy(value => value.Definition)
             .Select(group => new DerivedMutationImpact(
                 _derivedIds[group.Key],
@@ -196,7 +199,7 @@ public sealed partial class RelationRuntime
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.DerivedId)
             .ToArray();
-        var invariantImpacts = _dependencyGraph.GetInvariantImpacts()
+        var invariantImpacts = commit.DependencyPropagation.InvariantImpacts
             .GroupBy(value => value.Definition)
             .Select(group => new InvariantMutationImpact(
                 _invariantIds[group.Key],
@@ -225,7 +228,7 @@ public sealed partial class RelationRuntime
             })
             .ToArray();
         var result = new RuntimeApplyResult(
-            impact,
+            commit.Impact,
             relationImpacts,
             derivedImpacts,
             invariantImpacts,

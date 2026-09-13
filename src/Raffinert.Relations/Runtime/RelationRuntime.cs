@@ -285,9 +285,10 @@ public sealed partial class RelationRuntime
     /// </summary>
     public ChangeImpact Apply(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
-        var application = ApplyDetailed(mutationSet, validationMode);
-        application.Dispatch.Invoke();
-        return application.Result.ChangeImpact;
+        var prepared = Prepare(mutationSet, validationMode);
+        var impact = Commit(prepared);
+        Dispatch(prepared);
+        return impact;
     }
 
     /// <summary>
@@ -304,8 +305,8 @@ public sealed partial class RelationRuntime
     public RuntimeApplication ApplyDetailed(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
         var prepared = Prepare(mutationSet, validationMode);
-        var impact = Commit(prepared);
-        return CreateDetailedApplication(prepared, impact);
+        var result = CommitWithResult(prepared);
+        return CreateDetailedApplication(prepared, result);
     }
 
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>

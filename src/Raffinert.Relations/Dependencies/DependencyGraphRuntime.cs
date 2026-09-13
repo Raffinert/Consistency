@@ -13,6 +13,10 @@ internal sealed record InvariantImpactSnapshot(
     DependencyImpactKind Severity,
     IReadOnlyCollection<object> Sources);
 
+internal sealed record DependencyPropagationResult(
+    IReadOnlyList<DerivedImpactSnapshot> DerivedImpacts,
+    IReadOnlyList<InvariantImpactSnapshot> InvariantImpacts);
+
 /// <summary>
 /// Propagates source-scoped dependency impacts after relation state has been updated. This is a
 /// deliberately small graph of the node kinds the runtime currently supports, rather than a
@@ -180,7 +184,7 @@ internal sealed class DependencyGraphRuntime
         IReadOnlyList<DerivedNode> PreviousDerived,
         IReadOnlyList<InvariantNode> PreviousInvariants);
 
-    public void ApplyChangeImpacts(
+    public DependencyPropagationResult ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
         RuntimePolicyActions policyActions)
@@ -256,6 +260,7 @@ internal sealed class DependencyGraphRuntime
         }
         _previousDerived = currentDerived;
         _previousInvariants = currentInvariants;
+        return new DependencyPropagationResult(GetDerivedImpacts(), GetInvariantImpacts());
     }
 
     private static IEnumerable<TNode> Candidates<TNode>(
