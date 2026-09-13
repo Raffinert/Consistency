@@ -716,7 +716,8 @@ public sealed class RelationRuntime
             _navigation.RefreshRoot(rootSet, root);
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
-                pair.Key.ReindexRight(root);
+                MergeDelta(relationDeltas, _relations.Single(relation => ReferenceEquals(relation.Value, pair.Key)).Key,
+                    pair.Key.ReindexRight(root));
         foreach (var pair in impact.ReindexLeftRoots)
             foreach (var root in pair.Value)
                 pair.Key.ReindexLeft(root);
@@ -1278,7 +1279,7 @@ internal interface IRelationRuntimeState
     RelationDelta RemoveLeft(object instance);
     RelationDelta AddRight(object instance);
     RelationDelta RemoveRight(object instance);
-    void ReindexRight(object instance);
+    RelationDelta ReindexRight(object instance);
     void ReindexLeft(object instance);
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
@@ -1388,7 +1389,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
             foreach (var left in RelatedFromRightCore(right))
                 AddPair(left, right, delta);
         else if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
-            foreach (var left in _leftObjects.Instances)
+            foreach (var left in ConservativeCandidates(right))
                 delta.Affect(left);
         return delta;
     }
@@ -1398,7 +1399,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var delta = new RelationDelta();
         var right = (TRight)instance;
         if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
-            foreach (var left in _leftObjects.Instances)
+            foreach (var left in ConservativeCandidates(right))
                 delta.Affect(left);
         if (_hasExactPropagation && _leftsByRight.Remove(right, out var lefts))
             foreach (var left in lefts)
@@ -1425,7 +1426,19 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public IReadOnlyList<TLeft> RelatedFromRight(TRight right) => RelatedFromRightCore(right);
 
-    public void ReindexRight(object instance) => Reindex((TRight)instance);
+    public RelationDelta ReindexRight(object instance)
+    {
+        var delta = new RelationDelta();
+        var right = (TRight)instance;
+        if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+            foreach (var left in ConservativeCandidates(right))
+                delta.Affect(left);
+        Reindex(right);
+        if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+            foreach (var left in ConservativeCandidates(right))
+                delta.Affect(left);
+        return delta;
+    }
 
     public void ReindexLeft(object instance)
     {
@@ -1443,8 +1456,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         {
             foreach (var left in lefts)
                 delta.Affect(left);
-            if (rights.Any())
-                foreach (var left in _leftObjects.Instances)
+            foreach (var right in rights.Cast<TRight>())
+                foreach (var left in ConservativeCandidates(right))
                     delta.Affect(left);
             return delta;
         }
@@ -1483,8 +1496,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var lefts = new HashSet<object>(ReferenceEqualityComparer.Instance);
         if (!_hasExactPropagation)
         {
-            if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation && rights.Any())
-                lefts.UnionWith(_leftObjects.Instances);
+            if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+                foreach (var right in rights.Cast<TRight>())
+                    lefts.UnionWith(ConservativeCandidates(right));
             return lefts;
         }
         foreach (var right in rights.Cast<TRight>())
@@ -1589,6 +1603,15 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
                 $"Unsupported reverse access plan '{_definition.ReverseAccessPlan.GetType().Name}'.")
         };
         return candidates.Where(left => Evaluate(left, right)).ToArray();
+    }
+
+    private IEnumerable<TLeft> ConservativeCandidates(TRight right)
+    {
+        if (_definition.ReverseAccessPlan is not HashJoinAccessPlan)
+            return _leftObjects.Instances.Cast<TLeft>();
+        return _keys.TryGetValue(right, out var key) && _leftIndex.TryGetValue(key, out var bucket)
+            ? bucket
+            : [];
     }
 
     private bool Evaluate(TLeft left, TRight right)
