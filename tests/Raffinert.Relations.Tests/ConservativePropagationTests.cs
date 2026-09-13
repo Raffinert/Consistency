@@ -107,7 +107,7 @@ public sealed class ConservativePropagationTests
         var sources = model.Objects<Entry>().Key(value => value.Id);
         var items = model.Objects<Entry>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Conservatively()
+        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
             .Compute((_, matches) => matches.Count);
         var compiled = model.Build();
         var diagnostics = Assert.Single(compiled.Diagnostics.Relations);

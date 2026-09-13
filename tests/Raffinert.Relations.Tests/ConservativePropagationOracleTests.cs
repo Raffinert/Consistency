@@ -87,7 +87,7 @@ public sealed class ConservativePropagationOracleTests
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Region == item.Region &&
             string.Equals(source.Code, item.Code, StringComparison.OrdinalIgnoreCase));
-        var count = model.Derived(sources).Using(relation).Conservatively()
+        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
             .Compute((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var oldCandidate = new Entity { Id = Guid.NewGuid(), Region = 1, Code = "alpha" };
@@ -161,7 +161,7 @@ public sealed class ConservativePropagationOracleTests
                 source.Code == item.Code && source.Active && item.Active);
             var builder = model.Derived(sources).Using(relation);
             if (conservative)
-                builder.Conservatively();
+                builder.PreferConservativePropagation();
             var total = builder.Compute((_, matches) => matches.Sum(item => item.Amount));
             return new World(model.Build().CreateRuntime(), sources, items, total);
         }

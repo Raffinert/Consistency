@@ -655,7 +655,7 @@ Review at least:
 ```text
 DerivedBuilder / DerivedUsingBuilder / DerivedUpstreamBuilder naming
 Incrementally()
-Conservatively()
+PreferConservativePropagation()
 Impact(...)
 RuntimeApplication / PolicyDispatchHandle
 Relation propagation diagnostics names

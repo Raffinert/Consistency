@@ -289,7 +289,7 @@ public sealed class RandomizedDagPropagationTests
             var a = model.Derived(sources).Compute(source => source.Adjustment);
             var bBuilder = model.Derived(sources).Using(relation);
             if (conservative)
-                bBuilder.Conservatively();
+                bBuilder.PreferConservativePropagation();
             var b = bBuilder.Compute((_, matches) => matches.Sum(item => item.Details!.Quantity));
             var c = model.Derived(sources).Using(a, b).Compute((_, left, right) => left + right);
             var d = model.Derived(sources).Compute(source => source.Policy!.Maximum);

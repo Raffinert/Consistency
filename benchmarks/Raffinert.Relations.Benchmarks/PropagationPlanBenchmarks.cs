@@ -41,7 +41,7 @@ public class PropagationPlanBenchmarks
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
         var usingRelation = model.Derived(sources).Using(relation);
         if (conservative)
-            usingRelation.Conservatively();
+            usingRelation.PreferConservativePropagation();
         var count = usingRelation.Compute((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var retainedSources = Enumerable.Range(0, SourceCount)
@@ -115,7 +115,7 @@ public class SelectivePropagationPlanBenchmarks
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
         var builder = model.Derived(sources).Using(relation);
         if (conservative)
-            builder.Conservatively();
+            builder.PreferConservativePropagation();
         var count = builder.Compute((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var retainedSources = Enumerable.Range(0, SourceCount)

@@ -137,7 +137,7 @@ plans. They update already-fresh cache entries from relation/item deltas without
 match list. Unrecognized expressions retain the original compiled computation as the semantic fallback;
 the selected plan is shown in `DebugView`.
 
-Full-recompute relation consumers may instead call `Conservatively()` before `Compute(...)`.
+Full-recompute relation consumers may instead call `PreferConservativePropagation()` before `Compute(...)`.
 This avoids retaining permanent matching pairs and invalidates a safe source superset; lazy reads
 still execute the original predicate. Recognized join keys route right-side changes through the union
 of their old/new source candidate buckets; scan/opaque relations safely fall back to all sources.

@@ -43,7 +43,7 @@ a prepared mutation if another commit advanced `RelationRuntime.Version`.
 Direct query-only relations maintain their selected access index but do not retain all matching pairs.
 Relation consumers choose a propagation plan independently of query access. Exact propagation retains
 bidirectional membership for source-precise deltas and incremental aggregates. An explicit
-`Conservatively()` full-recompute consumer retains no permanent pairs and invalidates a safe source
+`PreferConservativePropagation()` is a consumer preference for a full-recompute consumer that retains no permanent pairs and invalidates a safe source
 superset. Hash joins use the union of stored old-key and current new-key source candidate buckets for
 right-side moves; scan/opaque relations fall back to all registered left sources when narrower routing
 cannot be proven.

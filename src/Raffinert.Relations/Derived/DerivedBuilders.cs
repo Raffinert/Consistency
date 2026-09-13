@@ -218,7 +218,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     }
 
     /// <summary>
-    /// Enables conservative incremental planning for a recognized standalone aggregate. Unsupported
+    /// Enables exact incremental maintenance for a recognized standalone aggregate. Unsupported
     /// expressions continue to use the original compiled computation as a full-recompute fallback.
     /// </summary>
     public DerivedUsingBuilder<TSource, TItem> Incrementally()
@@ -233,7 +233,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     /// Uses source invalidation instead of retaining exact relation pairs. The computation remains
     /// lazy and may invalidate a safe superset of sources.
     /// </summary>
-    public DerivedUsingBuilder<TSource, TItem> Conservatively()
+    public DerivedUsingBuilder<TSource, TItem> PreferConservativePropagation()
     {
         if (_useIncrementalComputation)
             throw new InvalidOperationException("Conservative propagation cannot supply exact incremental deltas.");

@@ -117,7 +117,7 @@ Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, S
 Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
 Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Conservatively() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
