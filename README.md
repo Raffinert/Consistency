@@ -107,13 +107,19 @@ policy work as data before any application callback runs:
 RuntimeApplyResult result = runtime.ApplyDetailed(mutations);
 
 foreach (var request in result.RepairRequests)
-    outbox.Add(request.InvariantId, request.Source, request.Reason);
+{
+    DurablePolicyRequestIdentity durable = request.GetDurableIdentity();
+    outbox.Add(durable.DefinitionKey, durable.Source, request.Reason);
+}
 
 result.DispatchPolicies(); // optional configured in-process callbacks
 ```
 
 The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
-requests, and the original `ChangeImpact`. Definition IDs are deterministic within a compiled model.
+requests, and the original `ChangeImpact`. Numeric definition IDs and `Source` object references are
+in-process conveniences only. Persist `DefinitionKey` plus canonical `DurableSourceIdentity`; the
+`GetDurableIdentity()` helper fails explicitly when the invariant/object set is unnamed or the key cannot
+be represented canonically.
 
 Standalone aggregates can opt into conservative incremental maintenance:
 

@@ -59,10 +59,17 @@ RuntimeApplyResult result = runtime.ApplyDetailed(MutationSet.Create(
     Change.Property(receipts, receipt, x => x.Quantity, oldQuantity, receipt.Quantity)));
 
 foreach (var request in result.RepairRequests)
-    outbox.Add(request.InvariantId, request.Source, request.Reason);
+{
+    var durable = request.GetDurableIdentity();
+    outbox.Add(durable.DefinitionKey, durable.Source, request.Reason);
+}
 
 result.DispatchPolicies(); // optional in-process scheduler
 ```
+
+`InvariantId` and `Source` are deliberately not persisted: they are respectively declaration-order-local
+and an in-process object reference. Name the invariant and source object set, then persist the canonical
+identity returned by `GetDurableIdentity()`.
 
 With `ItemChanged(Invalid)`, the old received quantity cannot be treated as usable before recomputation.
 Other PO lines remain fresh. Cancelling a receipt follows the same pattern:

@@ -67,6 +67,7 @@ work manually and commit runtime state only after the actual database transactio
 
 Ordinal definition IDs are compact identifiers scoped to one compiled model and may change when model
 declaration order changes. Definitions used across process boundaries should be assigned unique logical
-keys with `Named(...)`. Policy requests then include the invariant `DefinitionKey` and a `SourceIdentity`
-formed from the named source object set, its CLR type, and the registered stable object key. Only a
-`SourceIdentity` whose `IsDurable` property is true is suitable for persistence across deployments.
+keys with `Named(...)`. Numeric IDs and live `Source` references remain in-process-only. For persistence,
+`GetDurableIdentity()` requires both a named invariant and a named source set and returns canonical scalar
+key parts, stable type tokens, and invariant-culture values. It throws rather than degrading to ordinal,
+object-reference, runtime `Type`, anonymous-type identity, or arbitrary `ToString()` semantics.
