@@ -240,8 +240,8 @@ public sealed class RuntimeApplyResult
     {
         if (PoliciesDispatched)
             throw new InvalidOperationException("Policy actions have already been dispatched.");
-        PoliciesDispatched = true;
         _dispatch();
+        PoliciesDispatched = true;
     }
 }
 
@@ -387,6 +387,7 @@ internal sealed class RuntimePolicyActions
 {
     private readonly List<ImmediateInvariantEvaluation> _immediateEvaluations = [];
     private readonly List<RepairRequest> _repairRequests = [];
+    private int _nextAction;
 
     public IReadOnlyList<ImmediateInvariantEvaluation> ImmediateEvaluations => _immediateEvaluations;
     public IReadOnlyList<RepairRequest> RepairRequests => _repairRequests;
@@ -412,9 +413,19 @@ internal sealed class RuntimePolicyActions
 
     public void Dispatch()
     {
-        foreach (var evaluation in _immediateEvaluations)
-            evaluation.Invariant.EvaluatePolicy(evaluation.Source);
-        foreach (var request in _repairRequests)
-            request.Invariant.DispatchRepair(request.Source);
+        while (_nextAction < _immediateEvaluations.Count + _repairRequests.Count)
+        {
+            if (_nextAction < _immediateEvaluations.Count)
+            {
+                var evaluation = _immediateEvaluations[_nextAction];
+                evaluation.Invariant.EvaluatePolicy(evaluation.Source);
+            }
+            else
+            {
+                var request = _repairRequests[_nextAction - _immediateEvaluations.Count];
+                request.Invariant.DispatchRepair(request.Source);
+            }
+            _nextAction++;
+        }
     }
 }

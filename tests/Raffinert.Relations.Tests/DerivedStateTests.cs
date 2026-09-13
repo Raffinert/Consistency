@@ -1137,6 +1137,48 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Policy_dispatch_retry_resumes_at_failed_action_without_replaying_successes()
+    {
+        var calls = new int[3];
+        var failSecond = true;
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var items = model.Objects<CodeHolder>().Key(value => value.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+            .ScheduleRepairWith(_ => calls[0]++);
+        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+            .ScheduleRepairWith(_ =>
+            {
+                calls[1]++;
+                if (failSecond)
+                    throw new DeliberateDispatchException();
+            });
+        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+            .ScheduleRepairWith(_ => calls[2]++);
+        var runtime = model.Build().CreateRuntime();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Array.Clear(calls);
+        item.Code = "A";
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, item, value => value.Code, "B", "A")));
+
+        Assert.Throws<DeliberateDispatchException>(result.DispatchPolicies);
+        Assert.Equal([1, 1, 0], calls);
+        Assert.False(result.PoliciesDispatched);
+
+        failSecond = false;
+        result.DispatchPolicies();
+        Assert.Equal([1, 2, 1], calls);
+        Assert.True(result.PoliciesDispatched);
+        Assert.Throws<InvalidOperationException>(result.DispatchPolicies);
+    }
+
+    [Fact]
     public void Detailed_apply_exposes_stable_impacts_and_repair_requests_before_dispatch()
     {
         var scheduled = new List<CodeHolder>();
@@ -1401,6 +1443,8 @@ public sealed class DerivedStateTests
         public DependencyImpactKind Classify(RelationMembershipDependencyImpact impact) =>
             DependencyImpactKind.Invalid;
     }
+
+    private sealed class DeliberateDispatchException : Exception;
 
     private sealed class RepairCallbackException : Exception
     {

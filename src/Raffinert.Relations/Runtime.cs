@@ -605,8 +605,8 @@ public sealed class RelationRuntime
             throw new InvalidOperationException("The prepared mutation has not been committed.");
         if (prepared.IsDispatched)
             throw new InvalidOperationException("The prepared mutation's policy actions have already been dispatched.");
-        prepared.MarkDispatched();
         prepared.PolicyActions!.Dispatch();
+        prepared.MarkDispatched();
     }
 
     private void ValidatePreparedMutation(PreparedMutation prepared)
