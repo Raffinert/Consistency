@@ -1,4 +1,66 @@
 #nullable enable
+Raffinert.Relations.DependencyImpactCause
+Raffinert.Relations.DependencyImpactCause.DependencyImpactCause(Raffinert.Relations.ImpactCausePrecision Precision) -> void
+Raffinert.Relations.DependencyImpactCause.Precision.get -> Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.DependencyImpactCause.Precision.init -> void
+Raffinert.Relations.DirectSourceMemberCause
+Raffinert.Relations.DirectSourceMemberCause.ClassifiedSeverity.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.DirectSourceMemberCause.ClassifiedSeverity.init -> void
+Raffinert.Relations.DirectSourceMemberCause.DirectSourceMemberCause(int OriginId, string! MemberName, string! Policy, Raffinert.Relations.DependencySeverity ClassifiedSeverity) -> void
+Raffinert.Relations.DirectSourceMemberCause.MemberName.get -> string!
+Raffinert.Relations.DirectSourceMemberCause.MemberName.init -> void
+Raffinert.Relations.DirectSourceMemberCause.OriginId.get -> int
+Raffinert.Relations.DirectSourceMemberCause.OriginId.init -> void
+Raffinert.Relations.DirectSourceMemberCause.Policy.get -> string!
+Raffinert.Relations.DirectSourceMemberCause.Policy.init -> void
+Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.ImpactCausePrecision.Conservative = 1 -> Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.ImpactCausePrecision.Exact = 0 -> Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.MutationOrigin
+Raffinert.Relations.MutationOrigin.Kind.get -> Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.MutationOrigin.Kind.init -> void
+Raffinert.Relations.MutationOrigin.MemberName.get -> string?
+Raffinert.Relations.MutationOrigin.MemberName.init -> void
+Raffinert.Relations.MutationOrigin.MutationOrigin(int OriginId, Raffinert.Relations.MutationOriginKind Kind, object! Source, string? MemberName) -> void
+Raffinert.Relations.MutationOrigin.OriginId.get -> int
+Raffinert.Relations.MutationOrigin.OriginId.init -> void
+Raffinert.Relations.MutationOrigin.Source.get -> object!
+Raffinert.Relations.MutationOrigin.Source.init -> void
+Raffinert.Relations.MutationOrigin.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.MutationOrigin.SourceIdentity.init -> void
+Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.MutationOriginKind.CollectionChanged = 1 -> Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.MutationOriginKind.ObjectAdded = 2 -> Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.MutationOriginKind.ObjectRemoved = 3 -> Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.MutationOriginKind.SourceMemberChanged = 0 -> Raffinert.Relations.MutationOriginKind
+Raffinert.Relations.RelationDependencyCause
+Raffinert.Relations.RelationDependencyCause.CausePrecision.get -> Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.RelationDependencyCause.CausePrecision.init -> void
+Raffinert.Relations.RelationDependencyCause.DefinitionKey.get -> string?
+Raffinert.Relations.RelationDependencyCause.DefinitionKey.init -> void
+Raffinert.Relations.RelationDependencyCause.Kind.get -> Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RelationDependencyCause.Kind.init -> void
+Raffinert.Relations.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Relations.RelationImpactCauseKind Kind, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
+Raffinert.Relations.RelationDependencyCause.RelationId.get -> int
+Raffinert.Relations.RelationDependencyCause.RelationId.init -> void
+Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RelationImpactCauseKind.ConservativeCandidate = 3 -> Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RelationImpactCauseKind.MembershipAdded = 0 -> Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RelationImpactCauseKind.MembershipRemoved = 1 -> Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RelationImpactCauseKind.RelatedItemChanged = 2 -> Raffinert.Relations.RelationImpactCauseKind
+Raffinert.Relations.RuntimeImpactDetailLevel
+Raffinert.Relations.RuntimeImpactDetailLevel.Causal = 1 -> Raffinert.Relations.RuntimeImpactDetailLevel
+Raffinert.Relations.RuntimeImpactDetailLevel.Summary = 0 -> Raffinert.Relations.RuntimeImpactDetailLevel
+Raffinert.Relations.RuntimeImpactTraceRenderer
+static Raffinert.Relations.RuntimeImpactTraceRenderer.Render(Raffinert.Relations.RuntimeApplyResult! result) -> string!
+Raffinert.Relations.UpstreamDerivedCause
+Raffinert.Relations.UpstreamDerivedCause.CausePrecision.get -> Raffinert.Relations.ImpactCausePrecision
+Raffinert.Relations.UpstreamDerivedCause.CausePrecision.init -> void
+Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.get -> string?
+Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.init -> void
+Raffinert.Relations.UpstreamDerivedCause.DerivedId.get -> int
+Raffinert.Relations.UpstreamDerivedCause.DerivedId.init -> void
+Raffinert.Relations.UpstreamDerivedCause.UpstreamDerivedCause(int DerivedId, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
 override Raffinert.Relations.ObjectSet<T>.ToString() -> string!
 override Raffinert.Relations.ObjectSetBuilder<T>.ToString() -> string!
 Raffinert.Relations.AccessImpact
@@ -53,22 +115,29 @@ Raffinert.Relations.Derived<TSource, TValue>.DefinitionKey.get -> string?
 Raffinert.Relations.Derived<TSource, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>
 Raffinert.Relations.DerivedBuilder<TSource>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedBuilder<TSource!>!
+Raffinert.Relations.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedBuilder<TSource!>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Relations.Relation<TSource!, TItem!>! relation) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! upstream) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue1, TValue2>(Raffinert.Relations.Derived<TSource!, TValue1>! first, Raffinert.Relations.Derived<TSource!, TValue2>! second) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue1, TValue2>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
+Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TUpstream>!
+Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TUpstream>!
 Raffinert.Relations.DerivedImpactPolicyBuilder
 Raffinert.Relations.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> void
 Raffinert.Relations.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipAdded(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipRemoved(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedImpactPolicyBuilder.SourceChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.DerivedImpactPolicyBuilder() -> void
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.MembershipAdded(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.MembershipRemoved(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.SourceMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Relations.DependencySeverity>! classify) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.SourceChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
 Raffinert.Relations.DerivedLinqSemantics
 Raffinert.Relations.DerivedLinqSemantics.Item = 2 -> Raffinert.Relations.DerivedLinqSemantics
 Raffinert.Relations.DerivedLinqSemantics.Membership = 1 -> Raffinert.Relations.DerivedLinqSemantics
@@ -88,6 +157,8 @@ Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! RelationIds, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity, Raffinert.Relations.DependencySeverity SourceChangedSeverity) -> void
+Raffinert.Relations.DerivedModelDiagnostics.HasConditionalSourcePolicy.get -> bool
+Raffinert.Relations.DerivedModelDiagnostics.HasConditionalSourcePolicy.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Relations.DependencySeverity
@@ -104,6 +175,10 @@ Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleCount.get -> int
+Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleCount.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleNames.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
@@ -119,7 +194,7 @@ Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedValueState
 Raffinert.Relations.DerivedValueState.Dirty = 1 -> Raffinert.Relations.DerivedValueState
@@ -177,11 +252,13 @@ Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.get 
 Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.InvariantId.get -> int
 Raffinert.Relations.InvariantModelDiagnostics.InvariantId.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Relations.InvariantReaction Reaction) -> void
+Raffinert.Relations.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Relations.InvariantReaction Reaction) -> void
 Raffinert.Relations.InvariantModelDiagnostics.Predicate.get -> string!
 Raffinert.Relations.InvariantModelDiagnostics.Predicate.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.Reaction.get -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantModelDiagnostics.Reaction.init -> void
+Raffinert.Relations.InvariantModelDiagnostics.SourceObjectSetId.get -> int
+Raffinert.Relations.InvariantModelDiagnostics.SourceObjectSetId.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
 Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.init -> void
 Raffinert.Relations.InvariantMutationImpact
@@ -322,6 +399,8 @@ Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! ch
 Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! change, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.RuntimeApplication!
+Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
+Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
@@ -393,6 +472,8 @@ Raffinert.Relations.SourceKeyPart.Type.init -> void
 Raffinert.Relations.SourceKeyPart.Value.get -> string!
 Raffinert.Relations.SourceKeyPart.Value.init -> void
 Raffinert.Relations.SourceDependencyImpact
+Raffinert.Relations.SourceDependencyImpact.Causes.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DependencyImpactCause!>!
+Raffinert.Relations.SourceDependencyImpact.Causes.init -> void
 Raffinert.Relations.SourceDependencyImpact.Severity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.SourceDependencyImpact.Severity.init -> void
 Raffinert.Relations.SourceDependencyImpact.Source.get -> object!
@@ -402,9 +483,11 @@ Raffinert.Relations.SourceDependencyImpact.SourceIdentity.get -> Raffinert.Relat
 Raffinert.Relations.SourceDependencyImpact.SourceIdentity.init -> void
 Raffinert.Relations.RuntimeApplyResult
 Raffinert.Relations.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Relations.ChangeImpact!
+Raffinert.Relations.RuntimeApplyResult.DetailLevel.get -> Raffinert.Relations.RuntimeImpactDetailLevel
 Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!
 Raffinert.Relations.RuntimeApplyResult.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ImmediateEvaluationRequestInfo!>!
 Raffinert.Relations.RuntimeApplyResult.InvariantImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantMutationImpact!>!
+Raffinert.Relations.RuntimeApplyResult.MutationOrigins.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.MutationOrigin!>!
 Raffinert.Relations.RuntimeApplyResult.RelationImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationMutationImpact!>!
 Raffinert.Relations.RuntimeApplyResult.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RepairRequestInfo!>!
 Raffinert.Relations.RuntimeApplication

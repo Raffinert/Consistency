@@ -209,6 +209,7 @@ internal sealed class DependencyGraphRuntime
                     .ToArray() ?? []
                 : [];
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
+            var (dirtySourceRoots, invalidSourceRoots) = node.ClassifySourceRoots(sourceRoots, changes);
             var itemRoots = node.Relation is null
                 ? []
                 : ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes);
@@ -228,11 +229,11 @@ internal sealed class DependencyGraphRuntime
                 invalidMembershipRoots,
                 ReferenceEqualityComparer.Instance).ToArray();
             node.Apply(
-                sourceRoots,
+                dirtySourceRoots,
+                invalidSourceRoots,
                 itemSources,
                 dirtyMembershipRoots,
                 invalidMembershipRoots,
-                node.Definition.ImpactPolicy.SourceChanged.ToKind(),
                 node.Definition.ImpactPolicy.ItemChanged.ToKind(),
                 relationImpact,
                 changes);
@@ -345,11 +346,11 @@ internal sealed class DependencyGraphRuntime
             HashSet<object> DirtySources);
 
         public void Apply(
-            IEnumerable<object> sourceRoots,
+            IEnumerable<object> dirtySourceRoots,
+            IEnumerable<object> invalidSourceRoots,
             IEnumerable<object> itemSources,
             IEnumerable<object> dirtyMembershipRoots,
             IEnumerable<object> invalidMembershipRoots,
-            DependencyImpactKind sourceSeverity,
             DependencyImpactKind itemSeverity,
             RelationImpact? relationImpact,
             IReadOnlyList<PropertyChange> changes)
@@ -357,9 +358,8 @@ internal sealed class DependencyGraphRuntime
             InvalidSources = NewSet(invalidMembershipRoots);
             if (itemSeverity == DependencyImpactKind.Invalid)
                 InvalidSources.UnionWith(itemSources);
-            if (sourceSeverity == DependencyImpactKind.Invalid)
-                InvalidSources.UnionWith(sourceRoots);
-            DirtySources = sourceSeverity == DependencyImpactKind.Dirty ? NewSet(sourceRoots) : NewSet();
+            InvalidSources.UnionWith(invalidSourceRoots);
+            DirtySources = NewSet(dirtySourceRoots);
             if (itemSeverity == DependencyImpactKind.Dirty)
                 DirtySources.UnionWith(itemSources);
             DirtySources.UnionWith(dirtyMembershipRoots);
@@ -372,6 +372,40 @@ internal sealed class DependencyGraphRuntime
                     DirtySources.Where(source => !incrementallyUpdated.Contains(source)),
                     DependencyImpactKind.Dirty);
         }
+
+        public (IReadOnlyCollection<object> Dirty, IReadOnlyCollection<object> Invalid) ClassifySourceRoots(
+            IEnumerable<object> sourceRoots,
+            IReadOnlyList<PropertyChange> changes)
+        {
+            var dirty = NewSet();
+            var invalid = NewSet();
+            var directDependencies = SourceDependencies
+                .Where(dependency => dependency.Path.Segments.Count == 1)
+                .Select(dependency => dependency.Path.Segments[0].Member)
+                .ToHashSet();
+            var rules = Definition.ImpactPolicy.SourceMemberRules
+                .Where(rule => directDependencies.Contains(rule.Member))
+                .ToDictionary(rule => rule.Member);
+            foreach (var source in sourceRoots)
+            {
+                DependencySeverity? severity = null;
+                foreach (var change in changes.Where(change => ReferenceEquals(change.Instance, source)))
+                {
+                    var classified = rules.TryGetValue(change.Member, out var rule)
+                        ? rule.Classify(change.OldValue, change.NewValue)
+                        : Definition.ImpactPolicy.SourceChanged;
+                    severity = severity is null ? classified : Max(severity.Value, classified);
+                }
+                severity ??= Definition.ImpactPolicy.SourceChanged;
+                (severity == DependencySeverity.Invalid ? invalid : dirty).Add(source);
+            }
+            return (dirty, invalid);
+        }
+
+        private static DependencySeverity Max(DependencySeverity left, DependencySeverity right) =>
+            left == DependencySeverity.Invalid || right == DependencySeverity.Invalid
+                ? DependencySeverity.Invalid
+                : DependencySeverity.Dirty;
 
         public void Apply(IEnumerable<object> dirtySources, IEnumerable<object> invalidSources)
         {

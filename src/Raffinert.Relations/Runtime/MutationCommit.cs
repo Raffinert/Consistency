@@ -176,7 +176,11 @@ public sealed partial class RelationRuntime
         return new RuntimeCommitResult(publicImpact, relationImpacts, dependencyPropagation, policyActions);
     }
 
-    private RuntimeApplication CreateDetailedApplication(PreparedMutation prepared, RuntimeCommitResult commit)
+    private RuntimeApplication CreateDetailedApplication(
+        PreparedMutation prepared,
+        RuntimeCommitResult commit,
+        RuntimeImpactDetailLevel detailLevel,
+        IReadOnlyList<MutationOrigin> origins)
     {
         var relationImpacts = commit.RelationImpacts
             .OrderBy(pair => _relationIds[pair.Key])
@@ -195,7 +199,7 @@ public sealed partial class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new DerivedMutationImpact(
                 _derivedIds[group.Key],
-                CreateSourceImpacts(group, group.Key.SourceSet))
+                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.DerivedId)
             .ToArray();
@@ -203,7 +207,7 @@ public sealed partial class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new InvariantMutationImpact(
                 _invariantIds[group.Key],
-                CreateSourceImpacts(group, group.Key.SourceSet))
+                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
@@ -233,7 +237,9 @@ public sealed partial class RelationRuntime
             derivedImpacts,
             invariantImpacts,
             repairRequests,
-            immediateRequests);
+            immediateRequests,
+            detailLevel,
+            origins);
         return new RuntimeApplication(result, new PolicyDispatchHandle(() => Dispatch(prepared)));
     }
 
@@ -248,7 +254,12 @@ public sealed partial class RelationRuntime
 
     private IReadOnlyList<SourceDependencyImpact> CreateSourceImpacts<TSnapshot>(
         IEnumerable<TSnapshot> snapshots,
-        IObjectSetDefinition sourceSet) where TSnapshot : class
+        IObjectSetDefinition sourceSet,
+        object definition,
+        PreparedMutation prepared,
+        RuntimeCommitResult commit,
+        RuntimeImpactDetailLevel detailLevel,
+        IReadOnlyList<MutationOrigin> origins) where TSnapshot : class
     {
         var values = snapshots.SelectMany(snapshot => snapshot switch
         {
@@ -257,15 +268,130 @@ public sealed partial class RelationRuntime
             _ => throw new InvalidOperationException("Unsupported dependency impact snapshot.")
         });
         return values.GroupBy(value => value.source, ReferenceEqualityComparer.Instance)
-            .Select(group => new SourceDependencyImpact(
-                group.Key,
-                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
-                    ? DependencySeverity.Invalid
-                    : DependencySeverity.Dirty)
+            .Select(group =>
             {
-                SourceIdentity = CreateSourceIdentity(sourceSet, group.Key)
+                var severity = group.Any(value => value.Severity == DependencyImpactKind.Invalid)
+                    ? DependencySeverity.Invalid
+                    : DependencySeverity.Dirty;
+                return new SourceDependencyImpact(group.Key, severity)
+                {
+                    SourceIdentity = CreateSourceIdentity(sourceSet, group.Key),
+                    Causes = detailLevel == RuntimeImpactDetailLevel.Causal
+                        ? CreateCauses(definition, group.Key, severity, prepared, commit, origins)
+                        : []
+                };
             })
             .ToArray();
+    }
+
+    private IReadOnlyList<MutationOrigin> CaptureMutationOrigins(PreparedMutation prepared)
+    {
+        var values = new List<MutationOrigin>();
+        foreach (var mutation in prepared.LifecycleMutations)
+        {
+            var (kind, set, source) = mutation switch
+            {
+                ObjectAdded added => (MutationOriginKind.ObjectAdded, added.Set, added.Instance),
+                ObjectRemoved removed => (MutationOriginKind.ObjectRemoved, removed.Set, removed.Instance),
+                _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+            };
+            values.Add(new MutationOrigin(values.Count, kind, source, null)
+            {
+                SourceIdentity = TryCreateSourceIdentity(set, source)
+            });
+        }
+        foreach (var change in prepared.Changes)
+            values.Add(new MutationOrigin(
+                values.Count,
+                change.OldValue is null && change.NewValue is null
+                    ? MutationOriginKind.CollectionChanged
+                    : MutationOriginKind.SourceMemberChanged,
+                change.Instance,
+                change.Member.Name)
+            {
+                SourceIdentity = change.Set is null ? null : TryCreateSourceIdentity(change.Set, change.Instance)
+            });
+        return values.ToArray();
+    }
+
+    private SourceIdentity? TryCreateSourceIdentity(IObjectSetDefinition set, object source)
+    {
+        try { return CreateSourceIdentity(set, source); }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    private IReadOnlyList<DependencyImpactCause> CreateCauses(
+        object definition,
+        object source,
+        DependencySeverity finalSeverity,
+        PreparedMutation prepared,
+        RuntimeCommitResult commit,
+        IReadOnlyList<MutationOrigin> origins)
+    {
+        var causes = new List<DependencyImpactCause>();
+        var analysis = definition switch
+        {
+            IDerivedDefinition derived => derived.Analysis,
+            IInvariantDefinition invariant => invariant.Analysis,
+            _ => throw new InvalidOperationException("Unsupported dependency definition.")
+        };
+        var directMembers = analysis.Dependencies
+            .Where(dependency => dependency.Path.Segments.Count == 1)
+            .Select(dependency => dependency.Path.Segments[0].Member)
+            .ToHashSet();
+        foreach (var change in prepared.Changes.Where(change =>
+                     ReferenceEquals(change.Instance, source) && directMembers.Contains(change.Member)))
+        {
+            var origin = origins.Single(value =>
+                ReferenceEquals(value.Source, source) && value.MemberName == change.Member.Name);
+            var rule = (definition as IDerivedDefinition)?.ImpactPolicy.SourceMemberRules
+                .SingleOrDefault(candidate => candidate.Member == change.Member);
+            causes.Add(new DirectSourceMemberCause(
+                origin.OriginId,
+                change.Member.Name,
+                rule is null ? "fixed fallback" : "member-specific conditional policy",
+                finalSeverity));
+        }
+        if (definition is IDerivedDefinition derivedDefinition)
+        {
+            foreach (var input in derivedDefinition.Inputs.OfType<RelationDerivedInput>())
+            {
+                if (!commit.RelationImpacts.TryGetValue(input.Relation, out var impact) ||
+                    !impact.AffectedLefts.Contains(source, ReferenceEqualityComparer.Instance))
+                    continue;
+                var added = impact.AddedPairs.Any(pair => ReferenceEquals(pair.Left, source));
+                var removed = impact.RemovedPairs.Any(pair => ReferenceEquals(pair.Left, source));
+                var kind = added ? RelationImpactCauseKind.MembershipAdded
+                    : removed ? RelationImpactCauseKind.MembershipRemoved
+                    : input.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
+                        ? RelationImpactCauseKind.ConservativeCandidate
+                        : RelationImpactCauseKind.RelatedItemChanged;
+                causes.Add(new RelationDependencyCause(
+                    _relationIds[input.Relation], kind,
+                    input.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
+                        ? ImpactCausePrecision.Conservative
+                        : ImpactCausePrecision.Exact)
+                { DefinitionKey = input.Relation.DefinitionKey });
+            }
+            foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
+                if (commit.DependencyPropagation.DerivedImpacts.Any(impact =>
+                        ReferenceEquals(impact.Definition, input.Upstream) &&
+                        impact.Sources.Contains(source, ReferenceEqualityComparer.Instance)))
+                    causes.Add(new UpstreamDerivedCause(
+                        _derivedIds[input.Upstream], ImpactCausePrecision.Exact)
+                    { DefinitionKey = input.Upstream.DefinitionKey });
+        }
+        else if (definition is IInvariantDefinition invariantDefinition)
+        {
+            foreach (var upstream in invariantDefinition.UpstreamDerived)
+                if (commit.DependencyPropagation.DerivedImpacts.Any(impact =>
+                        ReferenceEquals(impact.Definition, upstream) &&
+                        impact.Sources.Contains(source, ReferenceEqualityComparer.Instance)))
+                    causes.Add(new UpstreamDerivedCause(
+                        _derivedIds[upstream], ImpactCausePrecision.Exact)
+                    { DefinitionKey = upstream.DefinitionKey });
+        }
+        return causes.Distinct().ToArray();
     }
 
     private void CommitAdd(

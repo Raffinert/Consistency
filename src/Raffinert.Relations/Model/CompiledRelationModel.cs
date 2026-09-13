@@ -185,10 +185,17 @@ public sealed class CompiledRelationModel
                 derived.ImpactPolicy.MembershipRemoved,
                 derived.ImpactPolicy.ItemChanged,
                 derived.ImpactPolicy.SourceChanged)
-            { DefinitionKey = derived.DefinitionKey })
+            {
+                DefinitionKey = derived.DefinitionKey,
+                HasConditionalSourcePolicy = derived.ImpactPolicy.SourceMemberRules.Count > 0,
+                SourceMemberRuleCount = derived.ImpactPolicy.SourceMemberRules.Count,
+                SourceMemberRuleNames = derived.ImpactPolicy.SourceMemberRules
+                    .Select(rule => rule.Member.Name).ToArray()
+            })
                 .ToArray(),
             _invariants.Select((invariant, id) => new InvariantModelDiagnostics(
                 id,
+                invariant.SourceSet.Id,
                 invariant.UpstreamDerived.Select(upstream => derivedIds[upstream]).ToArray(),
                 invariant.PredicateExpression.Body.ToString(),
                 invariant.Analysis.Dependencies.Select(dependency =>

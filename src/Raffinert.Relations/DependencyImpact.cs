@@ -1,3 +1,6 @@
+using System.Linq.Expressions;
+using System.Reflection;
+
 namespace Raffinert.Relations;
 
 /// <summary>Controls whether an affected cached result is stale or immediately unusable.</summary>
@@ -11,13 +14,14 @@ public enum DependencySeverity
 }
 
 /// <summary>Configures semantic dependency severity for a derived definition.</summary>
-public sealed class DerivedImpactPolicyBuilder
+public class DerivedImpactPolicyBuilder
 {
     internal DependencySeverity AddedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal DependencySeverity RemovedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal DependencySeverity ItemChangedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal DependencySeverity SourceChangedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal bool IsConfigured { get; private set; }
+    internal List<SourceMemberImpactRule> SourceMemberRules { get; } = [];
 
     public DerivedImpactPolicyBuilder MembershipAdded(DependencySeverity severity)
     {
@@ -49,7 +53,8 @@ public sealed class DerivedImpactPolicyBuilder
     }
 
     internal DerivedImpactPolicy Build() =>
-        new(AddedSeverity, RemovedSeverity, ItemChangedSeverity, SourceChangedSeverity, IsConfigured);
+        new(AddedSeverity, RemovedSeverity, ItemChangedSeverity, SourceChangedSeverity, IsConfigured,
+            SourceMemberRules.ToArray());
 
     private static DependencySeverity Validate(DependencySeverity severity) =>
         Enum.IsDefined(severity)
@@ -57,12 +62,70 @@ public sealed class DerivedImpactPolicyBuilder
             : throw new ArgumentOutOfRangeException(nameof(severity));
 }
 
+/// <summary>Configures typed semantic dependency severity for a derived source.</summary>
+public sealed class DerivedImpactPolicyBuilder<TSource> : DerivedImpactPolicyBuilder where TSource : class
+{
+    public new DerivedImpactPolicyBuilder<TSource> MembershipAdded(DependencySeverity severity)
+    {
+        base.MembershipAdded(severity);
+        return this;
+    }
+
+    public new DerivedImpactPolicyBuilder<TSource> MembershipRemoved(DependencySeverity severity)
+    {
+        base.MembershipRemoved(severity);
+        return this;
+    }
+
+    public new DerivedImpactPolicyBuilder<TSource> ItemChanged(DependencySeverity severity)
+    {
+        base.ItemChanged(severity);
+        return this;
+    }
+
+    public new DerivedImpactPolicyBuilder<TSource> SourceChanged(DependencySeverity severity)
+    {
+        base.SourceChanged(severity);
+        return this;
+    }
+
+    /// <summary>
+    /// Classifies the normalized old/new transition of a directly tracked source member. The
+    /// classifier is deterministic model logic and must be side-effect-free.
+    /// </summary>
+    public DerivedImpactPolicyBuilder<TSource> SourceMemberChanged<TValue>(
+        Expression<Func<TSource, TValue>> member,
+        Func<TValue, TValue, DependencySeverity> classify)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        ArgumentNullException.ThrowIfNull(classify);
+        var body = member.Body is UnaryExpression { NodeType: ExpressionType.Convert } conversion
+            ? conversion.Operand
+            : member.Body;
+        if (body is not MemberExpression { Expression: ParameterExpression } access)
+            throw new ArgumentException("The expression must select one direct source member.", nameof(member));
+        SourceMemberRules.Add(new SourceMemberImpactRule(
+            access.Member,
+            (oldValue, newValue) => Validate(classify((TValue)oldValue!, (TValue)newValue!))));
+        return this;
+    }
+
+    private static DependencySeverity Validate(DependencySeverity severity) => Enum.IsDefined(severity)
+        ? severity
+        : throw new ArgumentOutOfRangeException(nameof(severity));
+}
+
+internal sealed record SourceMemberImpactRule(
+    MemberInfo Member,
+    Func<object?, object?, DependencySeverity> Classify);
+
 internal sealed record DerivedImpactPolicy(
     DependencySeverity MembershipAdded,
     DependencySeverity MembershipRemoved,
     DependencySeverity ItemChanged,
     DependencySeverity SourceChanged,
-    bool IsConfigured)
+    bool IsConfigured,
+    IReadOnlyList<SourceMemberImpactRule> SourceMemberRules)
 {
     public DependencyImpactKind ClassifyMembership(RelationImpact impact, object source)
     {

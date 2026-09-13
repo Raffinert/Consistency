@@ -40,6 +40,53 @@ public sealed record RelationMutationImpact(
 public sealed record SourceDependencyImpact(object Source, DependencySeverity Severity)
 {
     public SourceIdentity? SourceIdentity { get; init; }
+    public IReadOnlyList<DependencyImpactCause> Causes { get; init; } = [];
+}
+
+public enum RuntimeImpactDetailLevel { Summary, Causal }
+public enum ImpactCausePrecision { Exact, Conservative }
+public enum MutationOriginKind { SourceMemberChanged, CollectionChanged, ObjectAdded, ObjectRemoved }
+public enum RelationImpactCauseKind
+{
+    MembershipAdded,
+    MembershipRemoved,
+    RelatedItemChanged,
+    ConservativeCandidate
+}
+
+public sealed record MutationOrigin(
+    int OriginId,
+    MutationOriginKind Kind,
+    object Source,
+    string? MemberName)
+{
+    public SourceIdentity? SourceIdentity { get; init; }
+}
+
+public abstract record DependencyImpactCause(ImpactCausePrecision Precision);
+
+public sealed record DirectSourceMemberCause(
+    int OriginId,
+    string MemberName,
+    string Policy,
+    DependencySeverity ClassifiedSeverity)
+    : DependencyImpactCause(ImpactCausePrecision.Exact);
+
+public sealed record RelationDependencyCause(
+    int RelationId,
+    RelationImpactCauseKind Kind,
+    ImpactCausePrecision CausePrecision)
+    : DependencyImpactCause(CausePrecision)
+{
+    public string? DefinitionKey { get; init; }
+}
+
+public sealed record UpstreamDerivedCause(
+    int DerivedId,
+    ImpactCausePrecision CausePrecision)
+    : DependencyImpactCause(CausePrecision)
+{
+    public string? DefinitionKey { get; init; }
 }
 
 /// <summary>Describes a derived definition's source-scoped impacts.</summary>
@@ -215,7 +262,9 @@ public sealed class RuntimeApplyResult
         IReadOnlyList<DerivedMutationImpact> derivedImpacts,
         IReadOnlyList<InvariantMutationImpact> invariantImpacts,
         IReadOnlyList<RepairRequestInfo> repairRequests,
-        IReadOnlyList<ImmediateEvaluationRequestInfo> immediateEvaluationRequests)
+        IReadOnlyList<ImmediateEvaluationRequestInfo> immediateEvaluationRequests,
+        RuntimeImpactDetailLevel detailLevel,
+        IReadOnlyList<MutationOrigin> mutationOrigins)
     {
         ChangeImpact = changeImpact;
         RelationImpacts = relationImpacts;
@@ -223,6 +272,8 @@ public sealed class RuntimeApplyResult
         InvariantImpacts = invariantImpacts;
         RepairRequests = repairRequests;
         ImmediateEvaluationRequests = immediateEvaluationRequests;
+        DetailLevel = detailLevel;
+        MutationOrigins = mutationOrigins;
     }
 
     public ChangeImpact ChangeImpact { get; }
@@ -231,6 +282,38 @@ public sealed class RuntimeApplyResult
     public IReadOnlyList<InvariantMutationImpact> InvariantImpacts { get; }
     public IReadOnlyList<RepairRequestInfo> RepairRequests { get; }
     public IReadOnlyList<ImmediateEvaluationRequestInfo> ImmediateEvaluationRequests { get; }
+    public RuntimeImpactDetailLevel DetailLevel { get; }
+    public IReadOnlyList<MutationOrigin> MutationOrigins { get; }
+}
+
+public static class RuntimeImpactTraceRenderer
+{
+    public static string Render(RuntimeApplyResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var lines = new List<string>();
+        foreach (var impact in result.DerivedImpacts)
+            foreach (var source in impact.Sources)
+            {
+                lines.Add($"{impact.DefinitionKey ?? $"derived-{impact.DerivedId}"} -> {source.Severity}");
+                lines.AddRange(source.Causes.Select(cause => $"  because {Describe(cause)} [{cause.Precision}]"));
+            }
+        foreach (var impact in result.InvariantImpacts)
+            foreach (var source in impact.Sources)
+            {
+                lines.Add($"{impact.DefinitionKey ?? $"invariant-{impact.InvariantId}"} -> {source.Severity}");
+                lines.AddRange(source.Causes.Select(cause => $"  because {Describe(cause)} [{cause.Precision}]"));
+            }
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string Describe(DependencyImpactCause cause) => cause switch
+    {
+        DirectSourceMemberCause direct => $"{direct.MemberName} changed ({direct.Policy})",
+        RelationDependencyCause relation => $"{relation.DefinitionKey ?? $"relation-{relation.RelationId}"} {relation.Kind}",
+        UpstreamDerivedCause upstream => $"upstream {upstream.DefinitionKey ?? $"derived-{upstream.DerivedId}"}",
+        _ => cause.GetType().Name
+    };
 }
 
 /// <summary>A committed mutation's stable result data and separate in-process dispatch capability.</summary>

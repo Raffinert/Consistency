@@ -46,7 +46,8 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
-        false);
+        false,
+        []);
 
     internal DerivedBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
     {
@@ -55,10 +56,10 @@ public sealed class DerivedBuilder<TSource> where TSource : class
     }
 
     /// <summary>Configures semantic severity for direct source-member changes.</summary>
-    public DerivedBuilder<TSource> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    public DerivedBuilder<TSource> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new DerivedImpactPolicyBuilder();
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
         configure(builder);
         _impactPolicy = builder.Build();
         return this;
@@ -121,10 +122,10 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
     internal DerivedUpstreamBuilder(RelationModelBuilder model, ObjectSet<TSource> source,
         Derived<TSource, TUpstream> upstream) => (_model, _source, _upstream) = (model, source, upstream);
 
-    public DerivedUpstreamBuilder<TSource, TUpstream> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    public DerivedUpstreamBuilder<TSource, TUpstream> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new DerivedImpactPolicyBuilder();
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
         configure(builder);
         _impactPolicy = builder.Build();
         return this;
@@ -141,7 +142,7 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
-        DependencySeverity.Dirty, false);
+        DependencySeverity.Dirty, false, []);
 }
 
 public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSource : class
@@ -156,10 +157,10 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
         Derived<TSource, TFirst> first, Derived<TSource, TSecond> second) =>
         (_model, _source, _first, _second) = (model, source, first, second);
 
-    public DerivedUpstreamBuilder<TSource, TFirst, TSecond> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    public DerivedUpstreamBuilder<TSource, TFirst, TSecond> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new DerivedImpactPolicyBuilder();
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
         configure(builder);
         _impactPolicy = builder.Build();
         return this;
@@ -178,7 +179,7 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
-        DependencySeverity.Dirty, false);
+        DependencySeverity.Dirty, false, []);
 }
 
 public sealed class DerivedUsingBuilder<TSource, TItem>
@@ -193,7 +194,8 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
-        false);
+        false,
+        []);
     private bool _useIncrementalComputation;
     private bool _useConservativePropagation;
 
@@ -208,10 +210,10 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     }
 
     /// <summary>Configures semantic severity independently of the relation's access plan.</summary>
-    public DerivedUsingBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    public DerivedUsingBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new DerivedImpactPolicyBuilder();
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
         configure(builder);
         _impactPolicy = builder.Build();
         return this;

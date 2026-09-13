@@ -296,17 +296,33 @@ public sealed partial class RelationRuntime
     /// application callbacks. Use the returned dispatch handle to invoke them.
     /// </summary>
     public RuntimeApplication ApplyDetailed(MutationSet mutationSet) =>
-        ApplyDetailed(mutationSet, ChangeValidationMode.Default);
+        ApplyDetailed(mutationSet, ChangeValidationMode.Default, RuntimeImpactDetailLevel.Summary);
+
+    public RuntimeApplication ApplyDetailed(
+        MutationSet mutationSet,
+        RuntimeImpactDetailLevel detailLevel) =>
+        ApplyDetailed(mutationSet, ChangeValidationMode.Default, detailLevel);
 
     /// <summary>
     /// Validates and commits a mutation batch, returning stable impact/request data without invoking
     /// application callbacks. Use the returned dispatch handle to invoke them.
     /// </summary>
     public RuntimeApplication ApplyDetailed(MutationSet mutationSet, ChangeValidationMode validationMode)
+        => ApplyDetailed(mutationSet, validationMode, RuntimeImpactDetailLevel.Summary);
+
+    public RuntimeApplication ApplyDetailed(
+        MutationSet mutationSet,
+        ChangeValidationMode validationMode,
+        RuntimeImpactDetailLevel detailLevel)
     {
+        if (!Enum.IsDefined(detailLevel))
+            throw new ArgumentOutOfRangeException(nameof(detailLevel));
         var prepared = Prepare(mutationSet, validationMode);
+        var origins = detailLevel == RuntimeImpactDetailLevel.Causal
+            ? CaptureMutationOrigins(prepared)
+            : [];
         var result = CommitWithResult(prepared);
-        return CreateDetailedApplication(prepared, result);
+        return CreateDetailedApplication(prepared, result, detailLevel, origins);
     }
 
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>

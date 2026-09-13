@@ -77,10 +77,14 @@ public sealed record DerivedModelDiagnostics(
     DependencySeverity SourceChangedSeverity)
 {
     public string? DefinitionKey { get; init; }
+    public bool HasConditionalSourcePolicy { get; init; }
+    public int SourceMemberRuleCount { get; init; }
+    public IReadOnlyList<string> SourceMemberRuleNames { get; init; } = [];
 }
 
 public sealed record InvariantModelDiagnostics(
     int InvariantId,
+    int SourceObjectSetId,
     IReadOnlyList<int> UpstreamDerivedIds,
     string Predicate,
     IReadOnlyList<string> Dependencies,
