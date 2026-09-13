@@ -61,8 +61,8 @@ internal sealed class DependencyGraphRuntime
                 definition.UpstreamDerived.Select(upstream => derivedByDefinition[upstream]).ToArray()))
             .ToArray();
         _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
+            .OfType<RelationDerivedInput>()
             .Select(input => input.Relation)
-            .OfType<IRelationDefinition>()
             .Select(relation => (relation, node))));
         _derivedByMember = Group(_derivedNodes.SelectMany(node =>
             node.SourceDependencies.Concat(node.ItemDependencies)
@@ -71,10 +71,10 @@ internal sealed class DependencyGraphRuntime
         _invariantsByDerived = Group(_invariantNodes.SelectMany(node =>
             node.Derived.Select(derived => (derived, node))));
         _derivedByUpstream = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
-            .Select(input => input.Upstream).OfType<IDerivedDefinition>()
+            .OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
             .Select(upstream => (derivedByDefinition[upstream], node))));
         _upstreamsByDerived = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
-            .Select(input => input.Upstream).OfType<IDerivedDefinition>()
+            .OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
             .Select(upstream => (node, derivedByDefinition[upstream]))));
         _invariantsByMember = Group(_invariantNodes.SelectMany(node =>
             node.SourceDependencies.SelectMany(dependency => dependency.Path.Segments)
@@ -105,7 +105,7 @@ internal sealed class DependencyGraphRuntime
                 AddRoots(node.Relation.RightSet, node.ItemDependencies);
         }
         foreach (var node in Candidates(changes, _invariantsByMember))
-            AddRoots(node.Definition.Derived.SourceSet, node.SourceDependencies);
+            AddRoots(node.Definition.SourceSet, node.SourceDependencies);
 
         return rootsBySet.SelectMany(pair => pair.Value.Select(root => (pair.Key, root))).ToArray();
 
@@ -248,7 +248,7 @@ internal sealed class DependencyGraphRuntime
                 continue;
             node.ApplyInherited(policyActions);
             var invariantRoots = ResolveRoots(
-                node.Definition.Derived.SourceSet,
+                node.Definition.SourceSet,
                 node.SourceDependencies,
                 changes);
             if (invariantRoots.Count > 0)
@@ -314,7 +314,7 @@ internal sealed class DependencyGraphRuntime
 
         public IDerivedDefinition Definition { get; }
         public IRelationDefinition? Relation => Definition.Inputs
-            .Select(input => input.Relation).OfType<IRelationDefinition>().SingleOrDefault();
+            .OfType<RelationDerivedInput>().Select(input => input.Relation).SingleOrDefault();
         public IDerivedRuntimeState State { get; }
         public IReadOnlyList<TrackedExpressionDependency> SourceDependencies { get; }
         public IReadOnlyList<TrackedExpressionDependency> ItemDependencies { get; }

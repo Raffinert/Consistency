@@ -59,8 +59,10 @@ Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue>(Raffinert.Relations.De
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue1, TValue2>(Raffinert.Relations.Derived<TSource!, TValue1>! first, Raffinert.Relations.Derived<TSource!, TValue2>! second) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue1, TValue2>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
+Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
+Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TUpstream>!
 Raffinert.Relations.DerivedImpactPolicyBuilder
 Raffinert.Relations.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> void
 Raffinert.Relations.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!

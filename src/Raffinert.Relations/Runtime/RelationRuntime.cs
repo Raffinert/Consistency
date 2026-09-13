@@ -66,7 +66,8 @@ public sealed class CompiledRelationModel
             lines.Add($"  Relation materialization: {(relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized ? "ExactPropagation" : "None")}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
             var materialized = _derivedStates.Any(derived =>
-                derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation)));
+                derived.Inputs.OfType<RelationDerivedInput>()
+                    .Any(input => ReferenceEquals(input.Relation, relation)));
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies,
@@ -89,9 +90,13 @@ public sealed class CompiledRelationModel
         }
         foreach (var derived in _derivedStates)
         {
-            var inputs = derived.Inputs.Select(input => input.Relation is not null
-                ? $"relation:{input.Relation.RightSet.ObjectType.Name}"
-                : $"derived:{input.Upstream!.DefinitionKey ?? input.Upstream.SourceSet.ObjectType.Name}");
+            var inputs = derived.Inputs.Select(input => input switch
+            {
+                RelationDerivedInput relation => $"relation:{relation.Relation.RightSet.ObjectType.Name}",
+                UpstreamDerivedInput upstream =>
+                    $"derived:{upstream.Upstream.DefinitionKey ?? upstream.Upstream.SourceSet.ObjectType.Name}",
+                _ => throw new NotSupportedException($"Unknown derived input '{input.GetType().Name}'.")
+            });
             lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using [{string.Join(", ", inputs)}]: {derived.ComputationExpression.Body}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(derived.Analysis.Flags)}");
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
@@ -109,7 +114,7 @@ public sealed class CompiledRelationModel
         }
         foreach (var invariant in _invariants)
         {
-            lines.Add($"Invariant {invariant.Derived.SourceSet.ObjectType.Name}");
+            lines.Add($"Invariant {invariant.SourceSet.ObjectType.Name}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(invariant.Analysis.Flags)}");
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
                 invariant.Analysis.Flags,
@@ -164,9 +169,9 @@ public sealed class CompiledRelationModel
             _derivedStates.Select((derived, id) => new DerivedModelDiagnostics(
                 id,
                 derived.SourceSet.Id,
-                derived.Inputs.Select(input => input.Relation).OfType<IRelationDefinition>()
+                derived.Inputs.OfType<RelationDerivedInput>().Select(input => input.Relation)
                     .Select(relation => relationIds[relation]).ToArray(),
-                derived.Inputs.Select(input => input.Upstream).OfType<IDerivedDefinition>()
+                derived.Inputs.OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
                     .Select(upstream => derivedIds[upstream]).ToArray(),
                 derived.ComputationExpression.Body.ToString(),
                 derived.Analysis.Dependencies.Select(dependency =>
@@ -204,7 +209,8 @@ public sealed class CompiledRelationModel
     private string CreatePropagationReason(IRelationDefinition relation)
     {
         var consumers = _derivedStates.Where(derived =>
-            derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation))).ToArray();
+            derived.Inputs.OfType<RelationDerivedInput>()
+                .Any(input => ReferenceEquals(input.Relation, relation))).ToArray();
         if (relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             return "Explicit full-recompute consumer preference";
         if (consumers.Any(derived => derived.RequiresExactPropagation))
@@ -770,7 +776,7 @@ public sealed class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new InvariantMutationImpact(
                 _invariantIds[group.Key],
-                CreateSourceImpacts(group, group.Key.Derived.SourceSet))
+                CreateSourceImpacts(group, group.Key.SourceSet))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
@@ -782,7 +788,7 @@ public sealed class RelationRuntime
                 request.Reason.ToSeverity())
             {
                 DefinitionKey = request.Invariant.DefinitionKey,
-                SourceIdentity = CreateSourceIdentity(request.Invariant.Derived.SourceSet, request.Source)
+                SourceIdentity = CreateSourceIdentity(request.Invariant.SourceSet, request.Source)
             })
             .ToArray();
         var immediateRequests = actions.ImmediateEvaluations
@@ -791,7 +797,7 @@ public sealed class RelationRuntime
                 request.Source)
             {
                 DefinitionKey = request.Invariant.Definition.DefinitionKey,
-                SourceIdentity = CreateSourceIdentity(request.Invariant.Definition.Derived.SourceSet, request.Source)
+                SourceIdentity = CreateSourceIdentity(request.Invariant.Definition.SourceSet, request.Source)
             })
             .ToArray();
         var result = new RuntimeApplyResult(

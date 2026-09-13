@@ -229,8 +229,8 @@ internal sealed class NavigationIndexRegistry
                 {
                     ExpressionParameterRole.DerivedSource => derived.SourceSet,
                     ExpressionParameterRole.RelationItem => derived.Inputs
+                        .OfType<RelationDerivedInput>()
                         .Select(input => input.Relation)
-                        .OfType<IRelationDefinition>()
                         .Single().RightSet,
                     _ => null
                 };
@@ -245,7 +245,7 @@ internal sealed class NavigationIndexRegistry
             foreach (var dependency in invariant.Analysis.Dependencies
                          .Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource))
             {
-                paths[invariant.Derived.SourceSet].Add(dependency.Path);
+                paths[invariant.SourceSet].Add(dependency.Path);
                 EnsurePathIndexes(dependency.Path);
             }
         }

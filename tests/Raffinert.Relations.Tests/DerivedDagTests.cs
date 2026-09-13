@@ -95,6 +95,61 @@ public sealed class DerivedDagTests
     }
 
     [Fact]
+    public void Composed_value_configures_direct_source_severity_without_weakening_upstream_severity()
+    {
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<Line>().Key(line => line.Id);
+        var basis = model.Derived(lines)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(line => line.Ordered);
+        var available = model.Derived(lines).Using(basis)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Dirty))
+            .Compute((line, ordered) => ordered - line.Received);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
+        runtime.Add(lines, line);
+        Assert.Equal(8m, runtime.Get(available, line));
+
+        line.Received = 3m;
+        runtime.Apply(Change.Property(lines, line, value => value.Received, 2m, 3m));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(basis, line));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(available, line));
+        Assert.Equal(7m, runtime.Get(available, line));
+
+        line.Ordered = 12m;
+        line.Received = 4m;
+        runtime.Apply(MutationSet.Create(
+            Change.Property(lines, line, value => value.Received, 3m, 4m),
+            Change.Property(lines, line, value => value.Ordered, 10m, 12m)));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(available, line));
+    }
+
+    [Fact]
+    public void Two_upstream_builder_supports_invalid_direct_source_impact_and_normalized_inputs()
+    {
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<Line>().Key(line => line.Id);
+        var ordered = model.Derived(lines).Compute(line => line.Ordered);
+        var received = model.Derived(lines).Compute(line => line.Received);
+        var remaining = model.Derived(lines).Using(ordered, received)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute((line, first, second) => first - second + line.Offset);
+        var invariant = model.Invariant(lines).Using(remaining, ordered)
+            .Must((_, value, maximum) => value <= maximum);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m, Offset = 1m };
+        runtime.Add(lines, line);
+        Assert.Equal(9m, runtime.Get(remaining, line));
+
+        line.Offset = 2m;
+        runtime.Apply(Change.Property(lines, line, value => value.Offset, 1m, 2m));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(remaining, line));
+        Assert.Same(lines.Definition, invariant.Definition.SourceSet);
+        Assert.All(remaining.Definition.Inputs, input => Assert.IsType<UpstreamDerivedInput>(input));
+    }
+
+    [Fact]
     public void Multi_input_invariant_merges_upstreams_and_schedules_once_per_source()
     {
         var repairs = new List<Line>();
@@ -154,6 +209,7 @@ public sealed class DerivedDagTests
         public Guid Id { get; init; }
         public decimal Ordered { get; set; }
         public decimal Received { get; set; }
+        public decimal Offset { get; set; }
     }
 
     private static (int Id, DependencySeverity Severity)[] ApplyOrderedBatch(bool upstreamFirst)

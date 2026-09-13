@@ -95,7 +95,7 @@ public sealed class RelationModelBuilder
                 invariant.AllowIncompleteDependencies);
         }
         foreach (var relation in _derivedStates.SelectMany(derived => derived.Inputs)
-                     .Select(input => input.Relation).OfType<IRelationDefinition>().Distinct())
+                     .OfType<RelationDerivedInput>().Select(input => input.Relation).Distinct())
         {
             ValidateComplete(
                 "Materialized relation",
@@ -103,7 +103,8 @@ public sealed class RelationModelBuilder
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies);
             var consumers = _derivedStates.Where(derived =>
-                derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation)));
+                derived.Inputs.OfType<RelationDerivedInput>()
+                    .Any(input => ReferenceEquals(input.Relation, relation)));
             if (consumers.All(derived => derived.PrefersConservativePropagation) &&
                 !consumers.Any(derived => derived.RequiresExactPropagation))
                 relation.UseConservativePropagation();

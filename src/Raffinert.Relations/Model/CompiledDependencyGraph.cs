@@ -36,7 +36,7 @@ internal sealed class CompiledDependencyGraph
             .ToDictionary(pair => pair.definition, pair => pair.id, ReferenceEqualityComparer.Instance);
         var edges = new List<CompiledDependencyEdge>();
         foreach (var downstream in derived)
-            foreach (var upstream in downstream.Inputs.Select(input => input.Upstream).OfType<IDerivedDefinition>())
+            foreach (var upstream in downstream.Inputs.OfType<UpstreamDerivedInput>().Select(input => input.Upstream))
                 edges.Add(new CompiledDependencyEdge(ids[upstream], ids[downstream]));
         foreach (var invariant in invariants)
             foreach (var upstream in invariant.UpstreamDerived)
