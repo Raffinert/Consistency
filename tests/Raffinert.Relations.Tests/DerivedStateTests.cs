@@ -1000,6 +1000,7 @@ public sealed class DerivedStateTests
                 .MembershipAdded(DependencySeverity.Dirty)
                 .MembershipRemoved(DependencySeverity.Invalid))
             .Compute((_, matches) => matches.Count);
+        var invariant = model.Invariant(sources).Using(count).Must((_, value) => value >= 0);
         var addedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var removedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
@@ -1009,12 +1010,25 @@ public sealed class DerivedStateTests
         runtime.Add(items, item);
         Assert.Equal(0, runtime.Get(count, addedSource));
         Assert.Equal(1, runtime.Get(count, removedSource));
+        Assert.True(runtime.Evaluate(invariant, addedSource));
+        Assert.True(runtime.Evaluate(invariant, removedSource));
         item.Code = "A";
 
-        runtime.Apply(Change.Property(items, item, value => value.Code, "B", "A"));
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, item, value => value.Code, "B", "A")));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, addedSource));
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, removedSource));
+        var publicSources = Assert.Single(result.DerivedImpacts).Sources;
+        Assert.Equal(DependencySeverity.Dirty,
+            Assert.Single(publicSources, value => ReferenceEquals(value.Source, addedSource)).Severity);
+        Assert.Equal(DependencySeverity.Invalid,
+            Assert.Single(publicSources, value => ReferenceEquals(value.Source, removedSource)).Severity);
+        var invariantSources = Assert.Single(result.InvariantImpacts).Sources;
+        Assert.Equal(DependencySeverity.Dirty,
+            Assert.Single(invariantSources, value => ReferenceEquals(value.Source, addedSource)).Severity);
+        Assert.Equal(DependencySeverity.Invalid,
+            Assert.Single(invariantSources, value => ReferenceEquals(value.Source, removedSource)).Severity);
     }
 
     [Fact]
@@ -1157,11 +1171,14 @@ public sealed class DerivedStateTests
         Assert.Same(item, addedPair.Right);
         var derivedImpact = Assert.Single(result.DerivedImpacts);
         Assert.Equal(0, derivedImpact.DerivedId);
-        Assert.Equal(DependencySeverity.Invalid, derivedImpact.Severity);
-        Assert.Equal([source], derivedImpact.Sources);
+        var derivedSource = Assert.Single(derivedImpact.Sources);
+        Assert.Same(source, derivedSource.Source);
+        Assert.Equal(DependencySeverity.Invalid, derivedSource.Severity);
         var invariantImpact = Assert.Single(result.InvariantImpacts);
         Assert.Equal(0, invariantImpact.InvariantId);
-        Assert.Equal(DependencySeverity.Invalid, invariantImpact.Severity);
+        var invariantSource = Assert.Single(invariantImpact.Sources);
+        Assert.Same(source, invariantSource.Source);
+        Assert.Equal(DependencySeverity.Invalid, invariantSource.Severity);
         var repair = Assert.Single(result.RepairRequests);
         Assert.Equal(0, repair.InvariantId);
         Assert.Same(source, repair.Source);

@@ -32,11 +32,16 @@ public sealed record RelationMutationImpact(
     public string? DefinitionKey { get; init; }
 }
 
-/// <summary>Describes a derived definition's affected sources and strongest severity.</summary>
+/// <summary>Describes one source's dependency impact.</summary>
+public sealed record SourceDependencyImpact(object Source, DependencySeverity Severity)
+{
+    public SourceIdentity? SourceIdentity { get; init; }
+}
+
+/// <summary>Describes a derived definition's source-scoped impacts.</summary>
 public sealed record DerivedMutationImpact(
     int DerivedId,
-    DependencySeverity Severity,
-    IReadOnlyList<object> Sources)
+    IReadOnlyList<SourceDependencyImpact> Sources)
 {
     public string? DefinitionKey { get; init; }
 }
@@ -44,8 +49,7 @@ public sealed record DerivedMutationImpact(
 /// <summary>Describes an invariant definition's dependency impact.</summary>
 public sealed record InvariantMutationImpact(
     int InvariantId,
-    DependencySeverity Severity,
-    IReadOnlyList<object> Sources)
+    IReadOnlyList<SourceDependencyImpact> Sources)
 {
     public string? DefinitionKey { get; init; }
 }

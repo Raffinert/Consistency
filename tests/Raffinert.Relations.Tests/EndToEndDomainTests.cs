@@ -45,8 +45,9 @@ public sealed class EndToEndDomainTests
         var update = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(scenario.Receipts, receipt, value => value.Quantity, 2m, 6m)));
 
-        Assert.Equal([firstLine], Assert.Single(update.DerivedImpacts).Sources);
-        Assert.Equal(DependencySeverity.Invalid, Assert.Single(update.DerivedImpacts).Severity);
+        var impact = Assert.Single(Assert.Single(update.DerivedImpacts).Sources);
+        Assert.Same(firstLine, impact.Source);
+        Assert.Equal(DependencySeverity.Invalid, impact.Severity);
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Received, firstLine));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Received, otherLine));
         Assert.Single(update.RepairRequests);

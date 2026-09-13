@@ -101,10 +101,8 @@ Raffinert.Relations.DerivedMutationImpact.DerivedId.get -> int
 Raffinert.Relations.DerivedMutationImpact.DerivedId.init -> void
 Raffinert.Relations.DerivedMutationImpact.DefinitionKey.get -> string?
 Raffinert.Relations.DerivedMutationImpact.DefinitionKey.init -> void
-Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, Raffinert.Relations.DependencySeverity Severity, System.Collections.Generic.IReadOnlyList<object!>! Sources) -> void
-Raffinert.Relations.DerivedMutationImpact.Severity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DerivedMutationImpact.Severity.init -> void
-Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<object!>!
+Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>! Sources) -> void
+Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
 Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
@@ -161,10 +159,8 @@ Raffinert.Relations.InvariantMutationImpact.InvariantId.get -> int
 Raffinert.Relations.InvariantMutationImpact.InvariantId.init -> void
 Raffinert.Relations.InvariantMutationImpact.DefinitionKey.get -> string?
 Raffinert.Relations.InvariantMutationImpact.DefinitionKey.init -> void
-Raffinert.Relations.InvariantMutationImpact.InvariantMutationImpact(int InvariantId, Raffinert.Relations.DependencySeverity Severity, System.Collections.Generic.IReadOnlyList<object!>! Sources) -> void
-Raffinert.Relations.InvariantMutationImpact.Severity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.InvariantMutationImpact.Severity.init -> void
-Raffinert.Relations.InvariantMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<object!>!
+Raffinert.Relations.InvariantMutationImpact.InvariantMutationImpact(int InvariantId, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>! Sources) -> void
+Raffinert.Relations.InvariantMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
 Raffinert.Relations.InvariantMutationImpact.Sources.init -> void
 Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Relations.InvariantReaction
@@ -342,6 +338,14 @@ Raffinert.Relations.SourceIdentity.SourceKey.get -> object!
 Raffinert.Relations.SourceIdentity.SourceKey.init -> void
 Raffinert.Relations.SourceIdentity.SourceType.get -> System.Type!
 Raffinert.Relations.SourceIdentity.SourceType.init -> void
+Raffinert.Relations.SourceDependencyImpact
+Raffinert.Relations.SourceDependencyImpact.Severity.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.SourceDependencyImpact.Severity.init -> void
+Raffinert.Relations.SourceDependencyImpact.Source.get -> object!
+Raffinert.Relations.SourceDependencyImpact.Source.init -> void
+Raffinert.Relations.SourceDependencyImpact.SourceDependencyImpact(object! Source, Raffinert.Relations.DependencySeverity Severity) -> void
+Raffinert.Relations.SourceDependencyImpact.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.SourceDependencyImpact.SourceIdentity.init -> void
 Raffinert.Relations.RuntimeApplyResult
 Raffinert.Relations.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!

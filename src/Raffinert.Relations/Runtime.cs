@@ -687,11 +687,7 @@ public sealed class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new DerivedMutationImpact(
                 _derivedIds[group.Key],
-                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
-                    ? DependencySeverity.Invalid
-                    : DependencySeverity.Dirty,
-                Array.AsReadOnly(group.SelectMany(value => value.Sources)
-                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()))
+                CreateSourceImpacts(group, group.Key.SourceSet))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.DerivedId)
             .ToArray();
@@ -699,11 +695,7 @@ public sealed class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new InvariantMutationImpact(
                 _invariantIds[group.Key],
-                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
-                    ? DependencySeverity.Invalid
-                    : DependencySeverity.Dirty,
-                Array.AsReadOnly(group.SelectMany(value => value.Sources)
-                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()))
+                CreateSourceImpacts(group, group.Key.Derived.SourceSet))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
@@ -739,6 +731,28 @@ public sealed class RelationRuntime
 
     private SourceIdentity CreateSourceIdentity(IObjectSetDefinition set, object source) =>
         new(set.DefinitionKey, set.ObjectType, _sets[set].GetRegisteredKey(source));
+
+    private IReadOnlyList<SourceDependencyImpact> CreateSourceImpacts<TSnapshot>(
+        IEnumerable<TSnapshot> snapshots,
+        IObjectSetDefinition sourceSet) where TSnapshot : class
+    {
+        var values = snapshots.SelectMany(snapshot => snapshot switch
+        {
+            DerivedImpactSnapshot derived => derived.Sources.Select(source => (source, derived.Severity)),
+            InvariantImpactSnapshot invariant => invariant.Sources.Select(source => (source, invariant.Severity)),
+            _ => throw new InvalidOperationException("Unsupported dependency impact snapshot.")
+        });
+        return values.GroupBy(value => value.source, ReferenceEqualityComparer.Instance)
+            .Select(group => new SourceDependencyImpact(
+                group.Key,
+                group.Any(value => value.Severity == DependencyImpactKind.Invalid)
+                    ? DependencySeverity.Invalid
+                    : DependencySeverity.Dirty)
+            {
+                SourceIdentity = CreateSourceIdentity(sourceSet, group.Key)
+            })
+            .ToArray();
+    }
 
     private void CommitAdd(
         ObjectAdded mutation,
