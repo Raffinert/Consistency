@@ -47,10 +47,10 @@ Raffinert.Relations.DependencyCompletenessIssue.OpaqueCode = 1 -> Raffinert.Rela
 Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DependencySeverity.Dirty = 0 -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DependencySeverity.Invalid = 1 -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.Derived<TSource, TItem, TValue>
-Raffinert.Relations.Derived<TSource, TItem, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Derived<TSource!, TItem!, TValue>!
-Raffinert.Relations.Derived<TSource, TItem, TValue>.DefinitionKey.get -> string?
-Raffinert.Relations.Derived<TSource, TItem, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Derived<TSource!, TItem!, TValue>!
+Raffinert.Relations.Derived<TSource, TValue>
+Raffinert.Relations.Derived<TSource, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Derived<TSource!, TValue>!
+Raffinert.Relations.Derived<TSource, TValue>.DefinitionKey.get -> string?
+Raffinert.Relations.Derived<TSource, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Relations.Relation<TSource!, TItem!>! relation) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedImpactPolicyBuilder
@@ -104,7 +104,7 @@ Raffinert.Relations.DerivedMutationImpact.Severity.init -> void
 Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<object!>!
 Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TItem!, TValue>!
+Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedValueState
@@ -121,14 +121,14 @@ Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.get -> object!
 Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
 Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.init -> void
-Raffinert.Relations.Invariant<TSource, TItem, TValue>
-Raffinert.Relations.Invariant<TSource, TItem, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
-Raffinert.Relations.Invariant<TSource, TItem, TValue>.DefinitionKey.get -> string?
-Raffinert.Relations.Invariant<TSource, TItem, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
-Raffinert.Relations.Invariant<TSource, TItem, TValue>.ReactWith(Raffinert.Relations.InvariantReaction reaction) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
-Raffinert.Relations.Invariant<TSource, TItem, TValue>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
+Raffinert.Relations.Invariant<TSource>
+Raffinert.Relations.Invariant<TSource>.AllowIncompleteDependencies() -> Raffinert.Relations.Invariant<TSource!>!
+Raffinert.Relations.Invariant<TSource>.DefinitionKey.get -> string?
+Raffinert.Relations.Invariant<TSource>.Named(string! definitionKey) -> Raffinert.Relations.Invariant<TSource!>!
+Raffinert.Relations.Invariant<TSource>.ReactWith(Raffinert.Relations.InvariantReaction reaction) -> Raffinert.Relations.Invariant<TSource!>!
+Raffinert.Relations.Invariant<TSource>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Relations.Invariant<TSource!>!
 Raffinert.Relations.InvariantBuilder<TSource>
-Raffinert.Relations.InvariantBuilder<TSource>.Using<TItem, TValue>(Raffinert.Relations.Derived<TSource!, TItem!, TValue>! derived) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TItem!, TValue>!
+Raffinert.Relations.InvariantBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TValue>!
 Raffinert.Relations.InvariantEvaluationState
 Raffinert.Relations.InvariantEvaluationState.Dirty = 3 -> Raffinert.Relations.InvariantEvaluationState
 Raffinert.Relations.InvariantEvaluationState.Invalid = 4 -> Raffinert.Relations.InvariantEvaluationState
@@ -168,8 +168,8 @@ Raffinert.Relations.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Relat
 Raffinert.Relations.InvariantReaction.MarkDirty = 1 -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantReaction.MarkInvalid = 2 -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantUsingBuilder<TSource, TItem, TValue>
-Raffinert.Relations.InvariantUsingBuilder<TSource, TItem, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
+Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>
+Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!>!
 Raffinert.Relations.MutationSet
 Raffinert.Relations.ObjectAdded
 Raffinert.Relations.ObjectAdded.Instance.get -> object!
@@ -284,10 +284,10 @@ Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSe
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
-Raffinert.Relations.RelationRuntime.Evaluate<TSource, TItem, TValue>(Raffinert.Relations.Invariant<TSource!, TItem!, TValue>! invariant, TSource! source) -> bool
-Raffinert.Relations.RelationRuntime.Get<TSource, TItem, TValue>(Raffinert.Relations.Derived<TSource!, TItem!, TValue>! derived, TSource! source) -> TValue
-Raffinert.Relations.RelationRuntime.GetState<TSource, TItem, TValue>(Raffinert.Relations.Derived<TSource!, TItem!, TValue>! derived, TSource! source) -> Raffinert.Relations.DerivedValueState
-Raffinert.Relations.RelationRuntime.GetState<TSource, TItem, TValue>(Raffinert.Relations.Invariant<TSource!, TItem!, TValue>! invariant, TSource! source) -> Raffinert.Relations.InvariantEvaluationState
+Raffinert.Relations.RelationRuntime.Evaluate<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> bool
+Raffinert.Relations.RelationRuntime.Get<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Relations.RelationRuntime.GetState<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, TSource! source) -> Raffinert.Relations.DerivedValueState
+Raffinert.Relations.RelationRuntime.GetState<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> Raffinert.Relations.InvariantEvaluationState
 Raffinert.Relations.RelationRuntime.Prepare(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.PreparedMutation!
 Raffinert.Relations.RelationRuntime.Prepare(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.PreparedMutation!
 Raffinert.Relations.RelationRuntime.Related<TLeft, TRight>(Raffinert.Relations.Relation<TLeft!, TRight!>! relation, TLeft! left) -> System.Collections.Generic.IReadOnlyList<TRight!>!

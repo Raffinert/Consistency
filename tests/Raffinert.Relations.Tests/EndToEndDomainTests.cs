@@ -128,8 +128,8 @@ public sealed class EndToEndDomainTests
         ObjectSet<PurchaseLine> Lines,
         ObjectSet<GoodsReceipt> Receipts,
         Relation<PurchaseLine, GoodsReceipt> Matches,
-        Derived<PurchaseLine, GoodsReceipt, decimal> Received,
-        Invariant<PurchaseLine, GoodsReceipt, decimal> QuantityInvariant);
+        Derived<PurchaseLine, decimal> Received,
+        Invariant<PurchaseLine> QuantityInvariant);
 
     private sealed class PurchasingContext : DbContext
     {

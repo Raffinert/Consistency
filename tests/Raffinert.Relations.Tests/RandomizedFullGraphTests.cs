@@ -271,7 +271,7 @@ public sealed class RandomizedFullGraphTests
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
         Relation<DerivedSourceRecord, DerivedItemRecord> Relation,
-        Derived<DerivedSourceRecord, DerivedItemRecord, decimal> Derived,
-        Invariant<DerivedSourceRecord, DerivedItemRecord, decimal> Invariant,
+        Derived<DerivedSourceRecord, decimal> Derived,
+        Invariant<DerivedSourceRecord> Invariant,
         List<Guid> Repairs);
 }

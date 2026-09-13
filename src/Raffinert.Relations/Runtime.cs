@@ -402,8 +402,8 @@ public sealed class RelationRuntime
         return ((RelationRuntimeState<TLeft, TRight>)state).RelatedFromRight(right);
     }
 
-    public TValue Get<TSource, TItem, TValue>(Derived<TSource, TItem, TValue> derived, TSource source)
-        where TSource : class where TItem : class
+    public TValue Get<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
+        where TSource : class
     {
         ArgumentNullException.ThrowIfNull(derived);
         ArgumentNullException.ThrowIfNull(source);
@@ -411,37 +411,37 @@ public sealed class RelationRuntime
             throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
         if (!_sets[derived.Definition.SourceSet].Contains(source))
             throw new InvalidOperationException("The source instance is not registered in the derived state's object set.");
-        return ((DerivedRuntimeState<TSource, TItem, TValue>)state).Get(source);
+        return (TValue)state.GetValue(source)!;
     }
 
-    public DerivedValueState GetState<TSource, TItem, TValue>(Derived<TSource, TItem, TValue> derived, TSource source)
-        where TSource : class where TItem : class
+    public DerivedValueState GetState<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
+        where TSource : class
     {
         ArgumentNullException.ThrowIfNull(derived);
         ArgumentNullException.ThrowIfNull(source);
         if (!_derivedStates.TryGetValue(derived.Definition, out var state))
             throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
-        return ((DerivedRuntimeState<TSource, TItem, TValue>)state).GetState(source);
+        return state.GetValueState(source);
     }
 
-    public bool Evaluate<TSource, TItem, TValue>(Invariant<TSource, TItem, TValue> invariant, TSource source)
-        where TSource : class where TItem : class
+    public bool Evaluate<TSource>(Invariant<TSource> invariant, TSource source)
+        where TSource : class
     {
         ArgumentNullException.ThrowIfNull(invariant);
         ArgumentNullException.ThrowIfNull(source);
         if (!_invariants.TryGetValue(invariant.Definition, out var state))
             throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
-        return ((InvariantRuntimeState<TSource, TItem, TValue>)state).Evaluate(source);
+        return state.EvaluateValue(source);
     }
 
-    public InvariantEvaluationState GetState<TSource, TItem, TValue>(Invariant<TSource, TItem, TValue> invariant, TSource source)
-        where TSource : class where TItem : class
+    public InvariantEvaluationState GetState<TSource>(Invariant<TSource> invariant, TSource source)
+        where TSource : class
     {
         ArgumentNullException.ThrowIfNull(invariant);
         ArgumentNullException.ThrowIfNull(source);
         if (!_invariants.TryGetValue(invariant.Definition, out var state))
             throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
-        return ((InvariantRuntimeState<TSource, TItem, TValue>)state).GetState(source);
+        return state.GetValueState(source);
     }
 
     public ChangeImpact Apply(PropertyChange change)

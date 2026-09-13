@@ -1166,7 +1166,7 @@ public sealed class DerivedStateTests
         var count = model.Derived(sources).Using(relation)
             .Compute((source, matches) => matches.Count);
         RelationRuntime? runtime = null;
-        Invariant<CodeHolder, CodeHolder, int>? invariant = null;
+        Invariant<CodeHolder>? invariant = null;
         var observedRelatedCount = -1;
         var observedDerivedState = DerivedValueState.Fresh;
         var observedInvariantState = InvariantEvaluationState.Unknown;
@@ -1258,7 +1258,7 @@ public sealed class DerivedStateTests
     private static RelationModelBuilder CreateQuantityModel(
         out ObjectSet<DerivedSourceRecord> sources,
         out ObjectSet<DerivedItemRecord> items,
-        out Derived<DerivedSourceRecord, DerivedItemRecord, decimal> derived,
+        out Derived<DerivedSourceRecord, decimal> derived,
         System.Linq.Expressions.Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, decimal>> computation,
         bool forceScan = false)
     {
@@ -1318,7 +1318,7 @@ public sealed class DerivedStateTests
         RelationRuntime Runtime,
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
-        Derived<DerivedSourceRecord, DerivedItemRecord, decimal> Derived,
+        Derived<DerivedSourceRecord, decimal> Derived,
         DerivedSourceRecord Source,
         DerivedItemRecord Item);
 
@@ -1326,7 +1326,7 @@ public sealed class DerivedStateTests
         RelationRuntime Runtime,
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
-        Derived<DerivedSourceRecord, DerivedItemRecord, decimal> Total,
+        Derived<DerivedSourceRecord, decimal> Total,
         DerivedSourceRecord Source);
 
     private sealed class InvalidMembershipImpactPolicy : IDependencyImpactPolicy
