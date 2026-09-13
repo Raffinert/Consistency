@@ -541,10 +541,20 @@ public sealed class RelationRuntime
     {
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
-        var snapshot = _rollbackSnapshotsEnabled ? CaptureState() : null;
+        var plannedImpact = new ResolvedChangeImpact();
+        foreach (var change in prepared.Changes)
+            plannedImpact.MergeFrom(_impactResolver.Resolve(change));
+        var navigationRoots = _dependencyGraph.ResolveNavigationRoots(plannedImpact, prepared.Changes);
+        var snapshot = _rollbackSnapshotsEnabled
+            ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
+            : null;
         try
         {
-            var result = CommitMutations(prepared.LifecycleMutations, prepared.Changes);
+            var result = CommitMutations(
+                prepared.LifecycleMutations,
+                prepared.Changes,
+                plannedImpact,
+                navigationRoots);
             _version++;
             prepared.MarkCommitted(result.PolicyActions);
             return result.Impact;
@@ -564,17 +574,31 @@ public sealed class RelationRuntime
         return this;
     }
 
-    private RuntimeStateSnapshot CaptureState() => new(
-        _sets.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
-        _relations.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
-        _navigation.CaptureState(),
-        _dependencyGraph.CaptureState(),
+    private RuntimeStateSnapshot CaptureState(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes,
+        ResolvedChangeImpact impact,
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
+    {
+        var lifecycleSets = lifecycleMutations.Select(mutation => mutation is ObjectAdded added
+            ? added.Set
+            : ((ObjectRemoved)mutation).Set).ToHashSet();
+        var affectedRelations = impact.AffectedRelations.ToHashSet();
+        affectedRelations.UnionWith(_relations.Keys.Where(relation =>
+            lifecycleSets.Contains(relation.LeftSet) || lifecycleSets.Contains(relation.RightSet)));
+        var navigationChanged = lifecycleMutations.Count > 0 || navigationRoots.Count > 0;
+        return new RuntimeStateSnapshot(
+        lifecycleSets.ToDictionary(set => set, set => _sets[set].CaptureState()),
+        affectedRelations.ToDictionary(relation => relation, relation => _relations[relation].CaptureState()),
+        navigationChanged ? _navigation.CaptureState() : null,
+        _dependencyGraph.CaptureState(affectedRelations, changes),
         LastRelationImpacts,
         _reindexedRoots,
         _affectedSources,
         _relationPairsAdded,
         _relationPairsRemoved,
         _policyRequestsEmitted);
+    }
 
     private void RestoreState(RuntimeStateSnapshot snapshot)
     {
@@ -582,7 +606,8 @@ public sealed class RelationRuntime
             _sets[pair.Key].RestoreState(pair.Value);
         foreach (var pair in snapshot.Relations)
             _relations[pair.Key].RestoreState(pair.Value);
-        _navigation.RestoreState(snapshot.Navigation);
+        if (snapshot.Navigation is not null)
+            _navigation.RestoreState(snapshot.Navigation);
         _dependencyGraph.RestoreState(snapshot.Dependencies);
         LastRelationImpacts = snapshot.LastRelationImpacts;
         _reindexedRoots = snapshot.ReindexedRoots;
@@ -595,7 +620,7 @@ public sealed class RelationRuntime
     private sealed record RuntimeStateSnapshot(
         IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
         IReadOnlyDictionary<IRelationDefinition, object> Relations,
-        object Navigation,
+        object? Navigation,
         object Dependencies,
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts,
         long ReindexedRoots,
@@ -633,7 +658,9 @@ public sealed class RelationRuntime
 
     private RuntimeCommitResult CommitMutations(
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
-        IReadOnlyList<PropertyChange> changes)
+        IReadOnlyList<PropertyChange> changes,
+        ResolvedChangeImpact impact,
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
     {
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
         foreach (var mutation in lifecycleMutations)
@@ -643,11 +670,7 @@ public sealed class RelationRuntime
             else
                 CommitRemove((ObjectRemoved)mutation, relationDeltas);
         }
-        var impact = new ResolvedChangeImpact();
-        foreach (var change in changes)
-            impact.MergeFrom(_impactResolver.Resolve(change));
-
-        foreach (var (rootSet, root) in _dependencyGraph.ResolveNavigationRoots(impact, changes))
+        foreach (var (rootSet, root) in navigationRoots)
             _navigation.RefreshRoot(rootSet, root);
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)

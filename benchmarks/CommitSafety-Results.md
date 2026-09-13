@@ -33,3 +33,12 @@ which confirms the all-set prepared-domain simulation cost targeted by Task 7. T
 additional snapshot cost is also material: at 100,000 retained objects it adds about
 54 ms and 31 MB per mutation. This is sufficient evidence to proceed with touched-set
 validation and scoped rollback state while preserving exception atomicity.
+
+## After touched-set validation and scoped snapshots
+
+The same matrix was rerun after Tasks 7 and 8. The safe path remains effectively flat
+across 1,000, 10,000, and 100,000 unrelated retained objects and across 1, 100, and
+1,000 retained pairs. At 100,000 objects it measured 2.20–2.22 us and 11.97 KB versus
+1.96–2.00 us and 10.47 KB for the benchmark-only unsafe comparison. Rollback safety
+therefore adds roughly 0.25 us and 1.5 KB to this fixed mutation instead of scaling with
+the unrelated retained graph.

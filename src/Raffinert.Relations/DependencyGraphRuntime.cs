@@ -109,26 +109,41 @@ internal sealed class DependencyGraphRuntime
             Snapshot(node.Definition, node.InvalidSources, node.DirtySources))
         .ToArray();
 
-    public object CaptureState() => new State(
-        _derivedNodes.Select(node => node.CaptureState()).ToArray(),
-        _invariantNodes.Select(node => node.CaptureState()).ToArray(),
+    public object CaptureState(
+        IReadOnlySet<IRelationDefinition> affectedRelations,
+        IReadOnlyList<PropertyChange> changes)
+    {
+        var derived = new HashSet<DerivedNode>(_previousDerived);
+        derived.UnionWith(Candidates(changes, _derivedByMember));
+        foreach (var relation in affectedRelations)
+            if (_derivedByRelation.TryGetValue(relation, out var nodes))
+                derived.UnionWith(nodes);
+        var invariants = new HashSet<InvariantNode>(_previousInvariants);
+        invariants.UnionWith(Candidates(changes, _invariantsByMember));
+        foreach (var node in derived)
+            if (_invariantsByDerived.TryGetValue(node, out var nodes))
+                invariants.UnionWith(nodes);
+        return new State(
+        derived.ToDictionary(node => node, node => node.CaptureState()),
+        invariants.ToDictionary(node => node, node => node.CaptureState()),
         _previousDerived.ToArray(),
         _previousInvariants.ToArray());
+    }
 
     public void RestoreState(object snapshot)
     {
         var state = (State)snapshot;
-        for (var index = 0; index < _derivedNodes.Count; index++)
-            _derivedNodes[index].RestoreState(state.Derived[index]);
-        for (var index = 0; index < _invariantNodes.Count; index++)
-            _invariantNodes[index].RestoreState(state.Invariants[index]);
+        foreach (var pair in state.Derived)
+            pair.Key.RestoreState(pair.Value);
+        foreach (var pair in state.Invariants)
+            pair.Key.RestoreState(pair.Value);
         _previousDerived = state.PreviousDerived.ToHashSet();
         _previousInvariants = state.PreviousInvariants.ToHashSet();
     }
 
     private sealed record State(
-        IReadOnlyList<object> Derived,
-        IReadOnlyList<object> Invariants,
+        IReadOnlyDictionary<DerivedNode, object> Derived,
+        IReadOnlyDictionary<InvariantNode, object> Invariants,
         IReadOnlyList<DerivedNode> PreviousDerived,
         IReadOnlyList<InvariantNode> PreviousInvariants);
 
