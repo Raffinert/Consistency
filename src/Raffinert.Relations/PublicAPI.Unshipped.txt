@@ -115,6 +115,7 @@ Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, S
 Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
 Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
+Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Conservatively() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
@@ -266,11 +267,17 @@ Raffinert.Relations.RelationModelDiagnostics.Materialization.get -> Raffinert.Re
 Raffinert.Relations.RelationModelDiagnostics.Materialization.init -> void
 Raffinert.Relations.RelationModelDiagnostics.Predicate.get -> string!
 Raffinert.Relations.RelationModelDiagnostics.Predicate.init -> void
+Raffinert.Relations.RelationModelDiagnostics.PropagationPlan.get -> Raffinert.Relations.RelationPropagationPlanKind
+Raffinert.Relations.RelationModelDiagnostics.PropagationPlan.init -> void
+Raffinert.Relations.RelationModelDiagnostics.PropagationReason.get -> string!
+Raffinert.Relations.RelationModelDiagnostics.PropagationReason.init -> void
 Raffinert.Relations.RelationModelDiagnostics.RelationId.get -> int
 Raffinert.Relations.RelationModelDiagnostics.RelationId.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RelationModelDiagnostics(int RelationId, int LeftObjectSetId, int RightObjectSetId, System.Type! LeftType, System.Type! RightType, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, System.Collections.Generic.IReadOnlyList<string!>! JoinKeys, Raffinert.Relations.RelationAccessPlanKind AccessPlan, Raffinert.Relations.RelationAccessPlanKind? ReverseAccessPlan, Raffinert.Relations.RelationMaterializationMode Materialization, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed) -> void
+Raffinert.Relations.RelationModelDiagnostics.RelationModelDiagnostics(int RelationId, int LeftObjectSetId, int RightObjectSetId, System.Type! LeftType, System.Type! RightType, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, System.Collections.Generic.IReadOnlyList<string!>! JoinKeys, Raffinert.Relations.RelationAccessPlanKind AccessPlan, Raffinert.Relations.RelationAccessPlanKind? ReverseAccessPlan, Raffinert.Relations.RelationMaterializationMode Materialization, Raffinert.Relations.RelationPropagationPlanKind PropagationPlan, bool RetainsPairMembership, string! PropagationReason, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed) -> void
 Raffinert.Relations.RelationModelDiagnostics.ReverseAccessPlan.get -> Raffinert.Relations.RelationAccessPlanKind?
 Raffinert.Relations.RelationModelDiagnostics.ReverseAccessPlan.init -> void
+Raffinert.Relations.RelationModelDiagnostics.RetainsPairMembership.get -> bool
+Raffinert.Relations.RelationModelDiagnostics.RetainsPairMembership.init -> void
 Raffinert.Relations.RelationModelDiagnostics.RightObjectSetId.get -> int
 Raffinert.Relations.RelationModelDiagnostics.RightObjectSetId.init -> void
 Raffinert.Relations.RelationModelDiagnostics.RightType.get -> System.Type!
@@ -297,6 +304,10 @@ Raffinert.Relations.RelationPairImpact.Left.init -> void
 Raffinert.Relations.RelationPairImpact.RelationPairImpact(object! Left, object! Right) -> void
 Raffinert.Relations.RelationPairImpact.Right.get -> object!
 Raffinert.Relations.RelationPairImpact.Right.init -> void
+Raffinert.Relations.RelationPropagationPlanKind
+Raffinert.Relations.RelationPropagationPlanKind.ConservativeInvalidation = 2 -> Raffinert.Relations.RelationPropagationPlanKind
+Raffinert.Relations.RelationPropagationPlanKind.ExactMaterialized = 1 -> Raffinert.Relations.RelationPropagationPlanKind
+Raffinert.Relations.RelationPropagationPlanKind.None = 0 -> Raffinert.Relations.RelationPropagationPlanKind
 Raffinert.Relations.RelationRuntime
 Raffinert.Relations.RelationRuntime.Add<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance) -> void
 Raffinert.Relations.RelationRuntime.Add<T>(T! instance) -> void

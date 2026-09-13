@@ -166,6 +166,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         DependencySeverity.Dirty,
         false);
     private bool _useIncrementalComputation;
+    private bool _useConservativePropagation;
 
     internal DerivedUsingBuilder(
         RelationModelBuilder model,
@@ -193,7 +194,21 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     /// </summary>
     public DerivedUsingBuilder<TSource, TItem> Incrementally()
     {
+        if (_useConservativePropagation)
+            throw new InvalidOperationException("Incremental computation requires exact propagation.");
         _useIncrementalComputation = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Uses source invalidation instead of retaining exact relation pairs. The computation remains
+    /// lazy and may invalidate a safe superset of sources.
+    /// </summary>
+    public DerivedUsingBuilder<TSource, TItem> Conservatively()
+    {
+        if (_useIncrementalComputation)
+            throw new InvalidOperationException("Conservative propagation cannot supply exact incremental deltas.");
+        _useConservativePropagation = true;
         return this;
     }
 
@@ -207,7 +222,8 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             computation,
             computation.Compile(),
             _impactPolicy,
-            _model.ForceFullRecomputePlansForTesting || !_useIncrementalComputation);
+            _model.ForceFullRecomputePlansForTesting || !_useIncrementalComputation,
+            _useConservativePropagation);
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
     }
@@ -388,6 +404,8 @@ internal interface IDerivedDefinition
     ExpressionDependencyAnalysis Analysis { get; }
     DerivedImpactPolicy ImpactPolicy { get; }
     string ComputationPlanName { get; }
+    bool RequiresExactPropagation { get; }
+    bool PrefersConservativePropagation { get; }
     bool AllowIncompleteDependencies { get; set; }
     IDerivedRuntimeState CreateState(
         IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
@@ -403,7 +421,8 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     LambdaExpression computationExpression,
     Func<TSource, IReadOnlyList<TItem>, TValue> computation,
     DerivedImpactPolicy impactPolicy,
-    bool forceFullRecompute) : IDerivedDefinition
+    bool forceFullRecompute,
+    bool preferConservativePropagation) : IDerivedDefinition
     where TSource : class
     where TItem : class
 {
@@ -422,6 +441,10 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
             (Expression<Func<TSource, IReadOnlyList<TItem>, TValue>>)computationExpression,
             forceFullRecompute);
     public string ComputationPlanName => IncrementalPlan?.DisplayName ?? "FullRecompute";
+    public bool RequiresExactPropagation => IncrementalPlan is not null ||
+        ImpactPolicy.MembershipAdded != DependencySeverity.Dirty ||
+        ImpactPolicy.MembershipRemoved != DependencySeverity.Dirty;
+    public bool PrefersConservativePropagation { get; } = preferConservativePropagation;
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
@@ -450,6 +473,8 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
         ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
     public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public string ComputationPlanName => "SourceFullRecompute";
+    public bool RequiresExactPropagation => false;
+    public bool PrefersConservativePropagation => false;
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
@@ -477,6 +502,8 @@ internal sealed class ComposedDerivedDefinition<TSource, TUpstream, TValue>(
     public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
     public DerivedImpactPolicy ImpactPolicy { get; } = DefaultImpact;
     public string ComputationPlanName => "DependencyFullRecompute";
+    public bool RequiresExactPropagation => false;
+    public bool PrefersConservativePropagation => false;
     public bool AllowIncompleteDependencies { get; set; }
     public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
@@ -503,6 +530,8 @@ internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue
     public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
     public DerivedImpactPolicy ImpactPolicy { get; } = DefaultImpact;
     public string ComputationPlanName => "DependencyFullRecompute";
+    public bool RequiresExactPropagation => false;
+    public bool PrefersConservativePropagation => false;
     public bool AllowIncompleteDependencies { get; set; }
     public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>

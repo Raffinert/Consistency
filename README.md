@@ -136,6 +136,12 @@ plans. They update already-fresh cache entries from relation/item deltas without
 match list. Unrecognized expressions retain the original compiled computation as the semantic fallback;
 the selected plan is shown in `DebugView`.
 
+Full-recompute relation consumers may instead call `Conservatively()` before `Compute(...)`.
+This avoids retaining permanent matching pairs and invalidates a safe source superset; lazy reads
+still execute the original predicate. Incremental computations and exact membership-severity policies
+retain exact materialized propagation. Query access, reverse candidate access, and propagation plan are
+reported independently in compiled diagnostics.
+
 `DebugView` also identifies each relation's `None` or `ExactPropagation` materialization mode.
 `runtime.Diagnostics.Relations` reports forward/reverse access-index entries, materialized pair count,
 average fan-out, and a density-warning flag. Configure advisory thresholds with

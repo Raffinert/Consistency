@@ -24,6 +24,8 @@ internal sealed class RelationDelta
         _affectedLefts.Add(left);
     }
 
+    public void Affect(object left) => _affectedLefts.Add(left);
+
     public void MergeFrom(RelationDelta other)
     {
         _addedPairs.AddRange(other._addedPairs);

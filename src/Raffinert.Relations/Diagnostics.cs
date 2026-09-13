@@ -6,6 +6,13 @@ public enum RelationAccessPlanKind
     HashJoin
 }
 
+public enum RelationPropagationPlanKind
+{
+    None,
+    ExactMaterialized,
+    ConservativeInvalidation
+}
+
 [Flags]
 public enum DependencyCompletenessIssue
 {
@@ -43,6 +50,9 @@ public sealed record RelationModelDiagnostics(
     RelationAccessPlanKind AccessPlan,
     RelationAccessPlanKind? ReverseAccessPlan,
     RelationMaterializationMode Materialization,
+    RelationPropagationPlanKind PropagationPlan,
+    bool RetainsPairMembership,
+    string PropagationReason,
     DependencyCompletenessIssue CompletenessIssues,
     bool IncompleteDependenciesAllowed)
 {

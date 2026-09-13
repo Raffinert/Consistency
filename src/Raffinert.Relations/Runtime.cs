@@ -154,6 +154,9 @@ public sealed class CompiledRelationModel
                 relation.PropagationPlan != RelationPropagationPlan.ExactMaterialized
                     ? RelationMaterializationMode.None
                     : RelationMaterializationMode.ExactPropagation,
+                (RelationPropagationPlanKind)relation.PropagationPlan,
+                relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized,
+                CreatePropagationReason(relation),
                 ToPublicCompleteness(relation.Analysis.DependencyAnalysis),
                 relation.AllowIncompleteDependencies)
             { DefinitionKey = relation.DefinitionKey })
@@ -197,6 +200,19 @@ public sealed class CompiledRelationModel
         HashJoinAccessPlan => RelationAccessPlanKind.HashJoin,
         _ => RelationAccessPlanKind.Scan
     };
+
+    private string CreatePropagationReason(IRelationDefinition relation)
+    {
+        var consumers = _derivedStates.Where(derived =>
+            derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation))).ToArray();
+        if (relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+            return "Explicit full-recompute consumer preference";
+        if (consumers.Any(derived => derived.RequiresExactPropagation))
+            return "Incremental computation or exact membership severity";
+        return relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized
+            ? "Exact propagation default"
+            : "No derived consumer";
+    }
 
     private static DependencyCompletenessIssue ToPublicCompleteness(DependencyAnalysisFlags flags)
     {
@@ -852,8 +868,6 @@ public sealed class RelationRuntime
         foreach (var relation in impact.AffectedRelations)
         {
             var state = _relations[relation];
-            if (!state.HasExactPropagation)
-                continue;
             var delta = state.RefreshMembership(
                 impact.GetAffectedRoots(relation, relation.LeftSet),
                 impact.GetAffectedRoots(relation, relation.RightSet));
@@ -1337,10 +1351,11 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public RelationDelta AddLeft(object instance)
     {
         var delta = new RelationDelta();
+        var left = (TLeft)instance;
+        if (_definition.ReverseAccessPlan is not null)
+            AddLeftToIndex(left);
         if (!_hasExactPropagation)
             return delta;
-        var left = (TLeft)instance;
-        AddLeftToIndex(left);
         foreach (var right in Related(left))
             AddPair(left, right, delta);
         return delta;
@@ -1349,10 +1364,11 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public RelationDelta RemoveLeft(object instance)
     {
         var delta = new RelationDelta();
+        var left = (TLeft)instance;
+        if (_definition.ReverseAccessPlan is not null)
+            RemoveLeftFromIndex(left);
         if (!_hasExactPropagation)
             return delta;
-        var left = (TLeft)instance;
-        RemoveLeftFromIndex(left);
         if (!_rightsByLeft.Remove(left, out var rights))
             return delta;
         foreach (var right in rights)
@@ -1371,6 +1387,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         if (_hasExactPropagation)
             foreach (var left in RelatedFromRightCore(right))
                 AddPair(left, right, delta);
+        else if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+            foreach (var left in _leftObjects.Instances)
+                delta.Affect(left);
         return delta;
     }
 
@@ -1378,6 +1397,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     {
         var delta = new RelationDelta();
         var right = (TRight)instance;
+        if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
+            foreach (var left in _leftObjects.Instances)
+                delta.Affect(left);
         if (_hasExactPropagation && _leftsByRight.Remove(right, out var lefts))
             foreach (var left in lefts)
             {
@@ -1407,7 +1429,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public void ReindexLeft(object instance)
     {
-        if (!_hasExactPropagation)
+        if (_definition.ReverseAccessPlan is null)
             return;
         var left = (TLeft)instance;
         RemoveLeftFromIndex(left);
@@ -1418,7 +1440,14 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     {
         var delta = new RelationDelta();
         if (!_hasExactPropagation)
+        {
+            foreach (var left in lefts)
+                delta.Affect(left);
+            if (rights.Any())
+                foreach (var left in _leftObjects.Instances)
+                    delta.Affect(left);
             return delta;
+        }
 
         var typedLefts = lefts.Cast<TLeft>().ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
         var typedRights = rights.Cast<TRight>().ToHashSet(ReferenceEqualityComparer<TRight>.Instance);
@@ -1453,7 +1482,11 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     {
         var lefts = new HashSet<object>(ReferenceEqualityComparer.Instance);
         if (!_hasExactPropagation)
+        {
+            if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation && rights.Any())
+                lefts.UnionWith(_leftObjects.Instances);
             return lefts;
+        }
         foreach (var right in rights.Cast<TRight>())
             if (_leftsByRight.TryGetValue(right, out var related))
                 lefts.UnionWith(related);

@@ -102,7 +102,13 @@ public sealed class RelationModelBuilder
                 relation.PredicateExpression.Body.ToString(),
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies);
-            relation.RequireExactPropagation();
+            var consumers = _derivedStates.Where(derived =>
+                derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation)));
+            if (consumers.All(derived => derived.PrefersConservativePropagation) &&
+                !consumers.Any(derived => derived.RequiresExactPropagation))
+                relation.UseConservativePropagation();
+            else
+                relation.RequireExactPropagation();
         }
 
         var dependencyGraph = CompiledDependencyGraph.Compile(_derivedStates, _invariants);

@@ -38,13 +38,15 @@ Domain objects must already contain their new values. The runtime owns indexes a
 state; it does not mutate or roll back the domain model. Preparation is side-effect-free. Commit rejects
 a prepared mutation if another commit advanced `RelationRuntime.Version`.
 
-## Exact propagation and materialization
+## Relation propagation and materialization
 
 Direct query-only relations maintain their selected access index but do not retain all matching pairs.
-A relation consumed by derived state enables `ExactPropagation`, including reverse access and
-bidirectional membership. That enables source-precise invalidation and O(delta) aggregate maintenance at
-the cost of O(left × right) memory in a dense relation. Inspect `compiled.Diagnostics`, `DebugView`, and
-`runtime.Diagnostics.Relations` to make this tradeoff visible.
+Relation consumers choose a propagation plan independently of query access. Exact propagation retains
+bidirectional membership for source-precise deltas and incremental aggregates. An explicit
+`Conservatively()` full-recompute consumer retains no permanent pairs and invalidates a safe source
+superset, falling back to all registered left sources when narrower old/new routing cannot be proven.
+The original predicate remains authoritative when a lazy value is recomputed. Inspect
+`compiled.Diagnostics`, `DebugView`, and `runtime.Diagnostics.Relations` to make this tradeoff visible.
 
 ## Derived state and policy
 
