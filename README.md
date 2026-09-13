@@ -218,6 +218,10 @@ The EF Core adapter captures and prepares a `RelationUnitOfWork` before `SaveCha
 mutations as one atomic runtime batch and dispatches callbacks only after the database operation succeeds.
 `SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering. Manual integrations can call the
 unit of work's `Prepare`, `Commit`, and `Dispatch` methods directly.
+If the database succeeds but runtime commit fails, the convenience methods throw
+`RelationRuntimeSynchronizationException`. The database must not be retried blindly: reconcile or rebuild
+the runtime from authoritative state, then prepare new runtime work. Policy callback failures are distinct;
+they occur after runtime commit and resumable dispatch can continue from the failed action.
 Added and deleted entities require a `RelationUnitOfWorkMappings` entry; selectors disambiguate CLR types
 used by multiple object sets. Modified scalars, references, owned entries, and collection resets are
 translated through the same core change contracts. A stale prepared mutation is rejected if runtime state

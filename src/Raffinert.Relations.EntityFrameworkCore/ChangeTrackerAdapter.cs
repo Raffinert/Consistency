@@ -4,6 +4,21 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Raffinert.Relations.EntityFrameworkCore;
 
+/// <summary>
+/// Indicates that the database operation succeeded but synchronizing the committed domain state into
+/// the relation runtime failed. The runtime retains its pre-commit state and must be reconciled or rebuilt.
+/// </summary>
+public sealed class RelationRuntimeSynchronizationException : Exception
+{
+    internal RelationRuntimeSynchronizationException(long runtimeVersion, Exception innerException)
+        : base("The database operation succeeded, but relation runtime synchronization failed. " +
+               "Do not retry the database command; reconcile or rebuild the runtime from authoritative state.",
+            innerException) => RuntimeVersion = runtimeVersion;
+
+    public bool DatabaseOperationSucceeded => true;
+    public long RuntimeVersion { get; }
+}
+
 /// <summary>Maps EF entity entries to specific Raffinert object sets.</summary>
 public sealed class RelationUnitOfWorkMappings
 {
@@ -194,7 +209,14 @@ public static class ChangeTrackerAdapter
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
         var result = context.SaveChanges();
-        unitOfWork.Commit(runtime);
+        try
+        {
+            unitOfWork.Commit(runtime);
+        }
+        catch (Exception exception)
+        {
+            throw new RelationRuntimeSynchronizationException(runtime.Version, exception);
+        }
         unitOfWork.Dispatch(runtime);
         return result;
     }
@@ -208,7 +230,14 @@ public static class ChangeTrackerAdapter
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
         var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        unitOfWork.Commit(runtime);
+        try
+        {
+            unitOfWork.Commit(runtime);
+        }
+        catch (Exception exception)
+        {
+            throw new RelationRuntimeSynchronizationException(runtime.Version, exception);
+        }
         unitOfWork.Dispatch(runtime);
         return result;
     }

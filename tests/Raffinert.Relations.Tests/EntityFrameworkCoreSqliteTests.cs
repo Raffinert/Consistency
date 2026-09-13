@@ -27,6 +27,36 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
+    public void Database_success_followed_by_runtime_failure_has_dedicated_exception()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var gate = new ThrowingRelationGate();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
+        var relation = model.Relation(objects, objects)
+            .Where((left, right) => gate.Match(left, right))
+            .AllowIncompleteDependencies();
+        _ = model.Derived(objects).Using(relation).Compute((_, matches) => matches.Count)
+            .AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "persisted" };
+        context.Add(entity);
+        gate.Throw = true;
+
+        var error = Assert.Throws<RelationRuntimeSynchronizationException>(() =>
+            context.SaveChangesAndApply(runtime, mappings));
+
+        Assert.True(error.DatabaseOperationSucceeded);
+        Assert.Equal(0, error.RuntimeVersion);
+        Assert.IsType<DeliberateRuntimeFailure>(error.InnerException);
+        Assert.Equal(1, context.Set<UniqueEntity>().Count());
+        Assert.Equal(0, runtime.Version);
+        Assert.False(runtime.Remove(objects, entity));
+    }
+
+    [Fact]
     public void Rolled_back_explicit_transaction_discards_prepared_runtime_mutation()
     {
         using var database = new SqliteFixture();
@@ -283,6 +313,15 @@ public sealed class EntityFrameworkCoreSqliteTests
         public Guid Id { get; init; }
         public string Code { get; set; } = "";
     }
+
+    private sealed class ThrowingRelationGate
+    {
+        public bool Throw { get; set; }
+        public bool Match(UniqueEntity left, UniqueEntity right) =>
+            Throw ? throw new DeliberateRuntimeFailure() : left.Code == right.Code;
+    }
+
+    private sealed class DeliberateRuntimeFailure : Exception;
 
     private sealed class GeneratedEntity
     {

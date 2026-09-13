@@ -9,6 +9,9 @@ Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Prepare(Raffinert.Rel
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings.Map<TEntity>(Raffinert.Relations.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings!
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings.RelationUnitOfWorkMappings() -> void
+Raffinert.Relations.EntityFrameworkCore.RelationRuntimeSynchronizationException
+Raffinert.Relations.EntityFrameworkCore.RelationRuntimeSynchronizationException.DatabaseOperationSucceeded.get -> bool
+Raffinert.Relations.EntityFrameworkCore.RelationRuntimeSynchronizationException.RuntimeVersion.get -> long
 static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.ApplyTrackedChanges(this Raffinert.Relations.RelationRuntime! runtime, Microsoft.EntityFrameworkCore.DbContext! context) -> Raffinert.Relations.ChangeImpact?
 static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.CaptureUnitOfWork(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker! changeTracker, Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings! mappings) -> Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork!
 static Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter.CreateChangeSet(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker! changeTracker) -> Raffinert.Relations.ChangeSet?

@@ -63,6 +63,11 @@ the same core mutation protocol. The convenience save methods prepare before `Sa
 success, and dispatch last. For an externally controlled database transaction, use the captured unit of
 work manually and commit runtime state only after the actual database transaction commits.
 
+If a convenience save completes in the database but runtime synchronization fails, the adapter throws
+`RelationRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
+reconciliation/rebuild from authoritative data, not a blind database-command retry. A later policy callback
+failure is different: runtime state is already committed and dispatch resumes from the failed action.
+
 ## Durable integration identity
 
 Ordinal definition IDs are compact identifiers scoped to one compiled model and may change when model
