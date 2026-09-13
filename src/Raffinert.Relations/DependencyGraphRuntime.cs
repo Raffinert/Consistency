@@ -117,19 +117,24 @@ internal sealed class DependencyGraphRuntime
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
             var itemRoots = ResolveRoots(node.Definition.Relation.RightSet, node.ItemDependencies, changes);
             var itemSources = _relations[node.Definition.Relation].GetLeftsForRights(itemRoots);
-            var membershipSeverity = DependencyImpactKind.Dirty;
-            if (membershipRoots.Length > 0)
-                membershipSeverity = node.Definition.ImpactPolicy.IsConfigured
-                    ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact!)
-                    : _impactPolicy.Classify(new RelationMembershipDependencyImpact(
-                        relationImpact!,
-                        node.Definition,
-                        changes));
+            var fallbackSeverity = membershipRoots.Length > 0 && !node.Definition.ImpactPolicy.IsConfigured
+                ? _impactPolicy.Classify(new RelationMembershipDependencyImpact(
+                    relationImpact!, node.Definition, changes))
+                : DependencyImpactKind.Dirty;
+            var invalidMembershipRoots = membershipRoots.Where(source =>
+                    node.Definition.ImpactPolicy.IsConfigured
+                        ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact!, source) == DependencyImpactKind.Invalid
+                        : fallbackSeverity == DependencyImpactKind.Invalid)
+                .ToArray();
+            var dirtyMembershipRoots = membershipRoots.Except(
+                invalidMembershipRoots,
+                ReferenceEqualityComparer.Instance).ToArray();
             node.Apply(
                 sourceRoots,
                 itemSources,
-                membershipRoots,
-                membershipSeverity,
+                dirtyMembershipRoots,
+                invalidMembershipRoots,
+                node.Definition.ImpactPolicy.SourceChanged.ToKind(),
                 node.Definition.ImpactPolicy.ItemChanged.ToKind(),
                 relationImpact,
                 changes);
@@ -164,13 +169,16 @@ internal sealed class DependencyGraphRuntime
                 .ToHashSet(ReferenceEqualityComparer.Instance);
             if (sources.Count == 0)
                 continue;
-            var severity = node.Definition.ImpactPolicy.IsConfigured
-                ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact)
-                : _impactPolicy.Classify(new RelationMembershipDependencyImpact(
-                    relationImpact,
-                    node.Definition,
-                    changes));
-            node.Apply(sources, severity);
+            var fallbackSeverity = !node.Definition.ImpactPolicy.IsConfigured
+                ? _impactPolicy.Classify(new RelationMembershipDependencyImpact(
+                    relationImpact, node.Definition, changes))
+                : DependencyImpactKind.Dirty;
+            var invalid = sources.Where(source =>
+                    node.Definition.ImpactPolicy.IsConfigured
+                        ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact, source) == DependencyImpactKind.Invalid
+                        : fallbackSeverity == DependencyImpactKind.Invalid)
+                .ToArray();
+            node.Apply(sources.Except(invalid, ReferenceEqualityComparer.Instance), invalid);
         }
 
         foreach (var node in _invariantNodes)
@@ -253,22 +261,22 @@ internal sealed class DependencyGraphRuntime
         public void Apply(
             IEnumerable<object> sourceRoots,
             IEnumerable<object> itemSources,
-            IEnumerable<object> membershipRoots,
-            DependencyImpactKind membershipSeverity,
+            IEnumerable<object> dirtyMembershipRoots,
+            IEnumerable<object> invalidMembershipRoots,
+            DependencyImpactKind sourceSeverity,
             DependencyImpactKind itemSeverity,
             RelationImpact? relationImpact,
             IReadOnlyList<PropertyChange> changes)
         {
-            InvalidSources = membershipSeverity == DependencyImpactKind.Invalid
-                ? NewSet(membershipRoots)
-                : NewSet();
+            InvalidSources = NewSet(invalidMembershipRoots);
             if (itemSeverity == DependencyImpactKind.Invalid)
                 InvalidSources.UnionWith(itemSources);
-            DirtySources = NewSet(sourceRoots);
+            if (sourceSeverity == DependencyImpactKind.Invalid)
+                InvalidSources.UnionWith(sourceRoots);
+            DirtySources = sourceSeverity == DependencyImpactKind.Dirty ? NewSet(sourceRoots) : NewSet();
             if (itemSeverity == DependencyImpactKind.Dirty)
                 DirtySources.UnionWith(itemSources);
-            if (membershipSeverity == DependencyImpactKind.Dirty)
-                DirtySources.UnionWith(membershipRoots);
+            DirtySources.UnionWith(dirtyMembershipRoots);
             DirtySources.ExceptWith(InvalidSources);
             var incrementallyUpdated = State.ApplyIncremental(DirtySources, relationImpact, changes);
             if (InvalidSources.Count > 0)
@@ -279,15 +287,15 @@ internal sealed class DependencyGraphRuntime
                     DependencyImpactKind.Dirty);
         }
 
-        public void Apply(IEnumerable<object> sources, DependencyImpactKind severity)
+        public void Apply(IEnumerable<object> dirtySources, IEnumerable<object> invalidSources)
         {
             ClearImpact();
-            var affected = NewSet(sources);
-            if (severity == DependencyImpactKind.Invalid)
-                InvalidSources = affected;
-            else
-                DirtySources = affected;
-            State.ApplyImpact(affected, severity);
+            InvalidSources = NewSet(invalidSources);
+            DirtySources = NewSet(dirtySources);
+            if (InvalidSources.Count > 0)
+                State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
+            if (DirtySources.Count > 0)
+                State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
         }
 
         public void ClearImpact()

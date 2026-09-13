@@ -989,6 +989,56 @@ public sealed class DerivedStateTests
     }
 
     [Fact]
+    public void Mixed_membership_delta_is_classified_per_source()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Impact(policy => policy
+                .MembershipAdded(DependencySeverity.Dirty)
+                .MembershipRemoved(DependencySeverity.Invalid))
+            .Compute((_, matches) => matches.Count);
+        var addedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var removedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
+        var runtime = model.Build().CreateRuntime();
+        runtime.Add(sources, addedSource);
+        runtime.Add(sources, removedSource);
+        runtime.Add(items, item);
+        Assert.Equal(0, runtime.Get(count, addedSource));
+        Assert.Equal(1, runtime.Get(count, removedSource));
+        item.Code = "A";
+
+        runtime.Apply(Change.Property(items, item, value => value.Code, "B", "A"));
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, addedSource));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, removedSource));
+    }
+
+    [Fact]
+    public void Public_impact_policy_can_invalidate_direct_source_changes()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(x => x.Id);
+        var items = model.Objects<CodeHolder>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute((source, matches) => source.Enabled ? matches.Count : 0);
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A", Enabled = true };
+        var runtime = model.Build().CreateRuntime();
+        runtime.Add(sources, source);
+        Assert.Equal(0, runtime.Get(count, source));
+        source.Enabled = false;
+
+        runtime.Apply(Change.Property(sources, source, value => value.Enabled, true, false));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, source));
+    }
+
+    [Fact]
     public void Public_impact_policy_can_invalidate_item_changes()
     {
         var model = new RelationModelBuilder();

@@ -16,6 +16,7 @@ public sealed class DerivedImpactPolicyBuilder
     internal DependencySeverity AddedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal DependencySeverity RemovedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal DependencySeverity ItemChangedSeverity { get; private set; } = DependencySeverity.Dirty;
+    internal DependencySeverity SourceChangedSeverity { get; private set; } = DependencySeverity.Dirty;
     internal bool IsConfigured { get; private set; }
 
     public DerivedImpactPolicyBuilder MembershipAdded(DependencySeverity severity)
@@ -39,8 +40,16 @@ public sealed class DerivedImpactPolicyBuilder
         return this;
     }
 
+    /// <summary>Configures severity for a directly tracked source-member change.</summary>
+    public DerivedImpactPolicyBuilder SourceChanged(DependencySeverity severity)
+    {
+        SourceChangedSeverity = Validate(severity);
+        IsConfigured = true;
+        return this;
+    }
+
     internal DerivedImpactPolicy Build() =>
-        new(AddedSeverity, RemovedSeverity, ItemChangedSeverity, IsConfigured);
+        new(AddedSeverity, RemovedSeverity, ItemChangedSeverity, SourceChangedSeverity, IsConfigured);
 
     private static DependencySeverity Validate(DependencySeverity severity) =>
         Enum.IsDefined(severity)
@@ -52,14 +61,15 @@ internal sealed record DerivedImpactPolicy(
     DependencySeverity MembershipAdded,
     DependencySeverity MembershipRemoved,
     DependencySeverity ItemChanged,
+    DependencySeverity SourceChanged,
     bool IsConfigured)
 {
-    public DependencyImpactKind ClassifyMembership(RelationImpact impact)
+    public DependencyImpactKind ClassifyMembership(RelationImpact impact, object source)
     {
         var severity = DependencySeverity.Dirty;
-        if (impact.AddedPairs.Count > 0)
+        if (impact.AddedPairs.Any(pair => ReferenceEquals(pair.Left, source)))
             severity = Max(severity, MembershipAdded);
-        if (impact.RemovedPairs.Count > 0)
+        if (impact.RemovedPairs.Any(pair => ReferenceEquals(pair.Left, source)))
             severity = Max(severity, MembershipRemoved);
         return severity.ToKind();
     }

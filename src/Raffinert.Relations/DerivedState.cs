@@ -70,6 +70,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
         false);
     private bool _useIncrementalComputation;
 

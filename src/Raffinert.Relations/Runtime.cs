@@ -91,7 +91,8 @@ public sealed class CompiledRelationModel
                 cached: true)}");
             lines.Add($"  Relation membership: {(derived.Analysis.HasRelationMembershipDependency ? "Yes" : "No")}");
             lines.Add($"  Impact policy: membership added={derived.ImpactPolicy.MembershipAdded}, " +
-                $"removed={derived.ImpactPolicy.MembershipRemoved}, item changed={derived.ImpactPolicy.ItemChanged}");
+                $"removed={derived.ImpactPolicy.MembershipRemoved}, item changed={derived.ImpactPolicy.ItemChanged}, " +
+                $"source changed={derived.ImpactPolicy.SourceChanged}");
             lines.Add($"  Computation plan: {derived.ComputationPlanName}");
             lines.Add($"  LINQ semantics: {derived.Analysis.LinqSemantics}");
             foreach (var dependency in derived.Analysis.Dependencies)
@@ -157,7 +158,8 @@ public sealed class CompiledRelationModel
                 derived.ComputationPlanName,
                 derived.ImpactPolicy.MembershipAdded,
                 derived.ImpactPolicy.MembershipRemoved,
-                derived.ImpactPolicy.ItemChanged)
+                derived.ImpactPolicy.ItemChanged,
+                derived.ImpactPolicy.SourceChanged)
             { DefinitionKey = derived.DefinitionKey })
                 .ToArray(),
             _invariants.Select((invariant, id) => new InvariantModelDiagnostics(

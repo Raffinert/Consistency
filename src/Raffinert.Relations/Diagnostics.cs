@@ -62,7 +62,8 @@ public sealed record DerivedModelDiagnostics(
     string ComputationPlan,
     DependencySeverity MembershipAddedSeverity,
     DependencySeverity MembershipRemovedSeverity,
-    DependencySeverity ItemChangedSeverity)
+    DependencySeverity ItemChangedSeverity,
+    DependencySeverity SourceChangedSeverity)
 {
     public string? DefinitionKey { get; init; }
 }

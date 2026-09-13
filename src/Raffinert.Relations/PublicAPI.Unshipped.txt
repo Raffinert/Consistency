@@ -58,6 +58,7 @@ Raffinert.Relations.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> v
 Raffinert.Relations.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipAdded(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipRemoved(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
+Raffinert.Relations.DerivedImpactPolicyBuilder.SourceChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
 Raffinert.Relations.DerivedLinqSemantics
 Raffinert.Relations.DerivedLinqSemantics.Item = 2 -> Raffinert.Relations.DerivedLinqSemantics
 Raffinert.Relations.DerivedLinqSemantics.Membership = 1 -> Raffinert.Relations.DerivedLinqSemantics
@@ -76,7 +77,7 @@ Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.get -> string?
 Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, int RelationId, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity) -> void
+Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, int RelationId, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity, Raffinert.Relations.DependencySeverity SourceChangedSeverity) -> void
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Relations.DependencySeverity
@@ -91,6 +92,8 @@ Raffinert.Relations.DerivedModelDiagnostics.RelationId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.RelationId.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.init -> void
 Raffinert.Relations.DerivedMutationImpact
