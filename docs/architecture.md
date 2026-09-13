@@ -6,7 +6,9 @@ conservative optimizations around them.
 
 ## Model compilation
 
-1. `ObjectSet<T>` defines stable object identity through a non-null key.
+1. `ObjectSet<T>` defines stable object identity through a non-null key. Supported keys are direct
+   scalar/value members or tuple/anonymous composites of direct scalar/value members; navigation,
+   method-call, captured/static-state, and collection-derived keys are rejected at model construction.
 2. `Relation<TLeft, TRight>` analyzes its predicate for member paths, equality join keys, residual
    semantics, and dependency completeness.
 3. Derived expressions add source, relation-membership, and related-item dependencies.

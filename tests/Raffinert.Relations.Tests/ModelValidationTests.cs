@@ -3,6 +3,34 @@ namespace Raffinert.Relations.Tests;
 public sealed class ModelValidationTests
 {
     [Fact]
+    public void Key_rejects_nested_navigation_and_opaque_expressions()
+    {
+        var nestedModel = new RelationModelBuilder();
+        var nested = nestedModel.Objects<PurchaseOrderLine>();
+        var methodModel = new RelationModelBuilder();
+        var method = methodModel.Objects<PurchaseOrderLine>();
+
+        var nestedError = Assert.Throws<ArgumentException>(() => nested.Key(value => value.PurchaseOrder!.Id));
+        var methodError = Assert.Throws<ArgumentException>(() => method.Key(value => value.Id.ToString()));
+
+        Assert.Contains("direct scalar", nestedError.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("method calls", methodError.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Key_accepts_direct_and_composite_value_members()
+    {
+        var directModel = new RelationModelBuilder();
+        _ = directModel.Objects<PurchaseOrderLine>().Key(value => value.Id);
+        var compositeModel = new RelationModelBuilder();
+        _ = compositeModel.Objects<PurchaseOrderLine>()
+            .Key(value => new { value.PurchaseOrderNumber, value.ItemNumber });
+
+        _ = directModel.Build();
+        _ = compositeModel.Build();
+    }
+
+    [Fact]
     public void Build_rejects_an_object_set_without_a_key()
     {
         var model = new RelationModelBuilder();

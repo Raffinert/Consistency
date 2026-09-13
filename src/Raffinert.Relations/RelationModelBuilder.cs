@@ -212,6 +212,7 @@ public sealed class ObjectSetBuilder<T> where T : class
         if (Definition.HasKey)
             throw new InvalidOperationException($"A key has already been declared for '{typeof(T).Name}'.");
 
+        KeyExpressionValidator.Validate(key);
         var compiled = key.Compile();
         Definition.SetKey(key, value => compiled(value));
         return Set;
@@ -312,4 +313,37 @@ internal sealed class KeyMemberCollector : ExpressionVisitor
 
         return base.VisitMember(node);
     }
+}
+
+internal static class KeyExpressionValidator
+{
+    public static void Validate(LambdaExpression expression)
+    {
+        if (!IsKeyShape(Unwrap(expression.Body), expression.Parameters[0], allowComposite: true))
+            throw new ArgumentException(
+                "A key must be a direct scalar/value member or a tuple/anonymous composite of direct scalar/value members. " +
+                "Nested navigation, method calls, captured/static state, and collection-derived keys are not supported.",
+                nameof(expression));
+    }
+
+    private static bool IsKeyShape(Expression expression, ParameterExpression parameter, bool allowComposite)
+    {
+        expression = Unwrap(expression);
+        if (expression is MemberExpression { Expression: var owner } member &&
+            ReferenceEquals(Unwrap(owner!), parameter))
+            return IsStableValueType(member.Type);
+
+        return allowComposite && expression is NewExpression { Arguments.Count: > 0 } composite &&
+               composite.Arguments.All(argument => IsKeyShape(argument, parameter, allowComposite: false));
+    }
+
+    private static Expression Unwrap(Expression expression)
+    {
+        while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            expression = unary.Operand;
+        return expression;
+    }
+
+    private static bool IsStableValueType(Type type) =>
+        type == typeof(string) || type.IsValueType;
 }
