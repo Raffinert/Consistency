@@ -26,7 +26,10 @@ public enum DerivedLinqSemantics
 public sealed record ObjectSetModelDiagnostics(
     int ObjectSetId,
     Type ObjectType,
-    string KeyExpression);
+    string KeyExpression)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 public sealed record RelationModelDiagnostics(
     int RelationId,
@@ -41,7 +44,10 @@ public sealed record RelationModelDiagnostics(
     RelationAccessPlanKind? ReverseAccessPlan,
     RelationMaterializationMode Materialization,
     DependencyCompletenessIssue CompletenessIssues,
-    bool IncompleteDependenciesAllowed);
+    bool IncompleteDependenciesAllowed)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 public sealed record DerivedModelDiagnostics(
     int DerivedId,
@@ -56,7 +62,10 @@ public sealed record DerivedModelDiagnostics(
     string ComputationPlan,
     DependencySeverity MembershipAddedSeverity,
     DependencySeverity MembershipRemovedSeverity,
-    DependencySeverity ItemChangedSeverity);
+    DependencySeverity ItemChangedSeverity)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 public sealed record InvariantModelDiagnostics(
     int InvariantId,
@@ -65,7 +74,10 @@ public sealed record InvariantModelDiagnostics(
     IReadOnlyList<string> Dependencies,
     DependencyCompletenessIssue CompletenessIssues,
     bool IncompleteDependenciesAllowed,
-    InvariantReaction Reaction);
+    InvariantReaction Reaction)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 public sealed record CompiledModelDiagnostics(
     IReadOnlyList<ObjectSetModelDiagnostics> ObjectSets,

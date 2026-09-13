@@ -61,3 +61,10 @@ the same core mutation protocol. The convenience save methods prepare before `Sa
 success, and dispatch last. For an externally controlled database transaction, use the captured unit of
 work manually and commit runtime state only after the actual database transaction commits.
 
+## Durable integration identity
+
+Ordinal definition IDs are compact identifiers scoped to one compiled model and may change when model
+declaration order changes. Definitions used across process boundaries should be assigned unique logical
+keys with `Named(...)`. Policy requests then include the invariant `DefinitionKey` and a `SourceIdentity`
+formed from the named source object set, its CLR type, and the registered stable object key. Only a
+`SourceIdentity` whose `IsDurable` property is true is suitable for persistence across deployments.

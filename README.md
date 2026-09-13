@@ -194,6 +194,13 @@ last `ResetDiagnostics()` call.
 
 The core package has no EF Core or dependency-injection dependency.
 
+Definitions that cross a process boundary can be assigned stable logical keys with `Named(...)` on
+object-set builders, relations, derived values, and invariants. Names are ordinal-independent and must be
+unique within the compiled model. Structured policy requests expose both the local numeric invariant ID
+and its optional `DefinitionKey`, plus a `SourceIdentity` containing the object-set key, CLR type, and
+registered source key. `SourceIdentity.IsDurable` is true only when the source object set was explicitly
+named; unnamed definitions and numeric IDs remain intended for in-process diagnostics only.
+
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)

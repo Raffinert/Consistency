@@ -72,6 +72,7 @@ public sealed class RelationModelBuilder
     public CompiledRelationModel Build()
     {
         ThrowIfBuilt();
+        ValidateDefinitionKeys();
         foreach (var set in _objectSets)
         {
             if (!set.HasKey)
@@ -109,6 +110,21 @@ public sealed class RelationModelBuilder
             _relations.ToArray(),
             _derivedStates.ToArray(),
             _invariants.ToArray());
+    }
+
+    private void ValidateDefinitionKeys()
+    {
+        var definitions = _objectSets.Select(set => (Kind: "object set", set.DefinitionKey))
+            .Concat(_relations.Select(relation => ("relation", relation.DefinitionKey)))
+            .Concat(_derivedStates.Select(derived => ("derived value", derived.DefinitionKey)))
+            .Concat(_invariants.Select(invariant => ("invariant", invariant.DefinitionKey)))
+            .Where(value => value.DefinitionKey is not null)
+            .ToArray();
+        var duplicate = definitions.GroupBy(value => value.DefinitionKey!, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException(
+                $"Definition key '{duplicate.Key}' is used more than once. Explicit definition keys must be unique within a compiled model.");
     }
 
     internal void AddRelation(IRelationDefinition relation)
@@ -201,6 +217,20 @@ public sealed class ObjectSetBuilder<T> where T : class
         return Set;
     }
 
+    /// <summary>Assigns a stable logical key for diagnostics and durable integration messages.</summary>
+    public ObjectSetBuilder<T> Named(string definitionKey)
+    {
+        _ensureMutable();
+        Definition.DefinitionKey = ValidateDefinitionKey(definitionKey);
+        return this;
+    }
+
+    internal static string ValidateDefinitionKey(string definitionKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(definitionKey);
+        return definitionKey.Trim();
+    }
+
     public override string ToString() => $"ObjectSet {typeof(T).Name}";
 }
 
@@ -216,12 +246,16 @@ public sealed class ObjectSet<T> where T : class
     internal object ModelIdentity { get; }
     internal ObjectSetDefinition<T> Definition { get; }
 
+    /// <summary>The optional stable logical key assigned while building the model.</summary>
+    public string? DefinitionKey => Definition.DefinitionKey;
+
     public override string ToString() => $"ObjectSet {typeof(T).Name}";
 }
 
 internal interface IObjectSetDefinition
 {
     int Id { get; }
+    string? DefinitionKey { get; }
     Type ObjectType { get; }
     bool HasKey { get; }
     LambdaExpression? KeyExpression { get; }
@@ -234,6 +268,7 @@ internal sealed class ObjectSetDefinition<T>(int id) : IObjectSetDefinition wher
     private Func<T, object?>? _keyAccessor;
 
     public int Id { get; } = id;
+    public string? DefinitionKey { get; set; }
     public Type ObjectType => typeof(T);
     public bool HasKey => _keyAccessor is not null;
     public LambdaExpression? KeyExpression { get; private set; }

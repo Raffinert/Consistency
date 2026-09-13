@@ -49,6 +49,8 @@ Raffinert.Relations.DependencySeverity.Dirty = 0 -> Raffinert.Relations.Dependen
 Raffinert.Relations.DependencySeverity.Invalid = 1 -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.Derived<TSource, TItem, TValue>
 Raffinert.Relations.Derived<TSource, TItem, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Derived<TSource!, TItem!, TValue>!
+Raffinert.Relations.Derived<TSource, TItem, TValue>.DefinitionKey.get -> string?
+Raffinert.Relations.Derived<TSource, TItem, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Derived<TSource!, TItem!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Relations.Relation<TSource!, TItem!>! relation) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Relations.DerivedImpactPolicyBuilder
@@ -70,6 +72,8 @@ Raffinert.Relations.DerivedModelDiagnostics.ComputationPlan.get -> string!
 Raffinert.Relations.DerivedModelDiagnostics.ComputationPlan.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Raffinert.Relations.DerivedModelDiagnostics.Dependencies.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, int RelationId, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity) -> void
@@ -92,6 +96,8 @@ Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.init -> void
 Raffinert.Relations.DerivedMutationImpact
 Raffinert.Relations.DerivedMutationImpact.DerivedId.get -> int
 Raffinert.Relations.DerivedMutationImpact.DerivedId.init -> void
+Raffinert.Relations.DerivedMutationImpact.DefinitionKey.get -> string?
+Raffinert.Relations.DerivedMutationImpact.DefinitionKey.init -> void
 Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, Raffinert.Relations.DependencySeverity Severity, System.Collections.Generic.IReadOnlyList<object!>! Sources) -> void
 Raffinert.Relations.DerivedMutationImpact.Severity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DerivedMutationImpact.Severity.init -> void
@@ -106,13 +112,19 @@ Raffinert.Relations.DerivedValueState.Dirty = 1 -> Raffinert.Relations.DerivedVa
 Raffinert.Relations.DerivedValueState.Fresh = 0 -> Raffinert.Relations.DerivedValueState
 Raffinert.Relations.DerivedValueState.Invalid = 2 -> Raffinert.Relations.DerivedValueState
 Raffinert.Relations.ImmediateEvaluationRequestInfo
+Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.get -> string?
+Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.ImmediateEvaluationRequestInfo(int InvariantId, object! Source) -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.get -> int
 Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.init -> void
 Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.get -> object!
 Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.init -> void
+Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.init -> void
 Raffinert.Relations.Invariant<TSource, TItem, TValue>
 Raffinert.Relations.Invariant<TSource, TItem, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
+Raffinert.Relations.Invariant<TSource, TItem, TValue>.DefinitionKey.get -> string?
+Raffinert.Relations.Invariant<TSource, TItem, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
 Raffinert.Relations.Invariant<TSource, TItem, TValue>.ReactWith(Raffinert.Relations.InvariantReaction reaction) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
 Raffinert.Relations.Invariant<TSource, TItem, TValue>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Relations.Invariant<TSource!, TItem!, TValue>!
 Raffinert.Relations.InvariantBuilder<TSource>
@@ -128,6 +140,8 @@ Raffinert.Relations.InvariantModelDiagnostics.CompletenessIssues.get -> Raffiner
 Raffinert.Relations.InvariantModelDiagnostics.CompletenessIssues.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Raffinert.Relations.InvariantModelDiagnostics.Dependencies.init -> void
+Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.DerivedId.get -> int
 Raffinert.Relations.InvariantModelDiagnostics.DerivedId.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
@@ -142,6 +156,8 @@ Raffinert.Relations.InvariantModelDiagnostics.Reaction.init -> void
 Raffinert.Relations.InvariantMutationImpact
 Raffinert.Relations.InvariantMutationImpact.InvariantId.get -> int
 Raffinert.Relations.InvariantMutationImpact.InvariantId.init -> void
+Raffinert.Relations.InvariantMutationImpact.DefinitionKey.get -> string?
+Raffinert.Relations.InvariantMutationImpact.DefinitionKey.init -> void
 Raffinert.Relations.InvariantMutationImpact.InvariantMutationImpact(int InvariantId, Raffinert.Relations.DependencySeverity Severity, System.Collections.Generic.IReadOnlyList<object!>! Sources) -> void
 Raffinert.Relations.InvariantMutationImpact.Severity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.InvariantMutationImpact.Severity.init -> void
@@ -160,12 +176,16 @@ Raffinert.Relations.ObjectAdded.Instance.get -> object!
 Raffinert.Relations.ObjectRemoved
 Raffinert.Relations.ObjectRemoved.Instance.get -> object!
 Raffinert.Relations.ObjectSet<T>
+Raffinert.Relations.ObjectSet<T>.DefinitionKey.get -> string?
 Raffinert.Relations.ObjectSetBuilder<T>
 Raffinert.Relations.ObjectSetBuilder<T>.Key<TKey>(System.Linq.Expressions.Expression<System.Func<T!, TKey>!>! key) -> Raffinert.Relations.ObjectSet<T!>!
+Raffinert.Relations.ObjectSetBuilder<T>.Named(string! definitionKey) -> Raffinert.Relations.ObjectSetBuilder<T!>!
 Raffinert.Relations.ObjectSetBuilder<T>.Set.get -> Raffinert.Relations.ObjectSet<T!>!
 Raffinert.Relations.ObjectSetModelDiagnostics
 Raffinert.Relations.ObjectSetModelDiagnostics.KeyExpression.get -> string!
 Raffinert.Relations.ObjectSetModelDiagnostics.KeyExpression.init -> void
+Raffinert.Relations.ObjectSetModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Relations.ObjectSetModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetId.get -> int
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetId.init -> void
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetModelDiagnostics(int ObjectSetId, System.Type! ObjectType, string! KeyExpression) -> void
@@ -180,6 +200,8 @@ Raffinert.Relations.PropertyChange.NewValue.get -> object?
 Raffinert.Relations.PropertyChange.OldValue.get -> object?
 Raffinert.Relations.Relation<TLeft, TRight>
 Raffinert.Relations.Relation<TLeft, TRight>.AllowIncompleteDependencies() -> Raffinert.Relations.Relation<TLeft!, TRight!>!
+Raffinert.Relations.Relation<TLeft, TRight>.DefinitionKey.get -> string?
+Raffinert.Relations.Relation<TLeft, TRight>.Named(string! definitionKey) -> Raffinert.Relations.Relation<TLeft!, TRight!>!
 Raffinert.Relations.RelationAccessPlanKind
 Raffinert.Relations.RelationAccessPlanKind.HashJoin = 1 -> Raffinert.Relations.RelationAccessPlanKind
 Raffinert.Relations.RelationAccessPlanKind.Scan = 0 -> Raffinert.Relations.RelationAccessPlanKind
@@ -202,6 +224,8 @@ Raffinert.Relations.RelationModelDiagnostics.CompletenessIssues.get -> Raffinert
 Raffinert.Relations.RelationModelDiagnostics.CompletenessIssues.init -> void
 Raffinert.Relations.RelationModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Raffinert.Relations.RelationModelDiagnostics.Dependencies.init -> void
+Raffinert.Relations.RelationModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Relations.RelationModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.RelationModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
 Raffinert.Relations.RelationModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.RelationModelDiagnostics.JoinKeys.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -228,6 +252,8 @@ Raffinert.Relations.RelationMutationImpact.AddedPairs.get -> System.Collections.
 Raffinert.Relations.RelationMutationImpact.AddedPairs.init -> void
 Raffinert.Relations.RelationMutationImpact.AffectedSources.get -> System.Collections.Generic.IReadOnlyList<object!>!
 Raffinert.Relations.RelationMutationImpact.AffectedSources.init -> void
+Raffinert.Relations.RelationMutationImpact.DefinitionKey.get -> string?
+Raffinert.Relations.RelationMutationImpact.DefinitionKey.init -> void
 Raffinert.Relations.RelationMutationImpact.LeftType.get -> System.Type!
 Raffinert.Relations.RelationMutationImpact.LeftType.init -> void
 Raffinert.Relations.RelationMutationImpact.RelationId.get -> int
@@ -293,6 +319,8 @@ Raffinert.Relations.RelationRuntimeDiagnostics.ReverseIndexEntries.init -> void
 Raffinert.Relations.RelationRuntimeDiagnostics.RightType.get -> System.Type!
 Raffinert.Relations.RelationRuntimeDiagnostics.RightType.init -> void
 Raffinert.Relations.RepairRequestInfo
+Raffinert.Relations.RepairRequestInfo.DefinitionKey.get -> string?
+Raffinert.Relations.RepairRequestInfo.DefinitionKey.init -> void
 Raffinert.Relations.RepairRequestInfo.InvariantId.get -> int
 Raffinert.Relations.RepairRequestInfo.InvariantId.init -> void
 Raffinert.Relations.RepairRequestInfo.Reason.get -> Raffinert.Relations.DependencySeverity
@@ -300,6 +328,17 @@ Raffinert.Relations.RepairRequestInfo.Reason.init -> void
 Raffinert.Relations.RepairRequestInfo.RepairRequestInfo(int InvariantId, object! Source, Raffinert.Relations.DependencySeverity Reason) -> void
 Raffinert.Relations.RepairRequestInfo.Source.get -> object!
 Raffinert.Relations.RepairRequestInfo.Source.init -> void
+Raffinert.Relations.RepairRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.RepairRequestInfo.SourceIdentity.init -> void
+Raffinert.Relations.SourceIdentity
+Raffinert.Relations.SourceIdentity.IsDurable.get -> bool
+Raffinert.Relations.SourceIdentity.ObjectSetKey.get -> string?
+Raffinert.Relations.SourceIdentity.ObjectSetKey.init -> void
+Raffinert.Relations.SourceIdentity.SourceIdentity(string? ObjectSetKey, System.Type! SourceType, object! SourceKey) -> void
+Raffinert.Relations.SourceIdentity.SourceKey.get -> object!
+Raffinert.Relations.SourceIdentity.SourceKey.init -> void
+Raffinert.Relations.SourceIdentity.SourceType.get -> System.Type!
+Raffinert.Relations.SourceIdentity.SourceType.init -> void
 Raffinert.Relations.RuntimeApplyResult
 Raffinert.Relations.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!

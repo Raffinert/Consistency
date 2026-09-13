@@ -121,7 +121,8 @@ public sealed class CompiledRelationModel
             _sets.Select(set => new ObjectSetModelDiagnostics(
                 set.Id,
                 set.ObjectType,
-                set.KeyExpression?.Body.ToString() ?? "<missing>"))
+                set.KeyExpression?.Body.ToString() ?? "<missing>")
+            { DefinitionKey = set.DefinitionKey })
                 .ToArray(),
             _relations.Select((relation, id) => new RelationModelDiagnostics(
                 id,
@@ -139,7 +140,8 @@ public sealed class CompiledRelationModel
                     ? RelationMaterializationMode.None
                     : RelationMaterializationMode.ExactPropagation,
                 ToPublicCompleteness(relation.Analysis.DependencyAnalysis),
-                relation.AllowIncompleteDependencies))
+                relation.AllowIncompleteDependencies)
+            { DefinitionKey = relation.DefinitionKey })
                 .ToArray(),
             _derivedStates.Select((derived, id) => new DerivedModelDiagnostics(
                 id,
@@ -155,7 +157,8 @@ public sealed class CompiledRelationModel
                 derived.ComputationPlanName,
                 derived.ImpactPolicy.MembershipAdded,
                 derived.ImpactPolicy.MembershipRemoved,
-                derived.ImpactPolicy.ItemChanged))
+                derived.ImpactPolicy.ItemChanged)
+            { DefinitionKey = derived.DefinitionKey })
                 .ToArray(),
             _invariants.Select((invariant, id) => new InvariantModelDiagnostics(
                 id,
@@ -165,7 +168,8 @@ public sealed class CompiledRelationModel
                     $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),
                 ToPublicCompleteness(invariant.Analysis.Flags),
                 invariant.AllowIncompleteDependencies,
-                invariant.Reaction))
+                invariant.Reaction)
+            { DefinitionKey = invariant.DefinitionKey })
                 .ToArray());
     }
 
@@ -674,7 +678,8 @@ public sealed class RelationRuntime
                     .Select(value => new RelationPairImpact(value.Left, value.Right)).ToArray()),
                 Array.AsReadOnly(pair.Value.RemovedPairs
                     .Select(value => new RelationPairImpact(value.Left, value.Right)).ToArray()),
-                Array.AsReadOnly(pair.Value.AffectedLefts.ToArray())))
+                Array.AsReadOnly(pair.Value.AffectedLefts.ToArray()))
+            { DefinitionKey = pair.Key.DefinitionKey })
             .ToArray();
         var derivedImpacts = _dependencyGraph.GetDerivedImpacts()
             .GroupBy(value => value.Definition)
@@ -684,7 +689,8 @@ public sealed class RelationRuntime
                     ? DependencySeverity.Invalid
                     : DependencySeverity.Dirty,
                 Array.AsReadOnly(group.SelectMany(value => value.Sources)
-                    .Distinct(ReferenceEqualityComparer.Instance).ToArray())))
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()))
+            { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.DerivedId)
             .ToArray();
         var invariantImpacts = _dependencyGraph.GetInvariantImpacts()
@@ -695,7 +701,8 @@ public sealed class RelationRuntime
                     ? DependencySeverity.Invalid
                     : DependencySeverity.Dirty,
                 Array.AsReadOnly(group.SelectMany(value => value.Sources)
-                    .Distinct(ReferenceEqualityComparer.Instance).ToArray())))
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()))
+            { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
         var actions = prepared.PolicyActions!;
@@ -703,12 +710,20 @@ public sealed class RelationRuntime
             .Select(request => new RepairRequestInfo(
                 _invariantIds[request.Invariant],
                 request.Source,
-                request.Reason.ToSeverity()))
+                request.Reason.ToSeverity())
+            {
+                DefinitionKey = request.Invariant.DefinitionKey,
+                SourceIdentity = CreateSourceIdentity(request.Invariant.Derived.SourceSet, request.Source)
+            })
             .ToArray();
         var immediateRequests = actions.ImmediateEvaluations
             .Select(request => new ImmediateEvaluationRequestInfo(
                 _invariantIds[request.Invariant.Definition],
-                request.Source))
+                request.Source)
+            {
+                DefinitionKey = request.Invariant.Definition.DefinitionKey,
+                SourceIdentity = CreateSourceIdentity(request.Invariant.Definition.Derived.SourceSet, request.Source)
+            })
             .ToArray();
         return new RuntimeApplyResult(
             impact,
@@ -719,6 +734,9 @@ public sealed class RelationRuntime
             immediateRequests,
             () => Dispatch(prepared));
     }
+
+    private SourceIdentity CreateSourceIdentity(IObjectSetDefinition set, object source) =>
+        new(set.DefinitionKey, set.ObjectType, _sets[set].GetRegisteredKey(source));
 
     private void CommitAdd(
         ObjectAdded mutation,
@@ -1096,6 +1114,9 @@ internal sealed class ObjectSetRuntime
     public IEnumerable<(object Instance, object Key)> RegisteredEntries =>
         _registeredKeys.Select(pair => (pair.Key, pair.Value));
     public bool Contains(object instance) => _instances.Contains(instance);
+    public object GetRegisteredKey(object instance) => _registeredKeys.TryGetValue(instance, out var key)
+        ? key
+        : throw new InvalidOperationException("The source instance is not registered in its object set.");
 
     public object CaptureState() => new State(
         _instances.ToArray(),

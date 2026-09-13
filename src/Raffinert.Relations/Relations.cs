@@ -50,6 +50,17 @@ public sealed class Relation<TLeft, TRight>
     }
     internal RelationDefinition<TLeft, TRight> Definition { get; }
 
+    /// <summary>The optional stable logical key assigned to this relation.</summary>
+    public string? DefinitionKey => Definition.DefinitionKey;
+
+    /// <summary>Assigns a stable logical key for diagnostics and durable integration messages.</summary>
+    public Relation<TLeft, TRight> Named(string definitionKey)
+    {
+        _ensureMutable();
+        Definition.DefinitionKey = ObjectSetBuilder<TLeft>.ValidateDefinitionKey(definitionKey);
+        return this;
+    }
+
     /// <summary>
     /// Explicitly permits incomplete dependency tracking. If this relation is materialized for a
     /// derived value, cached freshness is not guaranteed for dependencies hidden by opaque code or
@@ -65,6 +76,7 @@ public sealed class Relation<TLeft, TRight>
 
 internal interface IRelationDefinition
 {
+    string? DefinitionKey { get; }
     IObjectSetDefinition LeftSet { get; }
     IObjectSetDefinition RightSet { get; }
     LambdaExpression PredicateExpression { get; }
@@ -99,6 +111,7 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
     private readonly bool _forceScanPlans;
 
     public ObjectSetDefinition<TLeft> Left { get; }
+    public string? DefinitionKey { get; set; }
     public ObjectSetDefinition<TRight> Right { get; }
     public Func<TLeft, TRight, bool> Predicate { get; }
     public IObjectSetDefinition LeftSet => Left;

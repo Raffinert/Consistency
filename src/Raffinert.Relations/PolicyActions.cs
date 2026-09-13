@@ -27,28 +27,54 @@ public sealed record RelationMutationImpact(
     Type RightType,
     IReadOnlyList<RelationPairImpact> AddedPairs,
     IReadOnlyList<RelationPairImpact> RemovedPairs,
-    IReadOnlyList<object> AffectedSources);
+    IReadOnlyList<object> AffectedSources)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 /// <summary>Describes a derived definition's affected sources and strongest severity.</summary>
 public sealed record DerivedMutationImpact(
     int DerivedId,
     DependencySeverity Severity,
-    IReadOnlyList<object> Sources);
+    IReadOnlyList<object> Sources)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 /// <summary>Describes an invariant definition's dependency impact.</summary>
 public sealed record InvariantMutationImpact(
     int InvariantId,
     DependencySeverity Severity,
-    IReadOnlyList<object> Sources);
+    IReadOnlyList<object> Sources)
+{
+    public string? DefinitionKey { get; init; }
+}
 
 /// <summary>A request to schedule repair work for an affected source.</summary>
+/// <summary>A durable logical identity for a source in a named object set.</summary>
+public sealed record SourceIdentity(string? ObjectSetKey, Type SourceType, object SourceKey)
+{
+    /// <summary>Whether this identity has an explicit object-set key suitable for external persistence.</summary>
+    public bool IsDurable => ObjectSetKey is not null;
+}
+
 public sealed record RepairRequestInfo(
     int InvariantId,
     object Source,
-    DependencySeverity Reason);
+    DependencySeverity Reason)
+{
+    public string? DefinitionKey { get; init; }
+    public SourceIdentity? SourceIdentity { get; init; }
+}
 
 /// <summary>A request for an immediate invariant evaluation during policy dispatch.</summary>
-public sealed record ImmediateEvaluationRequestInfo(int InvariantId, object Source);
+public sealed record ImmediateEvaluationRequestInfo(
+    int InvariantId,
+    object Source)
+{
+    public string? DefinitionKey { get; init; }
+    public SourceIdentity? SourceIdentity { get; init; }
+}
 
 /// <summary>
 /// Stable data produced by a committed mutation. Application callbacks are not invoked until

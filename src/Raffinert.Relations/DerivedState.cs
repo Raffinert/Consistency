@@ -132,6 +132,17 @@ public sealed class Derived<TSource, TItem, TValue>
     }
     internal DerivedDefinition<TSource, TItem, TValue> Definition { get; }
 
+    /// <summary>The optional stable logical key assigned to this derived value.</summary>
+    public string? DefinitionKey => Definition.DefinitionKey;
+
+    /// <summary>Assigns a stable logical key for diagnostics and durable integration messages.</summary>
+    public Derived<TSource, TItem, TValue> Named(string definitionKey)
+    {
+        _ensureMutable();
+        Definition.DefinitionKey = ObjectSetBuilder<TSource>.ValidateDefinitionKey(definitionKey);
+        return this;
+    }
+
     /// <summary>
     /// Explicitly permits incomplete dependency tracking for this computation. Cached freshness is
     /// not guaranteed for dependencies hidden by opaque code or mutable external state.
@@ -205,6 +216,17 @@ public sealed class Invariant<TSource, TItem, TValue>
     }
     internal InvariantDefinition<TSource, TItem, TValue> Definition { get; }
 
+    /// <summary>The optional stable logical key assigned to this invariant.</summary>
+    public string? DefinitionKey => Definition.DefinitionKey;
+
+    /// <summary>Assigns a stable logical key for diagnostics and durable integration messages.</summary>
+    public Invariant<TSource, TItem, TValue> Named(string definitionKey)
+    {
+        _ensureMutable();
+        Definition.DefinitionKey = ObjectSetBuilder<TSource>.ValidateDefinitionKey(definitionKey);
+        return this;
+    }
+
     public Invariant<TSource, TItem, TValue> ReactWith(InvariantReaction reaction)
     {
         _ensureMutable();
@@ -237,6 +259,7 @@ public sealed class Invariant<TSource, TItem, TValue>
 
 internal interface IDerivedDefinition
 {
+    string? DefinitionKey { get; }
     IObjectSetDefinition SourceSet { get; }
     IRelationDefinition Relation { get; }
     LambdaExpression ComputationExpression { get; }
@@ -258,6 +281,7 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     where TItem : class
 {
     public ObjectSetDefinition<TSource> SourceSetDefinition { get; } = sourceSet;
+    public string? DefinitionKey { get; set; }
     public RelationDefinition<TSource, TItem> RelationDefinition { get; } = relation;
     public Func<TSource, IReadOnlyList<TItem>, TValue> Computation { get; } = computation;
     public IObjectSetDefinition SourceSet => SourceSetDefinition;
@@ -393,6 +417,7 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
 
 internal interface IInvariantDefinition
 {
+    string? DefinitionKey { get; }
     IDerivedDefinition Derived { get; }
     InvariantReaction Reaction { get; }
     LambdaExpression PredicateExpression { get; }
@@ -409,6 +434,7 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
     where TSource : class
     where TItem : class
 {
+    public string? DefinitionKey { get; set; }
     public DerivedDefinition<TSource, TItem, TValue> DerivedDefinition { get; } = derived;
     public Func<TSource, TValue, bool> Predicate { get; } = predicate;
     public LambdaExpression PredicateExpression { get; } = predicateExpression;
