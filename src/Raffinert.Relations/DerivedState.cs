@@ -267,6 +267,20 @@ public sealed class InvariantBuilder<TSource> where TSource : class
             throw new ArgumentException("The derived state's source set must match the invariant source set.", nameof(derived));
         return new InvariantUsingBuilder<TSource, TValue>(_model, derived);
     }
+
+    public InvariantUsingBuilder<TSource, TFirst, TSecond> Using<TFirst, TSecond>(
+        Derived<TSource, TFirst> first,
+        Derived<TSource, TSecond> second)
+    {
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(second);
+        _model.EnsureDerived(first.Definition);
+        _model.EnsureDerived(second.Definition);
+        if (!ReferenceEquals(first.Definition.SourceSet, _source.Definition) ||
+            !ReferenceEquals(second.Definition.SourceSet, _source.Definition))
+            throw new ArgumentException("All derived source sets must match the invariant source set.");
+        return new InvariantUsingBuilder<TSource, TFirst, TSecond>(_model, first, second);
+    }
 }
 
 public sealed class InvariantUsingBuilder<TSource, TValue>
@@ -285,6 +299,28 @@ public sealed class InvariantUsingBuilder<TSource, TValue>
     {
         ArgumentNullException.ThrowIfNull(predicate);
         var definition = _derived.Definition.CreateInvariant(predicate, predicate.Compile());
+        _model.AddInvariant(definition);
+        return new Invariant<TSource>(definition, _model.EnsureMutable);
+    }
+}
+
+public sealed class InvariantUsingBuilder<TSource, TFirst, TSecond> where TSource : class
+{
+    private readonly RelationModelBuilder _model;
+    private readonly Derived<TSource, TFirst> _first;
+    private readonly Derived<TSource, TSecond> _second;
+
+    internal InvariantUsingBuilder(RelationModelBuilder model, Derived<TSource, TFirst> first,
+        Derived<TSource, TSecond> second) => (_model, _first, _second) = (model, first, second);
+
+    public Invariant<TSource> Must(Expression<Func<TSource, TFirst, TSecond, bool>> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        var definition = new MultiInvariantDefinition<TSource, TFirst, TSecond>(
+            _first.Definition,
+            _second.Definition,
+            predicate,
+            predicate.Compile());
         _model.AddInvariant(definition);
         return new Invariant<TSource>(definition, _model.EnsureMutable);
     }
@@ -674,7 +710,8 @@ internal interface IInvariantDefinition
     LambdaExpression PredicateExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
     bool AllowIncompleteDependencies { get; set; }
-    IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState);
+    IInvariantRuntimeState CreateState(
+        IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> derivedStates);
     void DispatchRepair(object source);
     void SetRepairScheduler(Delegate scheduler);
 }
@@ -697,10 +734,38 @@ internal sealed class InvariantDefinition<TSource, TValue>(
     public InvariantReaction Reaction { get; set; } = InvariantReaction.MarkDirty;
     public Action<TSource>? RepairScheduler { get; set; }
 
-    public IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState) =>
-        new InvariantRuntimeState<TSource, TValue>(
-            this,
-            derivedState);
+    public IInvariantRuntimeState CreateState(
+        IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> derivedStates) =>
+        new InvariantRuntimeState<TSource>(this, source => Predicate(
+            source,
+            (TValue)derivedStates[DerivedDefinition].GetValue(source)!));
+
+    public void DispatchRepair(object source) => RepairScheduler!((TSource)source);
+    public void SetRepairScheduler(Delegate scheduler) => RepairScheduler = (Action<TSource>)scheduler;
+}
+
+internal sealed class MultiInvariantDefinition<TSource, TFirst, TSecond>(
+    IDerivedDefinition first,
+    IDerivedDefinition second,
+    LambdaExpression predicateExpression,
+    Func<TSource, TFirst, TSecond, bool> predicate) : IInvariantDefinition where TSource : class
+{
+    public string? DefinitionKey { get; set; }
+    public IDerivedDefinition Derived => first;
+    public IReadOnlyList<IDerivedDefinition> UpstreamDerived { get; } = [first, second];
+    public InvariantReaction Reaction { get; set; } = InvariantReaction.MarkDirty;
+    public LambdaExpression PredicateExpression => predicateExpression;
+    public ExpressionDependencyAnalysis Analysis { get; } =
+        ExpressionDependencyAnalyzer.AnalyzeSourceInvariant(predicateExpression);
+    public bool AllowIncompleteDependencies { get; set; }
+    public Action<TSource>? RepairScheduler { get; private set; }
+
+    public IInvariantRuntimeState CreateState(
+        IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> derivedStates) =>
+        new InvariantRuntimeState<TSource>(this, source => predicate(
+            source,
+            (TFirst)derivedStates[first].GetValue(source)!,
+            (TSecond)derivedStates[second].GetValue(source)!));
 
     public void DispatchRepair(object source) => RepairScheduler!((TSource)source);
     public void SetRepairScheduler(Delegate scheduler) => RepairScheduler = (Action<TSource>)scheduler;
@@ -721,9 +786,9 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
     InvariantEvaluationState GetValueState(object source);
 }
 
-internal sealed class InvariantRuntimeState<TSource, TValue>(
-    InvariantDefinition<TSource, TValue> definition,
-    IDerivedRuntimeState derivedState) : IInvariantRuntimeState
+internal sealed class InvariantRuntimeState<TSource>(
+    IInvariantDefinition definition,
+    Func<TSource, bool> evaluate) : IInvariantRuntimeState
     where TSource : class
 {
     private readonly Dictionary<TSource, InvariantEvaluationState> _states = new(ReferenceEqualityComparer<TSource>.Instance);
@@ -734,7 +799,7 @@ internal sealed class InvariantRuntimeState<TSource, TValue>(
 
     public bool Evaluate(TSource source)
     {
-        var valid = definition.Predicate(source, (TValue)derivedState.GetValue(source)!);
+        var valid = evaluate(source);
         _states[source] = valid ? InvariantEvaluationState.Valid : InvariantEvaluationState.Violated;
         return valid;
     }

@@ -154,6 +154,7 @@ Raffinert.Relations.Invariant<TSource>.ReactWith(Raffinert.Relations.InvariantRe
 Raffinert.Relations.Invariant<TSource>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Relations.Invariant<TSource!>!
 Raffinert.Relations.InvariantBuilder<TSource>
 Raffinert.Relations.InvariantBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TValue>!
+Raffinert.Relations.InvariantBuilder<TSource>.Using<TFirst, TSecond>(Raffinert.Relations.Derived<TSource!, TFirst>! first, Raffinert.Relations.Derived<TSource!, TSecond>! second) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TFirst, TSecond>!
 Raffinert.Relations.InvariantEvaluationState
 Raffinert.Relations.InvariantEvaluationState.Dirty = 3 -> Raffinert.Relations.InvariantEvaluationState
 Raffinert.Relations.InvariantEvaluationState.Invalid = 4 -> Raffinert.Relations.InvariantEvaluationState
@@ -193,6 +194,8 @@ Raffinert.Relations.InvariantReaction.MarkInvalid = 2 -> Raffinert.Relations.Inv
 Raffinert.Relations.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>
 Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!>!
+Raffinert.Relations.InvariantUsingBuilder<TSource, TFirst, TSecond>
+Raffinert.Relations.InvariantUsingBuilder<TSource, TFirst, TSecond>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!>!
 Raffinert.Relations.MutationSet
 Raffinert.Relations.ObjectAdded
 Raffinert.Relations.ObjectAdded.Instance.get -> object!

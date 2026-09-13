@@ -58,7 +58,7 @@ internal sealed class DependencyGraphRuntime
             .Select(definition => new InvariantNode(
                 definition,
                 invariants[definition],
-                derivedByDefinition[definition.Derived]))
+                definition.UpstreamDerived.Select(upstream => derivedByDefinition[upstream]).ToArray()))
             .ToArray();
         _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
             .Select(input => input.Relation)
@@ -68,7 +68,8 @@ internal sealed class DependencyGraphRuntime
             node.SourceDependencies.Concat(node.ItemDependencies)
                 .SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
-        _invariantsByDerived = Group(_invariantNodes.Select(node => (node.Derived, node)));
+        _invariantsByDerived = Group(_invariantNodes.SelectMany(node =>
+            node.Derived.Select(derived => (derived, node))));
         _derivedByUpstream = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
             .Select(input => input.Upstream).OfType<IDerivedDefinition>()
             .Select(upstream => (derivedByDefinition[upstream], node))));
@@ -447,13 +448,13 @@ internal sealed class DependencyGraphRuntime
 
     private sealed class InvariantNode
     {
-        private readonly DerivedNode _derived;
-        public DerivedNode Derived => _derived;
+        private readonly IReadOnlyList<DerivedNode> _derived;
+        public IReadOnlyList<DerivedNode> Derived => _derived;
 
         public InvariantNode(
             IInvariantDefinition definition,
             IInvariantRuntimeState state,
-            DerivedNode derived)
+            IReadOnlyList<DerivedNode> derived)
         {
             Definition = definition;
             State = state;
@@ -489,12 +490,13 @@ internal sealed class DependencyGraphRuntime
 
         public void ApplyInherited(RuntimePolicyActions policyActions)
         {
-            InvalidSources = NewSet(_derived.InvalidSources);
-            DirtySources = NewSet(_derived.DirtySources);
-            if (_derived.InvalidSources.Count > 0)
-                State.ApplyImpact(_derived.InvalidSources, DependencyImpactKind.Invalid, policyActions);
-            if (_derived.DirtySources.Count > 0)
-                State.ApplyImpact(_derived.DirtySources, DependencyImpactKind.Dirty, policyActions);
+            InvalidSources = NewSet(_derived.SelectMany(node => node.InvalidSources));
+            DirtySources = NewSet(_derived.SelectMany(node => node.DirtySources));
+            DirtySources.ExceptWith(InvalidSources);
+            if (InvalidSources.Count > 0)
+                State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid, policyActions);
+            if (DirtySources.Count > 0)
+                State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty, policyActions);
         }
 
         public void ApplyDirect(IEnumerable<object> sources, RuntimePolicyActions policyActions)

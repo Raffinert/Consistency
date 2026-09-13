@@ -322,7 +322,7 @@ public sealed class RelationRuntime
         _derivedStates = mutableDerivedStates;
         _invariants = invariants.ToDictionary(
             definition => definition,
-            definition => definition.CreateState(_derivedStates[definition.Derived]));
+            definition => definition.CreateState(_derivedStates));
         _sourceLifecycleParticipants = _derivedStates.Values.Cast<ISourceLifecycleParticipant>()
             .Concat(_invariants.Values)
             .ToArray();

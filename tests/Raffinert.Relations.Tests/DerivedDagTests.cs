@@ -56,6 +56,61 @@ public sealed class DerivedDagTests
         Assert.Equal(34m, runtime.Get(combined, first));
     }
 
+    [Fact]
+    public void Multi_input_invariant_merges_upstreams_and_schedules_once_per_source()
+    {
+        var repairs = new List<Line>();
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<Line>().Key(line => line.Id);
+        var ordered = model.Derived(lines)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(line => line.Ordered);
+        var received = model.Derived(lines).Compute(line => line.Received);
+        var invariant = model.Invariant(lines).Using(received, ordered)
+            .Must((line, receivedValue, orderedValue) => receivedValue <= orderedValue)
+            .ScheduleRepairWith(repairs.Add);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
+        runtime.Add(lines, line);
+        Assert.True(runtime.Evaluate(invariant, line));
+        repairs.Clear();
+
+        line.Ordered = 1m;
+        line.Received = 3m;
+        var application = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(lines, line, value => value.Ordered, 10m, 1m),
+            Change.Property(lines, line, value => value.Received, 2m, 3m)));
+
+        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, line));
+        Assert.Single(application.Result.RepairRequests);
+        application.Dispatch.Invoke();
+        Assert.Equal([line], repairs);
+    }
+
+    [Fact]
+    public void Multi_input_immediate_invariant_refreshes_all_upstreams_after_commit()
+    {
+        var model = new RelationModelBuilder();
+        var lines = model.Objects<Line>().Key(line => line.Id);
+        var ordered = model.Derived(lines).Compute(line => line.Ordered);
+        var received = model.Derived(lines).Compute(line => line.Received);
+        var invariant = model.Invariant(lines).Using(received, ordered)
+            .Must((_, receivedValue, orderedValue) => receivedValue <= orderedValue)
+            .ReactWith(InvariantReaction.EvaluateImmediately);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
+        runtime.Add(lines, line);
+        Assert.True(runtime.Evaluate(invariant, line));
+
+        line.Received = 12m;
+        var application = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(lines, line, value => value.Received, 2m, 12m)));
+        Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(invariant, line));
+
+        application.Dispatch.Invoke();
+        Assert.Equal(InvariantEvaluationState.Violated, runtime.GetState(invariant, line));
+    }
+
     private sealed class Line
     {
         public Guid Id { get; init; }
