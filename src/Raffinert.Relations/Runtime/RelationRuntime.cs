@@ -178,8 +178,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(left);
         if (!_relations.TryGetValue(relation.Definition, out var state))
             throw new ArgumentException("The relation does not belong to this compiled model.", nameof(relation));
-        if (!_sets[relation.Definition.Left].Contains(left))
-            throw new InvalidOperationException("The left instance is not registered in the relation's object set.");
+        EnsureRegistered(relation.Definition.Left, left, "left");
         return ((RelationRuntimeState<TLeft, TRight>)state).Related(left);
     }
 
@@ -196,8 +195,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(right);
         if (!_relations.TryGetValue(relation.Definition, out var state))
             throw new ArgumentException("The relation does not belong to this compiled model.", nameof(relation));
-        if (!_sets[relation.Definition.Right].Contains(right))
-            throw new InvalidOperationException("The right instance is not registered in the relation's object set.");
+        EnsureRegistered(relation.Definition.Right, right, "right");
         return ((RelationRuntimeState<TLeft, TRight>)state).RelatedFromRight(right);
     }
 
@@ -208,8 +206,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(source);
         if (!_derivedStates.TryGetValue(derived.Definition, out var state))
             throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
-        if (!_sets[derived.Definition.SourceSet].Contains(source))
-            throw new InvalidOperationException("The source instance is not registered in the derived state's object set.");
+        EnsureRegistered(derived.Definition.SourceSet, source, "source");
         return (TValue)state.GetValue(source)!;
     }
 
@@ -220,6 +217,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(source);
         if (!_derivedStates.TryGetValue(derived.Definition, out var state))
             throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
+        EnsureRegistered(derived.Definition.SourceSet, source, "source");
         return state.GetValueState(source);
     }
 
@@ -230,6 +228,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(source);
         if (!_invariants.TryGetValue(invariant.Definition, out var state))
             throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
+        EnsureRegistered(invariant.Definition.SourceSet, source, "source");
         return state.EvaluateValue(source);
     }
 
@@ -240,6 +239,7 @@ public sealed partial class RelationRuntime
         ArgumentNullException.ThrowIfNull(source);
         if (!_invariants.TryGetValue(invariant.Definition, out var state))
             throw new ArgumentException("The invariant does not belong to this compiled model.", nameof(invariant));
+        EnsureRegistered(invariant.Definition.SourceSet, source, "source");
         return state.GetValueState(source);
     }
 
@@ -352,5 +352,12 @@ public sealed partial class RelationRuntime
         if (!_sets.TryGetValue(definition, out var state))
             throw new ArgumentException("The object set does not belong to this compiled model.");
         return state;
+    }
+
+    private void EnsureRegistered(IObjectSetDefinition set, object source, string role)
+    {
+        if (!_sets[set].Contains(source))
+            throw new InvalidOperationException(
+                $"The {role} instance is not registered in its declared object set.");
     }
 }
