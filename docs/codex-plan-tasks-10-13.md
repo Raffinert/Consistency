@@ -1,5 +1,7 @@
 # Codex Implementation Plan — Post-DAG Verification Hardening
 
+Status: **Completed 2026-09-13.** This file is retained as execution history, not active instructions.
+
 Baseline: `main` at `db1d3488f05963c97eb806ce8943505609d37d70`.
 
 This document supersedes the previous “Tasks 10–13” execution instructions. The large architecture wave is now substantially implemented: source-only derived values, compiled DAG metadata, derived-on-derived composition, multi-input invariants, independent relation propagation planning, conservative no-pair propagation, multi-target core tests, benchmark coverage, and roadmap archival all exist on `main`.
@@ -710,29 +712,29 @@ Review package validation and public API analyzer output deliberately.
 ## Final hardening checklist
 
 ```text
-[ ] runtime DAG execution is explicitly topological
-[ ] mutation ordering cannot change DAG semantics
-[ ] diamond severity merges once and Invalid dominates Dirty
-[ ] conservative right changes use safe candidate routing when possible
-[ ] old-key and new-key candidate sets are both considered
-[ ] scan/no-safe-routing fallback remains all-source conservative
-[ ] no conservative false negatives across deterministic matrix
-[ ] randomized tests cover composed DAG + conservative propagation
-[ ] randomized tests pass on net8 and net10
-[ ] composed derived direct-source severity is configurable
-[ ] internal derived input representation has no invalid nullable state
-[ ] multi-input invariant has explicit SourceSet
-[ ] exact incremental aggregates retain exact propagation semantics
-[ ] RuntimeApplyResult remains data-only
-[ ] policy dispatch remains resumable
-[ ] durable identities still canonicalize/round-trip
-[ ] failed Commit restores touched runtime state
-[ ] EF database-success/runtime-sync-failure remains distinct
-[ ] RelationRuntime/DerivedState catch-all files are split by responsibility
-[ ] oversized test files are split by behavior
-[ ] benchmark documentation reflects post-hardening numbers
-[ ] README/architecture/public diagnostics match actual behavior
-[ ] CI is green
+[x] runtime DAG execution is explicitly topological
+[x] mutation ordering cannot change DAG semantics
+[x] diamond severity merges once and Invalid dominates Dirty
+[x] conservative right changes use safe candidate routing when possible
+[x] old-key and new-key candidate sets are both considered
+[x] scan/no-safe-routing fallback remains all-source conservative
+[x] no conservative false negatives across deterministic matrix
+[x] randomized tests cover composed DAG + conservative propagation
+[x] randomized tests pass on net8 and net10
+[x] composed derived direct-source severity is configurable
+[x] internal derived input representation has no invalid nullable state
+[x] multi-input invariant has explicit SourceSet
+[x] exact incremental aggregates retain exact propagation semantics
+[x] RuntimeApplyResult remains data-only
+[x] policy dispatch remains resumable
+[x] durable identities still canonicalize/round-trip
+[x] failed Commit restores touched runtime state
+[x] EF database-success/runtime-sync-failure remains distinct
+[x] RelationRuntime/DerivedState catch-all files are split by responsibility
+[x] oversized test files are split by behavior
+[x] benchmark documentation reflects post-hardening numbers
+[x] README/architecture/public diagnostics match actual behavior
+[x] CI is green
 ```
 
 ## Recommended commit sequence

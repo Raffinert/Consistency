@@ -44,7 +44,9 @@ Direct query-only relations maintain their selected access index but do not reta
 Relation consumers choose a propagation plan independently of query access. Exact propagation retains
 bidirectional membership for source-precise deltas and incremental aggregates. An explicit
 `Conservatively()` full-recompute consumer retains no permanent pairs and invalidates a safe source
-superset, falling back to all registered left sources when narrower old/new routing cannot be proven.
+superset. Hash joins use the union of stored old-key and current new-key source candidate buckets for
+right-side moves; scan/opaque relations fall back to all registered left sources when narrower routing
+cannot be proven.
 The original predicate remains authoritative when a lazy value is recomputed. Inspect
 `compiled.Diagnostics`, `DebugView`, and `runtime.Diagnostics.Relations` to make this tradeoff visible.
 
@@ -53,7 +55,8 @@ The original predicate remains authoritative when a lazy value is recomputed. In
 Derived caches transition monotonically among `Fresh`, `Dirty`, and `Invalid` until recomputed.
 Derived values may compute directly from a source, consume a relation, or compose one/two upstream
 derived values. Impacts propagate source-by-source in topological order; strongest severity wins while
-recomputation remains lazy.
+recomputation remains lazy. Composed builders expose the same direct-source `Impact(...)` configuration
+as source-only and relation-backed builders; inherited upstream severity remains monotonic.
 Per-derived impact configuration determines whether membership additions/removals and related-item
 changes make a cache stale or unusable. Exact standalone `Count`, `LongCount`, parameterless `Any`, and
 numeric `Sum` expressions may opt into incremental maintenance; all other expressions use the original
@@ -74,6 +77,9 @@ If a convenience save completes in the database but runtime synchronization fail
 `RelationRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
 reconciliation/rebuild from authoritative data, not a blind database-command retry. A later policy callback
 failure is different: runtime state is already committed and dispatch resumes from the failed action.
+
+Core behavior and API contracts are tested on .NET 8 and .NET 10. The EF Core adapter targets and is
+tested on .NET 10.
 
 ## Durable integration identity
 

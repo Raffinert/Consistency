@@ -123,7 +123,7 @@ in-process conveniences only. Persist `DefinitionKey` plus canonical `DurableSou
 `GetDurableIdentity()` helper fails explicitly when the invariant/object set is unnamed or the key cannot
 be represented canonically.
 
-Standalone aggregates can opt into conservative incremental maintenance:
+Standalone aggregates can opt into exact incremental maintenance:
 
 ```csharp
 var received = model.Derived(poLines)
@@ -139,7 +139,9 @@ the selected plan is shown in `DebugView`.
 
 Full-recompute relation consumers may instead call `Conservatively()` before `Compute(...)`.
 This avoids retaining permanent matching pairs and invalidates a safe source superset; lazy reads
-still execute the original predicate. Incremental computations and exact membership-severity policies
+still execute the original predicate. Recognized join keys route right-side changes through the union
+of their old/new source candidate buckets; scan/opaque relations safely fall back to all sources.
+Incremental computations and exact membership-severity policies
 retain exact materialized propagation. Query access, reverse candidate access, and propagation plan are
 reported independently in compiled diagnostics.
 
@@ -176,6 +178,7 @@ last `ResetDiagnostics()` call.
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Source-only derived values and one/two-upstream derived composition through a compiled DAG
+- Configurable direct-source severity on source-only, relation-backed, and composed derived values
 - Opt-in incremental `Count`, `LongCount`, `Any`, and direct numeric `Sum` computation plans
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
 - Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
@@ -198,6 +201,7 @@ last `ResetDiagnostics()` call.
 - Per-relation materialization, index-size, pair-count, fan-out, and configurable density diagnostics
 - Structured compiled-model diagnostics and cumulative incremental-work runtime counters
 - Deterministic full-graph randomized optimized-versus-scan correctness coverage
+- Core behavior verification on .NET 8 and .NET 10; EF Core adapter verification on .NET 10
 - CI restore/build/test/format/pack validation and NuGet-ready package metadata
 - Deterministic SourceLink-enabled packages, repository commit metadata, package validation, and `.snupkg` symbols
 
