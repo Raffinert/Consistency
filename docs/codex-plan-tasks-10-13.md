@@ -2,7 +2,9 @@
 
 Baseline: `main` at `824fbfeab77569c68faa44232626d01e687741e9`.
 
-This plan supersedes the Task 10–13 sections of `docs/codex-implementation-plan-after-safety-hardening.md`. Tasks 1–9 are considered implemented at this baseline. Do not reopen them unless a regression is found while implementing the work below.
+This plan supersedes the Task 10–13 sections of the archived
+`docs/roadmaps/archive/codex-implementation-plan-after-safety-hardening.md`. Tasks 1–9 are considered
+implemented at this baseline. Do not reopen them unless a regression is found while implementing the work below.
 
 ## Current verified state
 

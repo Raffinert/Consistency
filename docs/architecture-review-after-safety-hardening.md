@@ -2,7 +2,7 @@
 
 Reviewed against `main` at `83a60e64e6c6764df6c73c92dc69c18b88c1f184`.
 
-This follows `docs/next-architecture-improvements.md`. Since that review, the major correctness items were implemented: failure-safe prepared commits, Prepare/Commit domain-drift checks, durable definition/source identity metadata, simplified public derived/invariant handles, stable key-shape restrictions, per-source severity classification, and compiled dependency adjacency.
+This follows the archived `docs/roadmaps/archive/next-architecture-improvements.md`. Since that review, the major correctness items were implemented: failure-safe prepared commits, Prepare/Commit domain-drift checks, durable definition/source identity metadata, simplified public derived/invariant handles, stable key-shape restrictions, per-source severity classification, and compiled dependency adjacency.
 
 The architecture is materially stronger. The next phase should focus on preserving those guarantees at integration boundaries and making them scale.
 

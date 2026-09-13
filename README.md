@@ -220,6 +220,7 @@ canonically representable key. A durable policy request additionally requires a 
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)
+- [Current implementation roadmap](docs/roadmaps/README.md)
 - [End-to-end purchase order and goods receipt example](docs/purchase-order-example.md)
 - [Measured-workload optimizer policy](docs/optimizer-policy.md)
 - [Release and versioning process](RELEASING.md)
