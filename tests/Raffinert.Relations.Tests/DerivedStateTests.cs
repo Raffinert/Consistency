@@ -1019,12 +1019,12 @@ public sealed class DerivedStateTests
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, addedSource));
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(count, removedSource));
-        var publicSources = Assert.Single(result.DerivedImpacts).Sources;
+        var publicSources = Assert.Single(result.Result.DerivedImpacts).Sources;
         Assert.Equal(DependencySeverity.Dirty,
             Assert.Single(publicSources, value => ReferenceEquals(value.Source, addedSource)).Severity);
         Assert.Equal(DependencySeverity.Invalid,
             Assert.Single(publicSources, value => ReferenceEquals(value.Source, removedSource)).Severity);
-        var invariantSources = Assert.Single(result.InvariantImpacts).Sources;
+        var invariantSources = Assert.Single(result.Result.InvariantImpacts).Sources;
         Assert.Equal(DependencySeverity.Dirty,
             Assert.Single(invariantSources, value => ReferenceEquals(value.Source, addedSource)).Severity);
         Assert.Equal(DependencySeverity.Invalid,
@@ -1167,15 +1167,15 @@ public sealed class DerivedStateTests
         var result = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(items, item, value => value.Code, "B", "A")));
 
-        Assert.Throws<DeliberateDispatchException>(result.DispatchPolicies);
+        Assert.Throws<DeliberateDispatchException>(result.Dispatch.Invoke);
         Assert.Equal([1, 1, 0], calls);
-        Assert.False(result.PoliciesDispatched);
+        Assert.False(result.Dispatch.IsDispatched);
 
         failSecond = false;
-        result.DispatchPolicies();
+        result.Dispatch.Invoke();
         Assert.Equal([1, 2, 1], calls);
-        Assert.True(result.PoliciesDispatched);
-        Assert.Throws<InvalidOperationException>(result.DispatchPolicies);
+        Assert.True(result.Dispatch.IsDispatched);
+        Assert.Throws<InvalidOperationException>(result.Dispatch.Invoke);
     }
 
     [Fact]
@@ -1200,8 +1200,9 @@ public sealed class DerivedStateTests
         scheduled.Clear();
         item.Code = "A";
 
-        var result = runtime.ApplyDetailed(MutationSet.Create(
+        var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(items, item, x => x.Code, "B", "A")));
+        var result = application.Result;
 
         Assert.Empty(scheduled);
         var relationImpact = Assert.Single(result.RelationImpacts);
@@ -1227,10 +1228,10 @@ public sealed class DerivedStateTests
         Assert.Equal(DependencySeverity.Invalid, repair.Reason);
         Assert.Empty(result.ImmediateEvaluationRequests);
 
-        result.DispatchPolicies();
+        application.Dispatch.Invoke();
 
         Assert.Equal([source], scheduled);
-        Assert.True(result.PoliciesDispatched);
+        Assert.True(application.Dispatch.IsDispatched);
     }
 
     [Fact]
@@ -1251,15 +1252,16 @@ public sealed class DerivedStateTests
         Assert.True(runtime.Evaluate(invariant, source));
         item.Code = "A";
 
-        var result = runtime.ApplyDetailed(MutationSet.Create(
+        var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(items, item, x => x.Code, "B", "A")));
+        var result = application.Result;
 
         var request = Assert.Single(result.ImmediateEvaluationRequests);
         Assert.Equal(0, request.InvariantId);
         Assert.Same(source, request.Source);
         Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(invariant, source));
 
-        result.DispatchPolicies();
+        application.Dispatch.Invoke();
 
         Assert.Equal(InvariantEvaluationState.Violated, runtime.GetState(invariant, source));
     }

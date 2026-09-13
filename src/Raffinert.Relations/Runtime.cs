@@ -489,27 +489,27 @@ public sealed class RelationRuntime
     /// </summary>
     public ChangeImpact Apply(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
-        var result = ApplyDetailed(mutationSet, validationMode);
-        result.DispatchPolicies();
-        return result.ChangeImpact;
+        var application = ApplyDetailed(mutationSet, validationMode);
+        application.Dispatch.Invoke();
+        return application.Result.ChangeImpact;
     }
 
     /// <summary>
     /// Validates and commits a mutation batch, returning stable impact/request data without invoking
-    /// application callbacks. Call <see cref="RuntimeApplyResult.DispatchPolicies"/> to dispatch them.
+    /// application callbacks. Use the returned dispatch handle to invoke them.
     /// </summary>
-    public RuntimeApplyResult ApplyDetailed(MutationSet mutationSet) =>
+    public RuntimeApplication ApplyDetailed(MutationSet mutationSet) =>
         ApplyDetailed(mutationSet, ChangeValidationMode.Default);
 
     /// <summary>
     /// Validates and commits a mutation batch, returning stable impact/request data without invoking
-    /// application callbacks. Call <see cref="RuntimeApplyResult.DispatchPolicies"/> to dispatch them.
+    /// application callbacks. Use the returned dispatch handle to invoke them.
     /// </summary>
-    public RuntimeApplyResult ApplyDetailed(MutationSet mutationSet, ChangeValidationMode validationMode)
+    public RuntimeApplication ApplyDetailed(MutationSet mutationSet, ChangeValidationMode validationMode)
     {
         var prepared = Prepare(mutationSet, validationMode);
         var impact = Commit(prepared);
-        return CreateDetailedResult(prepared, impact);
+        return CreateDetailedApplication(prepared, impact);
     }
 
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
@@ -700,7 +700,7 @@ public sealed class RelationRuntime
         return new RuntimeCommitResult(publicImpact, policyActions);
     }
 
-    private RuntimeApplyResult CreateDetailedResult(PreparedMutation prepared, ChangeImpact impact)
+    private RuntimeApplication CreateDetailedApplication(PreparedMutation prepared, ChangeImpact impact)
     {
         var relationImpacts = LastRelationImpacts
             .OrderBy(pair => _relationIds[pair.Key])
@@ -751,14 +751,14 @@ public sealed class RelationRuntime
                 SourceIdentity = CreateSourceIdentity(request.Invariant.Definition.Derived.SourceSet, request.Source)
             })
             .ToArray();
-        return new RuntimeApplyResult(
+        var result = new RuntimeApplyResult(
             impact,
             relationImpacts,
             derivedImpacts,
             invariantImpacts,
             repairRequests,
-            immediateRequests,
-            () => Dispatch(prepared));
+            immediateRequests);
+        return new RuntimeApplication(result, new PolicyDispatchHandle(() => Dispatch(prepared)));
     }
 
     private SourceIdentity CreateSourceIdentity(IObjectSetDefinition set, object source)

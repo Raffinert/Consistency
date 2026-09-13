@@ -55,8 +55,9 @@ After changing a receipt quantity, request structured post-commit work:
 decimal oldQuantity = receipt.Quantity;
 receipt.Quantity = 12m;
 
-RuntimeApplyResult result = runtime.ApplyDetailed(MutationSet.Create(
+RuntimeApplication application = runtime.ApplyDetailed(MutationSet.Create(
     Change.Property(receipts, receipt, x => x.Quantity, oldQuantity, receipt.Quantity)));
+RuntimeApplyResult result = application.Result;
 
 foreach (var request in result.RepairRequests)
 {
@@ -64,7 +65,7 @@ foreach (var request in result.RepairRequests)
     outbox.Add(durable.DefinitionKey, durable.Source, request.Reason);
 }
 
-result.DispatchPolicies(); // optional in-process scheduler
+application.Dispatch.Invoke(); // optional in-process scheduler
 ```
 
 `InvariantId` and `Source` are deliberately not persisted: they are respectively declaration-order-local

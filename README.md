@@ -104,7 +104,8 @@ For outbox, queue, or background-work integrations, `ApplyDetailed` commits sync
 policy work as data before any application callback runs:
 
 ```csharp
-RuntimeApplyResult result = runtime.ApplyDetailed(mutations);
+RuntimeApplication application = runtime.ApplyDetailed(mutations);
+RuntimeApplyResult result = application.Result;
 
 foreach (var request in result.RepairRequests)
 {
@@ -112,7 +113,7 @@ foreach (var request in result.RepairRequests)
     outbox.Add(durable.DefinitionKey, durable.Source, request.Reason);
 }
 
-result.DispatchPolicies(); // optional configured in-process callbacks
+application.Dispatch.Invoke(); // optional configured in-process callbacks
 ```
 
 The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation

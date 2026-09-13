@@ -42,8 +42,9 @@ public sealed class EndToEndDomainTests
         repairs.Clear();
 
         receipt.Quantity = 6m;
-        var update = runtime.ApplyDetailed(MutationSet.Create(
+        var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(scenario.Receipts, receipt, value => value.Quantity, 2m, 6m)));
+        var update = application.Result;
 
         var impact = Assert.Single(Assert.Single(update.DerivedImpacts).Sources);
         Assert.Same(firstLine, impact.Source);
@@ -51,7 +52,7 @@ public sealed class EndToEndDomainTests
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Received, firstLine));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Received, otherLine));
         Assert.Single(update.RepairRequests);
-        update.DispatchPolicies();
+        application.Dispatch.Invoke();
         Assert.Equal([firstLine], repairs);
         Assert.Equal(6m, runtime.Get(scenario.Received, firstLine));
         Assert.False(runtime.Evaluate(scenario.QuantityInvariant, firstLine));

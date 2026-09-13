@@ -202,21 +202,18 @@ internal static class DurableSourceIdentityFactory
 }
 
 /// <summary>
-/// Stable data produced by a committed mutation. Application callbacks are not invoked until
-/// <see cref="DispatchPolicies"/> is called.
+/// Stable data produced by a committed mutation. This object contains no callback capability
+/// and does not retain the relation runtime.
 /// </summary>
 public sealed class RuntimeApplyResult
 {
-    private readonly Action _dispatch;
-
     internal RuntimeApplyResult(
         ChangeImpact changeImpact,
         IReadOnlyList<RelationMutationImpact> relationImpacts,
         IReadOnlyList<DerivedMutationImpact> derivedImpacts,
         IReadOnlyList<InvariantMutationImpact> invariantImpacts,
         IReadOnlyList<RepairRequestInfo> repairRequests,
-        IReadOnlyList<ImmediateEvaluationRequestInfo> immediateEvaluationRequests,
-        Action dispatch)
+        IReadOnlyList<ImmediateEvaluationRequestInfo> immediateEvaluationRequests)
     {
         ChangeImpact = changeImpact;
         RelationImpacts = relationImpacts;
@@ -224,7 +221,6 @@ public sealed class RuntimeApplyResult
         InvariantImpacts = invariantImpacts;
         RepairRequests = repairRequests;
         ImmediateEvaluationRequests = immediateEvaluationRequests;
-        _dispatch = dispatch;
     }
 
     public ChangeImpact ChangeImpact { get; }
@@ -233,15 +229,27 @@ public sealed class RuntimeApplyResult
     public IReadOnlyList<InvariantMutationImpact> InvariantImpacts { get; }
     public IReadOnlyList<RepairRequestInfo> RepairRequests { get; }
     public IReadOnlyList<ImmediateEvaluationRequestInfo> ImmediateEvaluationRequests { get; }
-    public bool PoliciesDispatched { get; private set; }
+}
+
+/// <summary>A committed mutation's stable result data and separate in-process dispatch capability.</summary>
+public sealed record RuntimeApplication(RuntimeApplyResult Result, PolicyDispatchHandle Dispatch);
+
+/// <summary>Dispatches a committed mutation's configured post-commit callbacks.</summary>
+public sealed class PolicyDispatchHandle
+{
+    private readonly Action _dispatch;
+
+    internal PolicyDispatchHandle(Action dispatch) => _dispatch = dispatch;
+
+    public bool IsDispatched { get; private set; }
 
     /// <summary>Invokes configured post-commit callbacks once.</summary>
-    public void DispatchPolicies()
+    public void Invoke()
     {
-        if (PoliciesDispatched)
+        if (IsDispatched)
             throw new InvalidOperationException("Policy actions have already been dispatched.");
         _dispatch();
-        PoliciesDispatched = true;
+        IsDispatched = true;
     }
 }
 

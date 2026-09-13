@@ -294,8 +294,8 @@ Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.MutationSet! mutat
 Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! change) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! change, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.RuntimeApplyResult!
+Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.RuntimeApplication!
+Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
@@ -377,12 +377,19 @@ Raffinert.Relations.SourceDependencyImpact.SourceIdentity.init -> void
 Raffinert.Relations.RuntimeApplyResult
 Raffinert.Relations.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!
-Raffinert.Relations.RuntimeApplyResult.DispatchPolicies() -> void
 Raffinert.Relations.RuntimeApplyResult.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ImmediateEvaluationRequestInfo!>!
 Raffinert.Relations.RuntimeApplyResult.InvariantImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantMutationImpact!>!
-Raffinert.Relations.RuntimeApplyResult.PoliciesDispatched.get -> bool
 Raffinert.Relations.RuntimeApplyResult.RelationImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationMutationImpact!>!
 Raffinert.Relations.RuntimeApplyResult.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RepairRequestInfo!>!
+Raffinert.Relations.RuntimeApplication
+Raffinert.Relations.RuntimeApplication.Dispatch.get -> Raffinert.Relations.PolicyDispatchHandle!
+Raffinert.Relations.RuntimeApplication.Dispatch.init -> void
+Raffinert.Relations.RuntimeApplication.Result.get -> Raffinert.Relations.RuntimeApplyResult!
+Raffinert.Relations.RuntimeApplication.Result.init -> void
+Raffinert.Relations.RuntimeApplication.RuntimeApplication(Raffinert.Relations.RuntimeApplyResult! Result, Raffinert.Relations.PolicyDispatchHandle! Dispatch) -> void
+Raffinert.Relations.PolicyDispatchHandle
+Raffinert.Relations.PolicyDispatchHandle.Invoke() -> void
+Raffinert.Relations.PolicyDispatchHandle.IsDispatched.get -> bool
 Raffinert.Relations.RuntimeDiagnosticOptions
 Raffinert.Relations.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.get -> double
 Raffinert.Relations.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.init -> void

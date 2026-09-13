@@ -78,8 +78,9 @@ public sealed class DiagnosticsTests
         runtime.ResetDiagnostics();
         item.Code = "A";
 
-        var result = runtime.ApplyDetailed(MutationSet.Create(
+        var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(items, item, value => value.Code, "B", "A")));
+        var result = application.Result;
         var diagnostics = runtime.Diagnostics;
 
         Assert.True(diagnostics.PredicateEvaluations > 0);
@@ -101,7 +102,7 @@ public sealed class DiagnosticsTests
         Assert.Equal("Source", durable.Source.ObjectSetKey);
         Assert.Empty(repairs);
 
-        result.DispatchPolicies();
+        application.Dispatch.Invoke();
         Assert.Equal([source], repairs);
         runtime.ResetDiagnostics();
         Assert.Equal(0, runtime.Diagnostics.PredicateEvaluations);
