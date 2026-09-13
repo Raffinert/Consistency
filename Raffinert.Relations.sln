@@ -19,6 +19,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Relations.EntityF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Relations.EntityFrameworkCore.Tests", "tests\Raffinert.Relations.EntityFrameworkCore.Tests\Raffinert.Relations.EntityFrameworkCore.Tests.csproj", "{153BF7CB-F46A-470A-A96B-FA4C47B61957}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Relations.PurchaseOrderSample", "samples\Raffinert.Relations.PurchaseOrderSample\Raffinert.Relations.PurchaseOrderSample.csproj", "{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -89,6 +93,18 @@ Global
 		{153BF7CB-F46A-470A-A96B-FA4C47B61957}.Release|x64.Build.0 = Release|Any CPU
 		{153BF7CB-F46A-470A-A96B-FA4C47B61957}.Release|x86.ActiveCfg = Release|Any CPU
 		{153BF7CB-F46A-470A-A96B-FA4C47B61957}.Release|x86.Build.0 = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|x64.Build.0 = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Debug|x86.Build.0 = Debug|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|x64.ActiveCfg = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|x64.Build.0 = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|x86.ActiveCfg = Release|Any CPU
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -99,5 +115,6 @@ Global
 		{3E1A405D-E80A-4C43-94B1-6994DD4DB620} = {CD80D5C3-C0C7-4766-9EA6-228AE718A94C}
 		{62E1E41C-D4FB-47A3-9D78-D493BD5CA4BF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{153BF7CB-F46A-470A-A96B-FA4C47B61957} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal
