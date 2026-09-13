@@ -57,111 +57,111 @@ public sealed class RandomizedDagPropagationTests
             switch (choice)
             {
                 case 0:
-                {
-                    var source = NewSource(random.Next());
-                    sources.Add(source);
-                    trace.Add($"add source {source.Id}");
-                    Apply(scenario => [Change.Add(scenario.Sources, source)]);
-                    break;
-                }
+                    {
+                        var source = NewSource(random.Next());
+                        sources.Add(source);
+                        trace.Add($"add source {source.Id}");
+                        Apply(scenario => [Change.Add(scenario.Sources, source)]);
+                        break;
+                    }
                 case 1:
-                {
-                    var index = random.Next(sources.Count);
-                    var source = sources[index];
-                    sources.RemoveAt(index);
-                    trace.Add($"remove source {source.Id}");
-                    Apply(scenario => [Change.Remove(scenario.Sources, source)]);
-                    break;
-                }
+                    {
+                        var index = random.Next(sources.Count);
+                        var source = sources[index];
+                        sources.RemoveAt(index);
+                        trace.Add($"remove source {source.Id}");
+                        Apply(scenario => [Change.Remove(scenario.Sources, source)]);
+                        break;
+                    }
                 case 2:
-                {
-                    var source = Pick(sources);
-                    var old = source.Adjustment;
-                    source.Adjustment = random.Next(0, 8);
-                    trace.Add($"source adjustment {source.Id} {old}->{source.Adjustment}");
-                    Apply(scenario =>
-                        [Change.Property(scenario.Sources, source, value => value.Adjustment, old, source.Adjustment)]);
-                    break;
-                }
+                    {
+                        var source = Pick(sources);
+                        var old = source.Adjustment;
+                        source.Adjustment = random.Next(0, 8);
+                        trace.Add($"source adjustment {source.Id} {old}->{source.Adjustment}");
+                        Apply(scenario =>
+                            [Change.Property(scenario.Sources, source, value => value.Adjustment, old, source.Adjustment)]);
+                        break;
+                    }
                 case 3:
-                {
-                    var source = Pick(sources);
-                    var old = source.Code;
-                    source.Code = RandomCode();
-                    trace.Add($"source code {source.Id} {old}->{source.Code}");
-                    Apply(scenario => [Change.Property(scenario.Sources, source, value => value.Code, old, source.Code)]);
-                    break;
-                }
+                    {
+                        var source = Pick(sources);
+                        var old = source.Code;
+                        source.Code = RandomCode();
+                        trace.Add($"source code {source.Id} {old}->{source.Code}");
+                        Apply(scenario => [Change.Property(scenario.Sources, source, value => value.Code, old, source.Code)]);
+                        break;
+                    }
                 case 4:
-                {
-                    var source = Pick(sources);
-                    var old = source.Policy!.Maximum;
-                    source.Policy.Maximum = random.Next(4, 24);
-                    trace.Add($"policy maximum {source.Id} {old}->{source.Policy.Maximum}");
-                    Apply(_ => [Change.Property(source.Policy, value => value.Maximum, old, source.Policy.Maximum)]);
-                    break;
-                }
+                    {
+                        var source = Pick(sources);
+                        var old = source.Policy!.Maximum;
+                        source.Policy.Maximum = random.Next(4, 24);
+                        trace.Add($"policy maximum {source.Id} {old}->{source.Policy.Maximum}");
+                        Apply(_ => [Change.Property(source.Policy, value => value.Maximum, old, source.Policy.Maximum)]);
+                        break;
+                    }
                 case 5:
-                {
-                    var item = NewItem(random.Next());
-                    items.Add(item);
-                    trace.Add($"add item {item.Id}");
-                    Apply(scenario => [Change.Add(scenario.Items, item)]);
-                    break;
-                }
+                    {
+                        var item = NewItem(random.Next());
+                        items.Add(item);
+                        trace.Add($"add item {item.Id}");
+                        Apply(scenario => [Change.Add(scenario.Items, item)]);
+                        break;
+                    }
                 case 6:
-                {
-                    var index = random.Next(items.Count);
-                    var item = items[index];
-                    items.RemoveAt(index);
-                    trace.Add($"remove item {item.Id}");
-                    Apply(scenario => [Change.Remove(scenario.Items, item)]);
-                    break;
-                }
+                    {
+                        var index = random.Next(items.Count);
+                        var item = items[index];
+                        items.RemoveAt(index);
+                        trace.Add($"remove item {item.Id}");
+                        Apply(scenario => [Change.Remove(scenario.Items, item)]);
+                        break;
+                    }
                 case 7:
-                {
-                    var item = Pick(items);
-                    var old = item.Details!.Code;
-                    item.Details.Code = RandomCode();
-                    trace.Add($"item code {item.Id} {old}->{item.Details.Code}");
-                    Apply(_ => [Change.Property(item.Details, value => value.Code, old, item.Details.Code)]);
-                    break;
-                }
+                    {
+                        var item = Pick(items);
+                        var old = item.Details!.Code;
+                        item.Details.Code = RandomCode();
+                        trace.Add($"item code {item.Id} {old}->{item.Details.Code}");
+                        Apply(_ => [Change.Property(item.Details, value => value.Code, old, item.Details.Code)]);
+                        break;
+                    }
                 case 8:
-                {
-                    var item = Pick(items);
-                    var old = item.Details!.Quantity;
-                    item.Details.Quantity = random.Next(1, 12);
-                    trace.Add($"item quantity {item.Id} {old}->{item.Details.Quantity}");
-                    Apply(_ => [Change.Property(item.Details, value => value.Quantity, old, item.Details.Quantity)]);
-                    break;
-                }
+                    {
+                        var item = Pick(items);
+                        var old = item.Details!.Quantity;
+                        item.Details.Quantity = random.Next(1, 12);
+                        trace.Add($"item quantity {item.Id} {old}->{item.Details.Quantity}");
+                        Apply(_ => [Change.Property(item.Details, value => value.Quantity, old, item.Details.Quantity)]);
+                        break;
+                    }
                 case 9:
-                {
-                    var item = Pick(items);
-                    var old = item.Enabled;
-                    item.Enabled = !old;
-                    trace.Add($"item enabled {item.Id} {old}->{item.Enabled}");
-                    Apply(scenario => [Change.Property(scenario.Items, item, value => value.Enabled, old, item.Enabled)]);
-                    break;
-                }
+                    {
+                        var item = Pick(items);
+                        var old = item.Enabled;
+                        item.Enabled = !old;
+                        trace.Add($"item enabled {item.Id} {old}->{item.Enabled}");
+                        Apply(scenario => [Change.Property(scenario.Items, item, value => value.Enabled, old, item.Enabled)]);
+                        break;
+                    }
                 default:
-                {
-                    var source = Pick(sources);
-                    var item = Pick(items);
-                    var oldAdjustment = source.Adjustment;
-                    var oldQuantity = item.Details!.Quantity;
-                    source.Adjustment = random.Next(0, 8);
-                    item.Details.Quantity = random.Next(1, 12);
-                    trace.Add($"batch source {source.Id} adjustment and item {item.Id} quantity");
-                    Apply(scenario =>
-                    [
-                        Change.Property(scenario.Sources, source, value => value.Adjustment,
+                    {
+                        var source = Pick(sources);
+                        var item = Pick(items);
+                        var oldAdjustment = source.Adjustment;
+                        var oldQuantity = item.Details!.Quantity;
+                        source.Adjustment = random.Next(0, 8);
+                        item.Details.Quantity = random.Next(1, 12);
+                        trace.Add($"batch source {source.Id} adjustment and item {item.Id} quantity");
+                        Apply(scenario =>
+                        [
+                            Change.Property(scenario.Sources, source, value => value.Adjustment,
                             oldAdjustment, source.Adjustment),
                         Change.Property(item.Details, value => value.Quantity, oldQuantity, item.Details.Quantity)
-                    ]);
-                    break;
-                }
+                        ]);
+                        break;
+                    }
             }
         }
 
