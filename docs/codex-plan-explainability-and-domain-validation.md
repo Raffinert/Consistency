@@ -1,5 +1,7 @@
 # Codex Implementation Plan — Domain-Semantic Severity, Impact Explainability, and Alpha Validation
 
+Status: **Completed 2026-09-13.** Retained as implementation history and release-review context.
+
 Baseline: `main` at `e7a6c2b6b89d7257ec58a32c1fc00bd6115c8c77`.
 
 The post-DAG hardening wave is complete at this baseline. The runtime now has deterministic topological propagation, exact/conservative relation propagation, selective conservative routing, source-only and composed derived values, multi-input invariants, randomized equivalence coverage, multi-target core tests, modularized runtime/derived code, and refreshed benchmark baselines.
@@ -1002,41 +1004,41 @@ docs: prepare explainability alpha release notes
 Before declaring this roadmap complete:
 
 ```text
-[ ] unregistered derived/invariant queries are rejected consistently
-[ ] failed query/evaluation does not create runtime cache state
-[ ] basic Apply bypasses detailed result construction
-[ ] Apply and ApplyDetailed have equivalent mutation semantics
-[ ] conservative public naming reflects preference rather than guaranteed plan
-[ ] source-member transition rules support Dirty vs Invalid asymmetry
-[ ] normalized multi-change batches classify the net transition
-[ ] multiple source-member causes merge with Invalid dominance
-[ ] classifier failure rolls back runtime-owned state
-[ ] relation predicate remains semantic authority
-[ ] exact/conservative propagation equivalence remains green
-[ ] incremental aggregates retain exact delta semantics
-[ ] one commit produces one immutable propagation result
-[ ] detailed result remains stable after subsequent commits
-[ ] no previous-wave impact/cause leakage
-[ ] causal mode does not alter committed state or policy requests
-[ ] exact vs conservative causal precision is truthful
-[ ] diamond graphs retain direct causes without duplicate impacts
-[ ] removed-source causal identity is safe and deterministic
-[ ] causal capture is opt-in; Summary/basic paths do not build full cause graphs
-[ ] randomized DAG tests cover causal/summary equivalence
-[ ] procurement sample compiles and runs
-[ ] PO quantity increase vs decrease demonstrates different declared severity
-[ ] GR cancellation propagates to link validity/repair
-[ ] PriceRate/UnitRate change propagates to downstream link validity
-[ ] sample requires no manual invalidation/rematch orchestration calls
-[ ] durable repair identity still round-trips canonically
-[ ] Prepare/Commit drift and rollback guarantees remain green
-[ ] dispatch remains resumable after callback failure
-[ ] EF DB-success/runtime-sync-failure remains distinguishable
-[ ] core tests pass net8.0 and net10.0
-[ ] EF tests pass net10.0
-[ ] packed NuGet consumer smoke tests pass
-[ ] format/package validation remains green
-[ ] README/architecture/changelog describe actual behavior
+[x] unregistered derived/invariant queries are rejected consistently
+[x] failed query/evaluation does not create runtime cache state
+[x] basic Apply bypasses detailed result construction
+[x] Apply and ApplyDetailed have equivalent mutation semantics
+[x] conservative public naming reflects preference rather than guaranteed plan
+[x] source-member transition rules support Dirty vs Invalid asymmetry
+[x] normalized multi-change batches classify the net transition
+[x] multiple source-member causes merge with Invalid dominance
+[x] classifier failure rolls back runtime-owned state
+[x] relation predicate remains semantic authority
+[x] exact/conservative propagation equivalence remains green
+[x] incremental aggregates retain exact delta semantics
+[x] one commit produces one immutable propagation result
+[x] detailed result remains stable after subsequent commits
+[x] no previous-wave impact/cause leakage
+[x] causal mode does not alter committed state or policy requests
+[x] exact vs conservative causal precision is truthful
+[x] diamond graphs retain direct causes without duplicate impacts
+[x] removed-source causal identity is safe and deterministic
+[x] causal capture is opt-in; Summary/basic paths do not build full cause graphs
+[x] randomized DAG tests cover causal/summary equivalence
+[x] procurement sample compiles and runs
+[x] PO quantity increase vs decrease demonstrates different declared severity
+[x] GR cancellation propagates to link validity/repair
+[x] PriceRate/UnitRate change propagates to downstream link validity
+[x] sample requires no manual invalidation/rematch orchestration calls
+[x] durable repair identity still round-trips canonically
+[x] Prepare/Commit drift and rollback guarantees remain green
+[x] dispatch remains resumable after callback failure
+[x] EF DB-success/runtime-sync-failure remains distinguishable
+[x] core tests pass net8.0 and net10.0
+[x] EF tests pass net10.0
+[x] packed NuGet consumer smoke tests pass
+[x] format/package validation remains green
+[x] README/architecture/changelog describe actual behavior
 ```
 
 ---

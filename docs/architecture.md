@@ -57,6 +57,9 @@ Derived values may compute directly from a source, consume a relation, or compos
 derived values. Impacts propagate source-by-source in topological order; strongest severity wins while
 recomputation remains lazy. Composed builders expose the same direct-source `Impact(...)` configuration
 as source-only and relation-backed builders; inherited upstream severity remains monotonic.
+Direct source members may additionally declare typed old/new classifiers. Classification uses the
+normalized net transition during commit, applies only to members tracked by the computation, and merges
+multiple changes with `Invalid` dominance. Classifiers are deterministic, side-effect-free model logic.
 Per-derived impact configuration determines whether membership additions/removals and related-item
 changes make a cache stale or unusable. Exact standalone `Count`, `LongCount`, parameterless `Any`, and
 numeric `Sum` expressions may opt into incremental maintenance; all other expressions use the original
@@ -80,6 +83,15 @@ failure is different: runtime state is already committed and dispatch resumes fr
 
 Core behavior and API contracts are tested on .NET 8 and .NET 10. The EF Core adapter targets and is
 tested on .NET 10.
+
+## Committed impact explanations
+
+Each commit produces an explicit ephemeral relation/dependency/policy result. `ApplyDetailed` converts
+that value into immutable summary data; a later mutation cannot alter it. Causal detail is opt-in through
+`RuntimeImpactDetailLevel.Causal` and records normalized mutation origins plus direct source, relation,
+and immediate-upstream causes. Conservative candidate causes are labeled `Conservative`; transitive
+paths are represented by upstream edges rather than copied into every impact. Basic `Apply` constructs
+neither public summary arrays nor causal records.
 
 ## Durable integration identity
 

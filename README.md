@@ -117,6 +117,18 @@ foreach (var request in result.RepairRequests)
 application.Dispatch.Invoke(); // optional configured in-process callbacks
 ```
 
+Detailed apply defaults to summary data. Opt into deterministic direct-cause records only when an
+explanation is needed:
+
+```csharp
+var application = runtime.ApplyDetailed(mutations, RuntimeImpactDetailLevel.Causal);
+Console.WriteLine(RuntimeImpactTraceRenderer.Render(application.Result));
+```
+
+Typed source-member policies classify normalized value transitions once in the model—for example, an
+ordered-quantity decrease can be `Invalid` while an increase remains `Dirty`. Basic `Apply` captures
+neither summary nor causal records.
+
 The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
 requests, and the original `ChangeImpact`. Numeric definition IDs and `Source` object references are
 in-process conveniences only. Persist `DefinitionKey` plus canonical `DurableSourceIdentity`; the
@@ -179,6 +191,7 @@ last `ResetDiagnostics()` call.
 - Lazy derived state with distinct fresh, dirty, and invalid states
 - Source-only derived values and one/two-upstream derived composition through a compiled DAG
 - Configurable direct-source severity on source-only, relation-backed, and composed derived values
+- Typed value-sensitive source-member severity with fixed fallback behavior
 - Opt-in incremental `Count`, `LongCount`, `Any`, and direct numeric `Sum` computation plans
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
 - Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
@@ -192,6 +205,7 @@ last `ResetDiagnostics()` call.
 - Single- and multi-input invariant evaluation with immediate, dirty, invalidation, and repair policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
 - Data-only `RuntimeApplyResult` impacts and policy requests with a separate resumable `PolicyDispatchHandle`
+- Opt-in exact/conservative causal explanations and deterministic trace rendering
 - A separate EF Core change-tracker adapter package
 - EF Core unit-of-work capture with prepare-before-save, versioned commit-after-success, relationship resets, and explicit set mapping
 - A BenchmarkDotNet benchmark project

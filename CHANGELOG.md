@@ -13,5 +13,11 @@ patch versions remain backward-compatible bug fixes where practical.
 - Added opt-in incremental Count, LongCount, Any, and numeric Sum plans.
 - Added EF Core 10 unit-of-work integration and SQLite transaction coverage.
 - Added .NET 8 and .NET 10 core assets and .NET 10 EF Core adapter assets.
+- Added deterministic source-scoped dependency DAG propagation and composed derived values/invariants.
+- Separated relation query access from exact or selectively routed conservative propagation.
+- Added typed value-sensitive source-member severity for asymmetric domain correctness rules.
+- Added opt-in committed-impact causality with exact/conservative precision and trace rendering.
+- Added a compiling purchase-order/goods-receipt/link-validity vertical slice.
+- Added packed-package consumer smoke tests for .NET 8, .NET 10, and the EF Core adapter.
 
 This alpha is not yet published automatically. Its public API is tracked by checked-in approval files.
