@@ -548,6 +548,7 @@ internal interface IInvariantDefinition
 {
     string? DefinitionKey { get; set; }
     IDerivedDefinition Derived { get; }
+    IReadOnlyList<IDerivedDefinition> UpstreamDerived { get; }
     InvariantReaction Reaction { get; set; }
     LambdaExpression PredicateExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
@@ -571,6 +572,7 @@ internal sealed class InvariantDefinition<TSource, TValue>(
         ExpressionDependencyAnalyzer.AnalyzeInvariant(predicateExpression);
     public bool AllowIncompleteDependencies { get; set; }
     public IDerivedDefinition Derived => DerivedDefinition;
+    public IReadOnlyList<IDerivedDefinition> UpstreamDerived { get; } = [derived];
     public InvariantReaction Reaction { get; set; } = InvariantReaction.MarkDirty;
     public Action<TSource>? RepairScheduler { get; set; }
 

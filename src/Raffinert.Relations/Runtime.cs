@@ -12,31 +12,34 @@ public sealed class CompiledRelationModel
     private readonly IReadOnlyList<IRelationDefinition> _relations;
     private readonly IReadOnlyList<IDerivedDefinition> _derivedStates;
     private readonly IReadOnlyList<IInvariantDefinition> _invariants;
+    private readonly CompiledDependencyGraph _dependencyGraph;
 
     internal CompiledRelationModel(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
-        IReadOnlyList<IInvariantDefinition> invariants)
+        IReadOnlyList<IInvariantDefinition> invariants,
+        CompiledDependencyGraph dependencyGraph)
     {
         _sets = sets;
         _relations = relations;
         _derivedStates = derivedStates;
         _invariants = invariants;
+        _dependencyGraph = dependencyGraph;
         Diagnostics = CreateDiagnostics();
         DebugView = CreateDebugView();
     }
 
     public string DebugView { get; }
     public CompiledModelDiagnostics Diagnostics { get; }
-    public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants);
+    public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph);
     public RelationRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
     {
         ArgumentNullException.ThrowIfNull(diagnosticOptions);
-        return new RelationRuntime(_sets, _relations, _derivedStates, _invariants, null, diagnosticOptions);
+        return new RelationRuntime(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, null, diagnosticOptions);
     }
     internal RelationRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
-        new(_sets, _relations, _derivedStates, _invariants, dependencyImpactPolicy);
+        new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, dependencyImpactPolicy);
 
     private string CreateDebugView()
     {
@@ -288,6 +291,7 @@ public sealed class RelationRuntime
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
         IReadOnlyList<IInvariantDefinition> invariants,
+        CompiledDependencyGraph compiledDependencyGraph,
         IDependencyImpactPolicy? dependencyImpactPolicy = null,
         RuntimeDiagnosticOptions? diagnosticOptions = null)
     {
@@ -322,6 +326,7 @@ public sealed class RelationRuntime
             _navigation,
             _derivedStates,
             _invariants,
+            compiledDependencyGraph,
             impactPolicy);
     }
 

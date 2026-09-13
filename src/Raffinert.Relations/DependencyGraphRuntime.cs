@@ -39,6 +39,7 @@ internal sealed class DependencyGraphRuntime
         NavigationIndexRegistry navigation,
         IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> derivedStates,
         IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> invariants,
+        CompiledDependencyGraph compiledGraph,
         IDependencyImpactPolicy impactPolicy)
     {
         _sets = sets;
@@ -48,9 +49,14 @@ internal sealed class DependencyGraphRuntime
         var derivedByDefinition = derivedStates.ToDictionary(
             pair => pair.Key,
             pair => new DerivedNode(pair.Key, pair.Value));
-        _derivedNodes = derivedByDefinition.Values.ToArray();
-        _invariantNodes = invariants
-            .Select(pair => new InvariantNode(pair.Key, pair.Value, derivedByDefinition[pair.Key.Derived]))
+        _derivedNodes = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived)
+            .Select(node => derivedByDefinition[(IDerivedDefinition)node.Definition]).ToArray();
+        _invariantNodes = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Invariant)
+            .Select(node => (IInvariantDefinition)node.Definition)
+            .Select(definition => new InvariantNode(
+                definition,
+                invariants[definition],
+                derivedByDefinition[definition.Derived]))
             .ToArray();
         _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
             .Select(input => input.Relation)

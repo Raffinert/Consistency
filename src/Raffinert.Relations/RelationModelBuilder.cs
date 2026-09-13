@@ -105,12 +105,15 @@ public sealed class RelationModelBuilder
             relation.RequireExactPropagation();
         }
 
+        var dependencyGraph = CompiledDependencyGraph.Compile(_derivedStates, _invariants);
+
         _built = true;
         return new CompiledRelationModel(
             _objectSets.ToArray(),
             _relations.ToArray(),
             _derivedStates.ToArray(),
-            _invariants.ToArray());
+            _invariants.ToArray(),
+            dependencyGraph);
     }
 
     private void ValidateDefinitionKeys()
