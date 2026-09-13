@@ -32,6 +32,14 @@ jobs:
         run: dotnet format Raffinert.Relations.sln --no-restore --verify-no-changes
       - name: Pack
         run: dotnet pack Raffinert.Relations.sln -c Release --no-build -o artifacts/packages
+      - name: Smoke test packed packages
+        run: |
+          dotnet restore tests/package-consumers/CoreNet8 --source https://api.nuget.org/v3/index.json --source artifacts/packages
+          dotnet restore tests/package-consumers/CoreNet10 --source https://api.nuget.org/v3/index.json --source artifacts/packages
+          dotnet restore tests/package-consumers/EfNet10 --source https://api.nuget.org/v3/index.json --source artifacts/packages
+          dotnet run --project tests/package-consumers/CoreNet8 -c Release --no-restore
+          dotnet run --project tests/package-consumers/CoreNet10 -c Release --no-restore
+          dotnet run --project tests/package-consumers/EfNet10 -c Release --no-restore
       - uses: actions/upload-artifact@v4
         with:
           name: NuGet-packages
