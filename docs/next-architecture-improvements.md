@@ -38,6 +38,9 @@ The existing optimizer policy should remain: no new access structure without a m
 
 # 1. P0 — Make runtime commit genuinely failure-safe
 
+**Status: Implemented.** Commit captures runtime-owned state and restores it without invoking domain
+code if any commit-time reader, predicate, selector, or equality operation fails.
+
 ## Finding
 
 The public documentation describes mutation application as atomic for runtime-owned state, and `Prepare(...)` is side-effect free.
@@ -157,6 +160,9 @@ A failed commit cannot leave runtime-owned state partially advanced.
 
 # 2. P0 — Detect domain drift between `Prepare` and `Commit`
 
+**Status: Implemented.** Prepared member/collection assumptions are checked before live mutation;
+added-object keys are intentionally late-bound and revalidated for non-null uniqueness at commit.
+
 ## Finding
 
 A `PreparedMutation` is protected against **runtime drift** with `BaseVersion`.
@@ -256,6 +262,9 @@ except for explicitly modeled late-bound values such as generated keys.
 ---
 
 # 3. P0 — Add durable definition and source identity before calling policy requests outbox-ready
+
+**Status: Implemented.** Named definitions are unique and ordinal-independent, and policy requests carry
+the registered source key/type/object-set identity alongside the in-process source reference.
 
 ## Finding
 
@@ -361,6 +370,9 @@ without depending on model declaration order or object reference identity.
 
 # 4. P0 — Review and simplify the public generic surface before first publication
 
+**Status: Implemented.** Public handles are `Derived<TSource,TValue>` and `Invariant<TSource>`; relation
+item types remain in strongly typed internal definitions.
+
 ## Finding
 
 The implementation now has enough real behavior to reveal which generic parameters are implementation details rather than useful public identity.
@@ -441,6 +453,9 @@ before promoting the alpha API baseline.
 
 # 5. P0 — Restrict or fully model object-set key expressions
 
+**Status: Implemented.** Keys accept direct scalar/value members and direct-member tuple/anonymous
+composites; navigation, calls, captured/static state, and collection-derived keys are rejected.
+
 ## Finding
 
 Object-set keys are treated as immutable stable identity.
@@ -512,6 +527,9 @@ No supported key expression can change without the runtime being able to detect/
 ---
 
 # 6. P1 — Compile dependency adjacency instead of scanning every derived/invariant node
+
+**Status: Implemented for dependency propagation.** Relation/member/derived adjacency now selects the
+reachable nodes for each mutation wave. Model-scale benchmark coverage remains tracked under section 12.
 
 ## Finding
 
@@ -609,6 +627,9 @@ Mutation cost scales primarily with the impacted graph, not the total number of 
 ---
 
 # 7. P1 — Make severity source-scoped, not relation-impact-wide
+
+**Status: Implemented.** Membership deltas are classified per source, and `.SourceChanged(...)` controls
+direct source-dependency severity.
 
 ## Finding
 
