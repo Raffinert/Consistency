@@ -1,4 +1,5 @@
 using Raffinert.Relations.Expressions;
+using System.Reflection;
 
 namespace Raffinert.Relations;
 
@@ -25,6 +26,12 @@ internal sealed class DependencyGraphRuntime
     private readonly IDependencyImpactPolicy _impactPolicy;
     private readonly IReadOnlyList<DerivedNode> _derivedNodes;
     private readonly IReadOnlyList<InvariantNode> _invariantNodes;
+    private readonly IReadOnlyDictionary<IRelationDefinition, IReadOnlyList<DerivedNode>> _derivedByRelation;
+    private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<DerivedNode>> _derivedByMember;
+    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<InvariantNode>> _invariantsByDerived;
+    private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<InvariantNode>> _invariantsByMember;
+    private HashSet<DerivedNode> _previousDerived = [];
+    private HashSet<InvariantNode> _previousInvariants = [];
 
     public DependencyGraphRuntime(
         IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets,
@@ -45,7 +52,23 @@ internal sealed class DependencyGraphRuntime
         _invariantNodes = invariants
             .Select(pair => new InvariantNode(pair.Key, pair.Value, derivedByDefinition[pair.Key.Derived]))
             .ToArray();
+        _derivedByRelation = Group(_derivedNodes.Select(node => (node.Definition.Relation, node)));
+        _derivedByMember = Group(_derivedNodes.SelectMany(node =>
+            node.SourceDependencies.Concat(node.ItemDependencies)
+                .SelectMany(dependency => dependency.Path.Segments)
+                .Select(segment => (segment.Member, node))));
+        _invariantsByDerived = Group(_invariantNodes.Select(node => (node.Derived, node)));
+        _invariantsByMember = Group(_invariantNodes.SelectMany(node =>
+            node.SourceDependencies.SelectMany(dependency => dependency.Path.Segments)
+                .Select(segment => (segment.Member, node))));
     }
+
+    private static IReadOnlyDictionary<TKey, IReadOnlyList<TValue>> Group<TKey, TValue>(
+        IEnumerable<(TKey Key, TValue Value)> values) where TKey : notnull =>
+        values.GroupBy(value => value.Key)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<TValue>)group.Select(value => value.Value).Distinct().ToArray());
 
     public IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> ResolveNavigationRoots(
         ResolvedChangeImpact impact,
@@ -57,12 +80,12 @@ internal sealed class DependencyGraphRuntime
         foreach (var (set, root) in impact.AffectedRoots)
             rootsBySet[set].Add(root);
 
-        foreach (var node in _derivedNodes)
+        foreach (var node in Candidates(changes, _derivedByMember))
         {
             AddRoots(node.Definition.SourceSet, node.SourceDependencies);
             AddRoots(node.Definition.Relation.RightSet, node.ItemDependencies);
         }
-        foreach (var node in _invariantNodes)
+        foreach (var node in Candidates(changes, _invariantsByMember))
             AddRoots(node.Definition.Derived.SourceSet, node.SourceDependencies);
 
         return rootsBySet.SelectMany(pair => pair.Value.Select(root => (pair.Key, root))).ToArray();
@@ -88,7 +111,9 @@ internal sealed class DependencyGraphRuntime
 
     public object CaptureState() => new State(
         _derivedNodes.Select(node => node.CaptureState()).ToArray(),
-        _invariantNodes.Select(node => node.CaptureState()).ToArray());
+        _invariantNodes.Select(node => node.CaptureState()).ToArray(),
+        _previousDerived.ToArray(),
+        _previousInvariants.ToArray());
 
     public void RestoreState(object snapshot)
     {
@@ -97,16 +122,28 @@ internal sealed class DependencyGraphRuntime
             _derivedNodes[index].RestoreState(state.Derived[index]);
         for (var index = 0; index < _invariantNodes.Count; index++)
             _invariantNodes[index].RestoreState(state.Invariants[index]);
+        _previousDerived = state.PreviousDerived.ToHashSet();
+        _previousInvariants = state.PreviousInvariants.ToHashSet();
     }
 
-    private sealed record State(IReadOnlyList<object> Derived, IReadOnlyList<object> Invariants);
+    private sealed record State(
+        IReadOnlyList<object> Derived,
+        IReadOnlyList<object> Invariants,
+        IReadOnlyList<DerivedNode> PreviousDerived,
+        IReadOnlyList<InvariantNode> PreviousInvariants);
 
     public void ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
         RuntimePolicyActions policyActions)
     {
-        foreach (var node in _derivedNodes)
+        var currentDerived = new HashSet<DerivedNode>(Candidates(changes, _derivedByMember));
+        foreach (var relation in relationImpacts.Keys)
+            if (_derivedByRelation.TryGetValue(relation, out var nodes))
+                currentDerived.UnionWith(nodes);
+        foreach (var node in _previousDerived.Except(currentDerived))
+            node.ClearImpact();
+        foreach (var node in currentDerived)
         {
             relationImpacts.TryGetValue(node.Definition.Relation, out var relationImpact);
             var membershipRoots = node.Definition.Analysis.HasRelationMembershipDependency
@@ -140,7 +177,13 @@ internal sealed class DependencyGraphRuntime
                 changes);
         }
 
-        foreach (var node in _invariantNodes)
+        var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
+        foreach (var derived in currentDerived)
+            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
+                currentInvariants.UnionWith(nodes);
+        foreach (var node in _previousInvariants.Except(currentInvariants))
+            node.ClearImpact();
+        foreach (var node in currentInvariants)
         {
             node.ApplyInherited(policyActions);
             var invariantRoots = ResolveRoots(
@@ -150,6 +193,8 @@ internal sealed class DependencyGraphRuntime
             if (invariantRoots.Count > 0)
                 node.ApplyDirect(invariantRoots, policyActions);
         }
+        _previousDerived = currentDerived;
+        _previousInvariants = currentInvariants;
     }
 
     public void ApplyRelationImpacts(
@@ -157,7 +202,13 @@ internal sealed class DependencyGraphRuntime
         IReadOnlyList<PropertyChange> changes,
         RuntimePolicyActions policyActions)
     {
-        foreach (var node in _derivedNodes)
+        var currentDerived = new HashSet<DerivedNode>();
+        foreach (var relation in relationImpacts.Keys)
+            if (_derivedByRelation.TryGetValue(relation, out var nodes))
+                currentDerived.UnionWith(nodes);
+        foreach (var node in _previousDerived.Except(currentDerived))
+            node.ClearImpact();
+        foreach (var node in currentDerived)
         {
             node.ClearImpact();
             if (!node.Definition.Analysis.HasRelationMembershipDependency ||
@@ -181,9 +232,23 @@ internal sealed class DependencyGraphRuntime
             node.Apply(sources.Except(invalid, ReferenceEqualityComparer.Instance), invalid);
         }
 
-        foreach (var node in _invariantNodes)
+        var currentInvariants = new HashSet<InvariantNode>();
+        foreach (var derived in currentDerived)
+            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
+                currentInvariants.UnionWith(nodes);
+        foreach (var node in _previousInvariants.Except(currentInvariants))
+            node.ClearImpact();
+        foreach (var node in currentInvariants)
             node.ApplyInherited(policyActions);
+        _previousDerived = currentDerived;
+        _previousInvariants = currentInvariants;
     }
+
+    private static IEnumerable<TNode> Candidates<TNode>(
+        IReadOnlyList<PropertyChange> changes,
+        IReadOnlyDictionary<MemberInfo, IReadOnlyList<TNode>> adjacency) =>
+        changes.SelectMany(change => adjacency.TryGetValue(change.Member, out var nodes) ? nodes : [])
+            .Distinct();
 
     private HashSet<object> ResolveRoots(
         IObjectSetDefinition rootSet,
@@ -313,6 +378,7 @@ internal sealed class DependencyGraphRuntime
     private sealed class InvariantNode
     {
         private readonly DerivedNode _derived;
+        public DerivedNode Derived => _derived;
 
         public InvariantNode(
             IInvariantDefinition definition,
@@ -367,6 +433,12 @@ internal sealed class DependencyGraphRuntime
             DirtySources.UnionWith(affected);
             DirtySources.ExceptWith(InvalidSources);
             State.ApplyImpact(affected, DependencyImpactKind.Dirty, policyActions);
+        }
+
+        public void ClearImpact()
+        {
+            InvalidSources = NewSet();
+            DirtySources = NewSet();
         }
 
         private static HashSet<object> NewSet(IEnumerable<object>? values = null) =>
