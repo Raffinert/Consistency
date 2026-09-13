@@ -110,6 +110,30 @@ public sealed class CausalImpactTests
         }
     }
 
+    [Fact]
+    public void Diamond_has_one_downstream_impact_with_both_direct_upstream_causes()
+    {
+        var model = new RelationModelBuilder();
+        var set = model.Objects<Source>().Key(source => source.Id);
+        var left = model.Derived(set).Compute(source => source.Quantity).Named("left");
+        var right = model.Derived(set).Compute(source => source.Quantity * 2).Named("right");
+        var bottom = model.Derived(set).Using(left, right)
+            .Compute((_, first, second) => first + second).Named("bottom");
+        var runtime = model.Build().CreateRuntime();
+        var source = new Source { Quantity = 1 };
+        runtime.Add(set, source);
+        Assert.Equal(3, runtime.Get(bottom, source));
+        source.Quantity = 2;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            set, source, value => value.Quantity, 1, 2)), RuntimeImpactDetailLevel.Causal).Result;
+
+        var impact = result.DerivedImpacts.Single(value => value.DefinitionKey == "bottom");
+        var causes = impact.Sources.Single().Causes.OfType<UpstreamDerivedCause>().ToArray();
+        Assert.Equal(2, causes.Length);
+        Assert.Equal(["left", "right"], causes.Select(cause => cause.DefinitionKey));
+    }
+
     private static Scenario CreateScenario()
     {
         var model = new RelationModelBuilder();
