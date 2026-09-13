@@ -228,7 +228,10 @@ internal sealed class NavigationIndexRegistry
                 var rootSet = dependency.Role switch
                 {
                     ExpressionParameterRole.DerivedSource => derived.SourceSet,
-                    ExpressionParameterRole.RelationItem => derived.Relation.RightSet,
+                    ExpressionParameterRole.RelationItem => derived.Inputs
+                        .Select(input => input.Relation)
+                        .OfType<IRelationDefinition>()
+                        .Single().RightSet,
                     _ => null
                 };
                 if (rootSet is null)

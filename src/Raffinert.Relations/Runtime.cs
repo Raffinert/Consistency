@@ -60,7 +60,8 @@ public sealed class CompiledRelationModel
             lines.Add($"  Reverse access plan: {relation.ReverseAccessPlan?.DisplayName ?? "Disabled"}");
             lines.Add($"  Relation materialization: {(relation.ReverseAccessPlan is null ? "None" : "ExactPropagation")}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
-            var materialized = _derivedStates.Any(derived => ReferenceEquals(derived.Relation, relation));
+            var materialized = _derivedStates.Any(derived =>
+                derived.Inputs.Any(input => ReferenceEquals(input.Relation, relation)));
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies,
@@ -83,7 +84,10 @@ public sealed class CompiledRelationModel
         }
         foreach (var derived in _derivedStates)
         {
-            lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using {derived.Relation.RightSet.ObjectType.Name}: {derived.ComputationExpression.Body}");
+            var inputs = derived.Inputs.Select(input => input.Relation is not null
+                ? $"relation:{input.Relation.RightSet.ObjectType.Name}"
+                : $"derived:{input.Upstream!.DefinitionKey ?? input.Upstream.SourceSet.ObjectType.Name}");
+            lines.Add($"Derived {derived.SourceSet.ObjectType.Name} using [{string.Join(", ", inputs)}]: {derived.ComputationExpression.Body}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(derived.Analysis.Flags)}");
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
                 derived.Analysis.Flags,
@@ -147,7 +151,8 @@ public sealed class CompiledRelationModel
             _derivedStates.Select((derived, id) => new DerivedModelDiagnostics(
                 id,
                 derived.SourceSet.Id,
-                relationIds[derived.Relation],
+                derived.Inputs.Select(input => input.Relation).OfType<IRelationDefinition>()
+                    .Select(relation => relationIds[relation]).DefaultIfEmpty(-1).First(),
                 derived.ComputationExpression.Body.ToString(),
                 derived.Analysis.Dependencies.Select(dependency =>
                     $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),
@@ -297,13 +302,14 @@ public sealed class RelationRuntime
             .ToDictionary(pair => pair.definition, pair => pair.id);
         _invariantIds = invariants.Select((definition, id) => (definition, id))
             .ToDictionary(pair => pair.definition, pair => pair.id);
-        foreach (var relation in derivedStates.Select(derived => derived.Relation).Distinct())
+        foreach (var relation in derivedStates.SelectMany(derived => derived.Inputs)
+                     .Select(input => input.Relation).OfType<IRelationDefinition>().Distinct())
             _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
         _derivedStates = derivedStates.ToDictionary(
             definition => definition,
-            definition => definition.CreateState(_relations[definition.Relation]));
+            definition => definition.CreateState(_relations));
         _invariants = invariants.ToDictionary(
             definition => definition,
             definition => definition.CreateState(_derivedStates[definition.Derived]));

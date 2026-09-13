@@ -67,14 +67,16 @@ internal static class ExpressionDependencyAnalyzer
                 [expression.Parameters[1]] = ExpressionParameterRole.RelationRight
             });
 
-    public static ExpressionDependencyAnalysis AnalyzeDerived(LambdaExpression expression) =>
-        Analyze(
-            expression.Body,
-            new Dictionary<ParameterExpression, ExpressionParameterRole>
-            {
-                [expression.Parameters[0]] = ExpressionParameterRole.DerivedSource,
-                [expression.Parameters[1]] = ExpressionParameterRole.RelationMembership
-            });
+    public static ExpressionDependencyAnalysis AnalyzeDerived(LambdaExpression expression)
+    {
+        var parameters = new Dictionary<ParameterExpression, ExpressionParameterRole>
+        {
+            [expression.Parameters[0]] = ExpressionParameterRole.DerivedSource
+        };
+        if (expression.Parameters.Count > 1)
+            parameters[expression.Parameters[1]] = ExpressionParameterRole.RelationMembership;
+        return Analyze(expression.Body, parameters);
+    }
 
     public static ExpressionDependencyAnalysis AnalyzeInvariant(LambdaExpression expression) =>
         Analyze(

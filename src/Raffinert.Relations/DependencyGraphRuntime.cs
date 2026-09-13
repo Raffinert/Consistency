@@ -52,7 +52,10 @@ internal sealed class DependencyGraphRuntime
         _invariantNodes = invariants
             .Select(pair => new InvariantNode(pair.Key, pair.Value, derivedByDefinition[pair.Key.Derived]))
             .ToArray();
-        _derivedByRelation = Group(_derivedNodes.Select(node => (node.Definition.Relation, node)));
+        _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
+            .Select(input => input.Relation)
+            .OfType<IRelationDefinition>()
+            .Select(relation => (relation, node))));
         _derivedByMember = Group(_derivedNodes.SelectMany(node =>
             node.SourceDependencies.Concat(node.ItemDependencies)
                 .SelectMany(dependency => dependency.Path.Segments)
@@ -83,7 +86,8 @@ internal sealed class DependencyGraphRuntime
         foreach (var node in Candidates(changes, _derivedByMember))
         {
             AddRoots(node.Definition.SourceSet, node.SourceDependencies);
-            AddRoots(node.Definition.Relation.RightSet, node.ItemDependencies);
+            if (node.Relation is not null)
+                AddRoots(node.Relation.RightSet, node.ItemDependencies);
         }
         foreach (var node in Candidates(changes, _invariantsByMember))
             AddRoots(node.Definition.Derived.SourceSet, node.SourceDependencies);
@@ -160,15 +164,21 @@ internal sealed class DependencyGraphRuntime
             node.ClearImpact();
         foreach (var node in currentDerived)
         {
-            relationImpacts.TryGetValue(node.Definition.Relation, out var relationImpact);
+            RelationImpact? relationImpact = null;
+            if (node.Relation is not null)
+                relationImpacts.TryGetValue(node.Relation, out relationImpact);
             var membershipRoots = node.Definition.Analysis.HasRelationMembershipDependency
                 ? relationImpact?.AffectedLefts
                     .Where(_sets[node.Definition.SourceSet].Contains)
                     .ToArray() ?? []
                 : [];
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
-            var itemRoots = ResolveRoots(node.Definition.Relation.RightSet, node.ItemDependencies, changes);
-            var itemSources = _relations[node.Definition.Relation].GetLeftsForRights(itemRoots);
+            var itemRoots = node.Relation is null
+                ? []
+                : ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes);
+            var itemSources = node.Relation is null
+                ? []
+                : _relations[node.Relation].GetLeftsForRights(itemRoots);
             var fallbackSeverity = membershipRoots.Length > 0 && !node.Definition.ImpactPolicy.IsConfigured
                 ? _impactPolicy.Classify(new RelationMembershipDependencyImpact(
                     relationImpact!, node.Definition, changes))
@@ -227,7 +237,8 @@ internal sealed class DependencyGraphRuntime
         {
             node.ClearImpact();
             if (!node.Definition.Analysis.HasRelationMembershipDependency ||
-                !relationImpacts.TryGetValue(node.Definition.Relation, out var relationImpact) ||
+                node.Relation is null ||
+                !relationImpacts.TryGetValue(node.Relation, out var relationImpact) ||
                 relationImpact.AffectedLefts.Count == 0)
                 continue;
             var sources = relationImpact.AffectedLefts
@@ -314,6 +325,8 @@ internal sealed class DependencyGraphRuntime
         }
 
         public IDerivedDefinition Definition { get; }
+        public IRelationDefinition? Relation => Definition.Inputs
+            .Select(input => input.Relation).OfType<IRelationDefinition>().SingleOrDefault();
         public IDerivedRuntimeState State { get; }
         public IReadOnlyList<TrackedExpressionDependency> SourceDependencies { get; }
         public IReadOnlyList<TrackedExpressionDependency> ItemDependencies { get; }

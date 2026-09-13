@@ -94,7 +94,8 @@ public sealed class RelationModelBuilder
                 invariant.Analysis.Flags,
                 invariant.AllowIncompleteDependencies);
         }
-        foreach (var relation in _derivedStates.Select(derived => derived.Relation).Distinct())
+        foreach (var relation in _derivedStates.SelectMany(derived => derived.Inputs)
+                     .Select(input => input.Relation).OfType<IRelationDefinition>().Distinct())
         {
             ValidateComplete(
                 "Materialized relation",

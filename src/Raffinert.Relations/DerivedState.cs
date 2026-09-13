@@ -41,11 +41,27 @@ public sealed class DerivedBuilder<TSource> where TSource : class
 {
     private readonly RelationModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
+    private DerivedImpactPolicy _impactPolicy = new(
+        DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
+        DependencySeverity.Dirty,
+        false);
 
     internal DerivedBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
     {
         _model = model;
         _source = source;
+    }
+
+    /// <summary>Configures semantic severity for direct source-member changes.</summary>
+    public DerivedBuilder<TSource> Impact(Action<DerivedImpactPolicyBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new DerivedImpactPolicyBuilder();
+        configure(builder);
+        _impactPolicy = builder.Build();
+        return this;
     }
 
     public DerivedUsingBuilder<TSource, TItem> Using<TItem>(Relation<TSource, TItem> relation)
@@ -56,6 +72,19 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         if (!ReferenceEquals(relation.Definition.Left, _source.Definition))
             throw new ArgumentException("The relation's left object set must be the derived state's source set.", nameof(relation));
         return new DerivedUsingBuilder<TSource, TItem>(_model, _source, relation);
+    }
+
+    /// <summary>Defines a value computed directly from the source object.</summary>
+    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new SourceDerivedDefinition<TSource, TValue>(
+            _source.Definition,
+            computation,
+            computation.Compile(),
+            _impactPolicy);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
     }
 }
 
@@ -254,15 +283,17 @@ internal interface IDerivedDefinition
 {
     string? DefinitionKey { get; set; }
     IObjectSetDefinition SourceSet { get; }
-    IRelationDefinition Relation { get; }
+    IReadOnlyList<DerivedInput> Inputs { get; }
     LambdaExpression ComputationExpression { get; }
     ExpressionDependencyAnalysis Analysis { get; }
     DerivedImpactPolicy ImpactPolicy { get; }
     string ComputationPlanName { get; }
     bool AllowIncompleteDependencies { get; set; }
-    IDerivedRuntimeState CreateState(IRelationRuntimeState relationState);
+    IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations);
     IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate);
 }
+
+internal sealed record DerivedInput(IRelationDefinition? Relation, IDerivedDefinition? Upstream = null);
 
 internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
@@ -279,7 +310,7 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public RelationDefinition<TSource, TItem> RelationDefinition { get; } = relation;
     public Func<TSource, IReadOnlyList<TItem>, TValue> Computation { get; } = computation;
     public IObjectSetDefinition SourceSet => SourceSetDefinition;
-    public IRelationDefinition Relation => RelationDefinition;
+    public IReadOnlyList<DerivedInput> Inputs { get; } = [new(relation)];
     public LambdaExpression ComputationExpression { get; } = computationExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
         ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
@@ -291,14 +322,107 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public string ComputationPlanName => IncrementalPlan?.DisplayName ?? "FullRecompute";
     public bool AllowIncompleteDependencies { get; set; }
 
-    public IDerivedRuntimeState CreateState(IRelationRuntimeState relationState) =>
-        new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relationState);
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations) =>
+        new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relations[RelationDefinition]);
 
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
-        new InvariantDefinition<TSource, TItem, TValue>(
+        new InvariantDefinition<TSource, TValue>(
             this,
             predicate,
             (Func<TSource, TValue, bool>)compiledPredicate);
+}
+
+internal sealed class SourceDerivedDefinition<TSource, TValue>(
+    ObjectSetDefinition<TSource> sourceSet,
+    Expression<Func<TSource, TValue>> computationExpression,
+    Func<TSource, TValue> computation,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    where TSource : class
+{
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs { get; } = [];
+    public LambdaExpression ComputationExpression => computationExpression;
+    public ExpressionDependencyAnalysis Analysis { get; } =
+        ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
+    public string ComputationPlanName => "SourceFullRecompute";
+    public bool AllowIncompleteDependencies { get; set; }
+
+    public IDerivedRuntimeState CreateState(
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations) =>
+        new SourceDerivedRuntimeState<TSource, TValue>(this, computation);
+
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, TValue>(
+            this,
+            predicate,
+            (Func<TSource, TValue, bool>)compiledPredicate);
+}
+
+internal sealed class SourceDerivedRuntimeState<TSource, TValue>(
+    IDerivedDefinition definition,
+    Func<TSource, TValue> computation) : IDerivedRuntimeState
+    where TSource : class
+{
+    private readonly Dictionary<TSource, CacheEntry> _cache = new(ReferenceEqualityComparer<TSource>.Instance);
+    public IDerivedDefinition Definition => definition;
+    public IObjectSetDefinition SourceSet => definition.SourceSet;
+    public int SourceStateEntryCount => _cache.Count;
+    public long FullRecomputationCount { get; private set; }
+    public long IncrementalUpdateCount => 0;
+
+    public object? GetValue(object source)
+    {
+        var typed = (TSource)source;
+        if (_cache.TryGetValue(typed, out var entry) && entry.State == DerivedValueState.Fresh)
+            return entry.Value;
+        var value = computation(typed);
+        FullRecomputationCount++;
+        _cache[typed] = new CacheEntry(value, DerivedValueState.Fresh);
+        return value;
+    }
+
+    public DerivedValueState GetValueState(object source) =>
+        _cache.TryGetValue((TSource)source, out var entry) ? entry.State : DerivedValueState.Dirty;
+
+    public void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact)
+    {
+        foreach (var source in sources.Cast<TSource>())
+            if (_cache.TryGetValue(source, out var entry))
+                entry.State = DependencyStateTransitions.Apply(entry.State, impact);
+    }
+
+    public IReadOnlyCollection<object> ApplyIncremental(
+        IEnumerable<object> sources,
+        RelationImpact? relationImpact,
+        IReadOnlyList<PropertyChange> changes) => [];
+
+    public void ResetDiagnostics() => FullRecomputationCount = 0;
+    public object CaptureState() => new State(
+        _cache.ToDictionary(pair => pair.Key, pair => new CacheEntry(pair.Value.Value, pair.Value.State),
+            ReferenceEqualityComparer<TSource>.Instance),
+        FullRecomputationCount);
+
+    public void RestoreState(object snapshot)
+    {
+        var state = (State)snapshot;
+        _cache.Clear();
+        foreach (var pair in state.Cache)
+            _cache.Add(pair.Key, pair.Value);
+        FullRecomputationCount = state.FullRecomputationCount;
+    }
+
+    public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
+    public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
+
+    private sealed class CacheEntry(TValue value, DerivedValueState state)
+    {
+        public TValue Value { get; } = value;
+        public DerivedValueState State { get; set; } = state;
+    }
+
+    private sealed record State(Dictionary<TSource, CacheEntry> Cache, long FullRecomputationCount);
 }
 
 internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
@@ -433,15 +557,14 @@ internal interface IInvariantDefinition
     void SetRepairScheduler(Delegate scheduler);
 }
 
-internal sealed class InvariantDefinition<TSource, TItem, TValue>(
-    DerivedDefinition<TSource, TItem, TValue> derived,
+internal sealed class InvariantDefinition<TSource, TValue>(
+    IDerivedDefinition derived,
     LambdaExpression predicateExpression,
     Func<TSource, TValue, bool> predicate) : IInvariantDefinition
     where TSource : class
-    where TItem : class
 {
     public string? DefinitionKey { get; set; }
-    public DerivedDefinition<TSource, TItem, TValue> DerivedDefinition { get; } = derived;
+    public IDerivedDefinition DerivedDefinition { get; } = derived;
     public Func<TSource, TValue, bool> Predicate { get; } = predicate;
     public LambdaExpression PredicateExpression { get; } = predicateExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
@@ -452,9 +575,9 @@ internal sealed class InvariantDefinition<TSource, TItem, TValue>(
     public Action<TSource>? RepairScheduler { get; set; }
 
     public IInvariantRuntimeState CreateState(IDerivedRuntimeState derivedState) =>
-        new InvariantRuntimeState<TSource, TItem, TValue>(
+        new InvariantRuntimeState<TSource, TValue>(
             this,
-            (DerivedRuntimeState<TSource, TItem, TValue>)derivedState);
+            derivedState);
 
     public void DispatchRepair(object source) => RepairScheduler!((TSource)source);
     public void SetRepairScheduler(Delegate scheduler) => RepairScheduler = (Action<TSource>)scheduler;
@@ -475,11 +598,10 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
     InvariantEvaluationState GetValueState(object source);
 }
 
-internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
-    InvariantDefinition<TSource, TItem, TValue> definition,
-    DerivedRuntimeState<TSource, TItem, TValue> derivedState) : IInvariantRuntimeState
+internal sealed class InvariantRuntimeState<TSource, TValue>(
+    InvariantDefinition<TSource, TValue> definition,
+    IDerivedRuntimeState derivedState) : IInvariantRuntimeState
     where TSource : class
-    where TItem : class
 {
     private readonly Dictionary<TSource, InvariantEvaluationState> _states = new(ReferenceEqualityComparer<TSource>.Instance);
 
@@ -489,7 +611,7 @@ internal sealed class InvariantRuntimeState<TSource, TItem, TValue>(
 
     public bool Evaluate(TSource source)
     {
-        var valid = definition.Predicate(source, derivedState.Get(source));
+        var valid = definition.Predicate(source, (TValue)derivedState.GetValue(source)!);
         _states[source] = valid ? InvariantEvaluationState.Valid : InvariantEvaluationState.Violated;
         return valid;
     }
