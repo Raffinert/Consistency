@@ -11,9 +11,11 @@ conservative optimizations around them.
    method-call, captured/static-state, and collection-derived keys are rejected at model construction.
 2. `Relation<TLeft, TRight>` analyzes its predicate for member paths, equality join keys, residual
    semantics, and dependency completeness.
-3. Derived expressions add source, relation-membership, and related-item dependencies.
-4. Invariant expressions add dependencies on source state and a derived value.
-5. `Build()` rejects incomplete cached dependency consumers unless explicitly opted into weaker
+3. Derived expressions add source, relation-membership, related-item, and upstream-derived dependencies.
+4. Invariant expressions add dependencies on source state and one or more derived values.
+5. `Build()` compiles explicit dependency nodes and edges, rejects cycles, and assigns deterministic
+   topological order.
+6. `Build()` rejects incomplete cached dependency consumers unless explicitly opted into weaker
    guarantees, chooses access/computation plans, and emits structured diagnostics.
 
 Hash and scan access plans only change candidate lookup. The compiled predicate always filters the
@@ -47,12 +49,15 @@ the cost of O(left × right) memory in a dense relation. Inspect `compiled.Diagn
 ## Derived state and policy
 
 Derived caches transition monotonically among `Fresh`, `Dirty`, and `Invalid` until recomputed.
+Derived values may compute directly from a source, consume a relation, or compose one/two upstream
+derived values. Impacts propagate source-by-source in topological order; strongest severity wins while
+recomputation remains lazy.
 Per-derived impact configuration determines whether membership additions/removals and related-item
 changes make a cache stale or unusable. Exact standalone `Count`, `LongCount`, parameterless `Any`, and
 numeric `Sum` expressions may opt into incremental maintenance; all other expressions use the original
 full computation.
 
-Invariant state inherits derived impacts and can be marked, evaluated immediately, or represented as a
+Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or represented as a
 repair request. `ApplyDetailed` exposes requests as data for an outbox/queue. In-process callbacks run
 only through explicit post-commit dispatch.
 

@@ -42,7 +42,8 @@ public sealed class DiagnosticsTests
         var derivedDiagnostic = Assert.Single(diagnostics.DerivedValues);
         Assert.Equal(0, derivedDiagnostic.DerivedId);
         Assert.Equal("Source.Total", derivedDiagnostic.DefinitionKey);
-        Assert.Equal(0, derivedDiagnostic.RelationId);
+        Assert.Equal([0], derivedDiagnostic.RelationIds);
+        Assert.Empty(derivedDiagnostic.UpstreamDerivedIds);
         Assert.True(derivedDiagnostic.UsesRelationMembership);
         Assert.True(derivedDiagnostic.LinqSemantics.HasFlag(DerivedLinqSemantics.Membership));
         Assert.True(derivedDiagnostic.LinqSemantics.HasFlag(DerivedLinqSemantics.Item));
@@ -51,7 +52,7 @@ public sealed class DiagnosticsTests
         var invariantDiagnostic = Assert.Single(diagnostics.Invariants);
         Assert.Equal(0, invariantDiagnostic.InvariantId);
         Assert.Equal("Source.Total.NonNegative", invariantDiagnostic.DefinitionKey);
-        Assert.Equal(0, invariantDiagnostic.DerivedId);
+        Assert.Equal([0], invariantDiagnostic.UpstreamDerivedIds);
         Assert.Equal(InvariantReaction.MarkInvalid, invariantDiagnostic.Reaction);
     }
 

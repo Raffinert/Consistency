@@ -85,7 +85,7 @@ Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.get -> string?
 Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.DerivedId.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, int RelationId, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity, Raffinert.Relations.DependencySeverity SourceChangedSeverity) -> void
+Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! RelationIds, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity, Raffinert.Relations.DependencySeverity SourceChangedSeverity) -> void
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Relations.DependencySeverity
@@ -96,14 +96,16 @@ Raffinert.Relations.DerivedModelDiagnostics.MembershipAddedSeverity.get -> Raffi
 Raffinert.Relations.DerivedModelDiagnostics.MembershipAddedSeverity.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.MembershipRemovedSeverity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DerivedModelDiagnostics.MembershipRemovedSeverity.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.RelationId.get -> int
-Raffinert.Relations.DerivedModelDiagnostics.RelationId.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.RelationIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Relations.DerivedModelDiagnostics.RelationIds.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.get -> int
 Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.get -> bool
 Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.init -> void
+Raffinert.Relations.DerivedModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Relations.DerivedModelDiagnostics.UpstreamDerivedIds.init -> void
 Raffinert.Relations.DerivedMutationImpact
 Raffinert.Relations.DerivedMutationImpact.DerivedId.get -> int
 Raffinert.Relations.DerivedMutationImpact.DerivedId.init -> void
@@ -168,17 +170,17 @@ Raffinert.Relations.InvariantModelDiagnostics.Dependencies.get -> System.Collect
 Raffinert.Relations.InvariantModelDiagnostics.Dependencies.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.get -> string?
 Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.DerivedId.get -> int
-Raffinert.Relations.InvariantModelDiagnostics.DerivedId.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
 Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.InvariantId.get -> int
 Raffinert.Relations.InvariantModelDiagnostics.InvariantId.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, int DerivedId, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Relations.InvariantReaction Reaction) -> void
+Raffinert.Relations.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Relations.InvariantReaction Reaction) -> void
 Raffinert.Relations.InvariantModelDiagnostics.Predicate.get -> string!
 Raffinert.Relations.InvariantModelDiagnostics.Predicate.init -> void
 Raffinert.Relations.InvariantModelDiagnostics.Reaction.get -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantModelDiagnostics.Reaction.init -> void
+Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.init -> void
 Raffinert.Relations.InvariantMutationImpact
 Raffinert.Relations.InvariantMutationImpact.InvariantId.get -> int
 Raffinert.Relations.InvariantMutationImpact.InvariantId.init -> void

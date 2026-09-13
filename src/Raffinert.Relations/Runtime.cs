@@ -116,6 +116,11 @@ public sealed class CompiledRelationModel
             foreach (var dependency in invariant.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
         }
+        lines.Add("Dependency DAG:");
+        foreach (var node in _dependencyGraph.Nodes)
+            lines.Add($"  [{node.TopologicalOrder}] {node.Kind}: {node.Id}");
+        foreach (var edge in _dependencyGraph.Edges)
+            lines.Add($"  Edge: {edge.FromNodeId} -> {edge.ToNodeId}");
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -155,7 +160,9 @@ public sealed class CompiledRelationModel
                 id,
                 derived.SourceSet.Id,
                 derived.Inputs.Select(input => input.Relation).OfType<IRelationDefinition>()
-                    .Select(relation => relationIds[relation]).DefaultIfEmpty(-1).First(),
+                    .Select(relation => relationIds[relation]).ToArray(),
+                derived.Inputs.Select(input => input.Upstream).OfType<IDerivedDefinition>()
+                    .Select(upstream => derivedIds[upstream]).ToArray(),
                 derived.ComputationExpression.Body.ToString(),
                 derived.Analysis.Dependencies.Select(dependency =>
                     $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),
@@ -172,7 +179,7 @@ public sealed class CompiledRelationModel
                 .ToArray(),
             _invariants.Select((invariant, id) => new InvariantModelDiagnostics(
                 id,
-                derivedIds[invariant.Derived],
+                invariant.UpstreamDerived.Select(upstream => derivedIds[upstream]).ToArray(),
                 invariant.PredicateExpression.Body.ToString(),
                 invariant.Analysis.Dependencies.Select(dependency =>
                     $"{dependency.Role}: {dependency.Path.DisplayName}").ToArray(),

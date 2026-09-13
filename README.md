@@ -143,7 +143,7 @@ average fan-out, and a density-warning flag. Configure advisory thresholds with
 
 `compiled.Diagnostics` is the machine-readable counterpart to `DebugView`. It provides immutable object
 set, relation, derived-value, and invariant records with deterministic IDs, types/expressions,
-dependencies, access plans, completeness issues, materialization, LINQ semantics, computation plans, and
+relation and upstream-derived input IDs, access plans, completeness issues, materialization, LINQ semantics, computation plans, and
 configured reactions/severities. Runtime counters additionally track reindexed roots, affected sources,
 membership pairs added/removed, full and incremental derived computations, and policy requests since the
 last `ResetDiagnostics()` call.
@@ -168,6 +168,7 @@ last `ResetDiagnostics()` call.
 - Deterministic, atomically validated `ChangeSet` and unified lifecycle/property/collection `MutationSet` application
 - Bidirectional relation queries
 - Lazy derived state with distinct fresh, dirty, and invalid states
+- Source-only derived values and one/two-upstream derived composition through a compiled DAG
 - Opt-in incremental `Count`, `LongCount`, `Any`, and direct numeric `Sum` computation plans
 - Documented monotonic state transitions with explicit recomputation and revalidation recovery
 - Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
@@ -178,9 +179,9 @@ last `ResetDiagnostics()` call.
 - Role-aware dependency analysis for derived computations and invariant predicates
 - LINQ dependency extraction for common aggregate, filter, and projection operators
 - Explicit membership/item/ordering semantics for selection, cardinality, distinct, paging, and containment operators
-- Invariant evaluation with immediate, dirty, and invalidation policies
+- Single- and multi-input invariant evaluation with immediate, dirty, invalidation, and repair policies
 - Post-commit immediate evaluation and deduplicated repair-request dispatch
-- Structured `RuntimeApplyResult` impacts and policy requests with explicit one-shot dispatch
+- Data-only `RuntimeApplyResult` impacts and policy requests with a separate resumable `PolicyDispatchHandle`
 - A separate EF Core change-tracker adapter package
 - EF Core unit-of-work capture with prepare-before-save, versioned commit-after-success, relationship resets, and explicit set mapping
 - A BenchmarkDotNet benchmark project
@@ -205,8 +206,9 @@ Definitions that cross a process boundary can be assigned stable logical keys wi
 object-set builders, relations, derived values, and invariants. Names are ordinal-independent and must be
 unique within the compiled model. Structured policy requests expose both the local numeric invariant ID
 and its optional `DefinitionKey`, plus a `SourceIdentity` containing the object-set key, CLR type, and
-registered source key. `SourceIdentity.IsDurable` is true only when the source object set was explicitly
-named; unnamed definitions and numeric IDs remain intended for in-process diagnostics only.
+registered source key. `SourceIdentity.IsDurable` requires both a named source object set and a
+canonically representable key. A durable policy request additionally requires a stable invariant
+`DefinitionKey`; unnamed definitions and numeric IDs remain intended for in-process diagnostics only.
 
 ## Documentation
 

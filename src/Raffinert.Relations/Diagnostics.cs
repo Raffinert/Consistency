@@ -52,7 +52,8 @@ public sealed record RelationModelDiagnostics(
 public sealed record DerivedModelDiagnostics(
     int DerivedId,
     int SourceObjectSetId,
-    int RelationId,
+    IReadOnlyList<int> RelationIds,
+    IReadOnlyList<int> UpstreamDerivedIds,
     string Computation,
     IReadOnlyList<string> Dependencies,
     DependencyCompletenessIssue CompletenessIssues,
@@ -70,7 +71,7 @@ public sealed record DerivedModelDiagnostics(
 
 public sealed record InvariantModelDiagnostics(
     int InvariantId,
-    int DerivedId,
+    IReadOnlyList<int> UpstreamDerivedIds,
     string Predicate,
     IReadOnlyList<string> Dependencies,
     DependencyCompletenessIssue CompletenessIssues,

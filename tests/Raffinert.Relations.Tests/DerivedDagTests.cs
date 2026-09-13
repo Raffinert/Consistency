@@ -26,6 +26,27 @@ public sealed class DerivedDagTests
         Assert.Equal(11m, runtime.Get(display, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(ordered, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(remaining, line));
+        runtime.Remove(lines, line);
+        Assert.Equal(0, runtime.DerivedStateEntryCount);
+    }
+
+    [Fact]
+    public void Relation_derived_value_propagates_to_composed_downstream_value()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Line>().Key(line => line.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.LineId);
+        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        var doubled = model.Derived(sources).Using(count).Compute((_, value) => value * 2);
+        var runtime = model.Build().CreateRuntime();
+        var line = new Line { Id = Guid.NewGuid() };
+        runtime.Add(sources, line);
+        Assert.Equal(0, runtime.Get(doubled, line));
+
+        runtime.Add(items, new Item { Id = Guid.NewGuid(), LineId = line.Id });
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(doubled, line));
+        Assert.Equal(2, runtime.Get(doubled, line));
     }
 
     [Fact]
@@ -116,5 +137,11 @@ public sealed class DerivedDagTests
         public Guid Id { get; init; }
         public decimal Ordered { get; set; }
         public decimal Received { get; set; }
+    }
+
+    private sealed class Item
+    {
+        public Guid Id { get; init; }
+        public Guid LineId { get; init; }
     }
 }
