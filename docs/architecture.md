@@ -87,6 +87,9 @@ write the returned impact plan as outbox rows, and commit the database transacti
 `Commit` and `Dispatch`. `PlanDetailed` uses the same reversible execution engine as commit, captures a
 binding forward patch, and restores runtime-owned state. Committing that plan installs the exact planned
 result without semantic reexecution. It is post-domain-mutation planning, not a hypothetical what-if overlay.
+Lifecycle object-set entries and projection sources are captured as touched-state journals, so a small plan
+does not clone those complete registries. Relation, navigation, and dependency rollback scopes remain
+selected from the affected execution graph and preserve exception atomicity.
 
 That ordering assumes stable application-assigned object-set keys. With store-generated keys, capture the
 unit before saving, run the first `SaveChanges` inside the transaction, and only then prepare and plan so
