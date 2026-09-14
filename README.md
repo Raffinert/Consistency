@@ -63,6 +63,21 @@ runtime.Commit(prepared);
 runtime.Dispatch(prepared);
 ```
 
+Use `CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal)` in that sequence when the committed
+impact must be written to an outbox before callbacks are dispatched. The EF Core unit of work exposes
+the same manual prepared-commit operation.
+
+Existing authoritative objects can initialize a fresh runtime without pretending startup is a business
+mutation. Bootstrap keeps `Version == 0`, emits no policy work, and leaves derived values lazy:
+
+```csharp
+var runtime = compiled.CreateRuntime(seed =>
+{
+    seed.Add(poLines, loadedLines);
+    seed.Add(receipts, loadedReceipts);
+});
+```
+
 Preparation performs ordinary mutation validation without changing runtime-owned state. A prepared
 mutation records `runtime.Version`; commit rejects it as stale if another runtime mutation committed in
 the meantime. Commit updates runtime state but never invokes application callbacks, which remain isolated
@@ -128,6 +143,16 @@ Console.WriteLine(RuntimeImpactTraceRenderer.Render(application.Result));
 Typed source-member policies classify normalized value transitions once in the model—for example, an
 ordered-quantity decrease can be `Invalid` while an increase remains `Dirty`. Basic `Apply` captures
 neither summary nor causal records.
+
+Derived values can reuse an upstream derived value owned by an object reached through a tracked
+reference. This keeps a persisted link model separate while declaring purchase-order calculations once:
+
+```csharp
+var linkValidity = model.Derived(invoiceLinks)
+    .Using(link => link.PurchaseOrderLine, decisionInputs)
+    .Compute((link, current) =>
+        link.ReservedQuantity <= current.AvailableQuantity && link.CapturedRate == current.UnitRate);
+```
 
 The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
 requests, and the original `ChangeImpact`. Numeric definition IDs and `Source` object references are

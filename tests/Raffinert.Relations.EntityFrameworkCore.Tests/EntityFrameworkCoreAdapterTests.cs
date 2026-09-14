@@ -115,6 +115,33 @@ public sealed class EntityFrameworkCoreAdapterTests
         Assert.False(context.SaveWasCalled);
     }
 
+    [Fact]
+    public void Manual_unit_of_work_can_commit_causal_details_after_database_success()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
+        var code = model.Derived(objects).Compute(value => value.Code).Named("code");
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new TestDbContext();
+        var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        context.Add(entity);
+        context.SaveChanges();
+        runtime.Add(objects, entity);
+        Assert.Equal("A", runtime.Get(code, entity));
+        entity.Code = "B";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        context.SaveChanges();
+        var result = unit.CommitDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+
+        Assert.NotNull(result);
+        Assert.Equal(RuntimeImpactDetailLevel.Causal, result.DetailLevel);
+        Assert.Single(result.MutationOrigins);
+        unit.Dispatch(runtime);
+    }
+
     private class TestDbContext : DbContext
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder) =>

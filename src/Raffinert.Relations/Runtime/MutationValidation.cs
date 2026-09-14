@@ -44,7 +44,8 @@ public sealed partial class RelationRuntime
         var properties = NormalizeChanges(mutations.OfType<PropertyChange>()
             .Select(change => ValidateBatchChange(change, lifecycleTargets))
             .ToArray());
-        var collections = NormalizeCollectionChanges(mutations.OfType<CollectionChange>().ToArray())
+        var normalizedCollections = NormalizeCollectionChanges(mutations.OfType<CollectionChange>().ToArray());
+        var collections = normalizedCollections
             .Select(change => IsLifecycleTarget(change.Set, change.Owner, lifecycleTargets)
                 ? new PropertyChange(change.Set, change.Owner, change.Member, null, null)
                 : ValidateCollectionChange(change))
@@ -56,7 +57,22 @@ public sealed partial class RelationRuntime
             .ToArray();
         if (validationMode == ChangeValidationMode.StrictNewValue)
             ValidateCurrentValues(properties);
-        return new ValidatedMutationBatch(lifecycle, changes);
+        var provenance = lifecycle.Select(mutation => mutation switch
+            {
+                ObjectAdded added => new NormalizedMutationProvenance(
+                    MutationOriginKind.ObjectAdded, added.Set, added.Instance, null, null, null, null, null),
+                ObjectRemoved removed => new NormalizedMutationProvenance(
+                    MutationOriginKind.ObjectRemoved, removed.Set, removed.Instance, null, null, null, null, null),
+                _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+            })
+            .Concat(properties.Select(change => new NormalizedMutationProvenance(
+                MutationOriginKind.SourceMemberChanged, change.Set, change.Instance, change.Member,
+                change.OldValue, change.NewValue, null, null)))
+            .Concat(normalizedCollections.Select(change => new NormalizedMutationProvenance(
+                MutationOriginKind.CollectionChanged, change.Set, change.Owner, change.Member,
+                null, null, change.Kind, change.Item)))
+            .ToArray();
+        return new ValidatedMutationBatch(lifecycle, changes, provenance);
     }
 
     private PropertyChange ValidateBatchChange(
@@ -276,6 +292,17 @@ public sealed partial class RelationRuntime
 
     private sealed record ValidatedMutationBatch(
         IReadOnlyList<RuntimeMutation> LifecycleMutations,
-        IReadOnlyList<PropertyChange> Changes);
+        IReadOnlyList<PropertyChange> Changes,
+        IReadOnlyList<NormalizedMutationProvenance> Provenance);
 
 }
+
+internal sealed record NormalizedMutationProvenance(
+    MutationOriginKind Kind,
+    IObjectSetDefinition? Set,
+    object Source,
+    MemberInfo? Member,
+    object? OldValue,
+    object? NewValue,
+    CollectionChangeKind? CollectionKind,
+    object? CollectionItem);

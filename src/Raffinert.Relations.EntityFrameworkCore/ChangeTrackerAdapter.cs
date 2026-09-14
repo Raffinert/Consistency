@@ -116,6 +116,27 @@ public sealed class RelationUnitOfWork
         return runtime.Commit(_prepared!);
     }
 
+    /// <summary>
+    /// Commits prepared runtime state and returns detailed data before policy dispatch. Empty units
+    /// return <see langword="null"/>.
+    /// </summary>
+    public RuntimeApplyResult? CommitDetailed(
+        RelationRuntime runtime,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (!_isPrepared)
+            throw new InvalidOperationException("This unit of work must be prepared before it is committed.");
+        if (_mutations is null)
+        {
+            if (_emptyCommitted)
+                throw new InvalidOperationException("This unit of work has already been committed.");
+            _emptyCommitted = true;
+            return null;
+        }
+        return runtime.CommitDetailed(_prepared!, detailLevel);
+    }
+
     /// <summary>Dispatches post-commit policy callbacks.</summary>
     public void Dispatch(RelationRuntime runtime)
     {

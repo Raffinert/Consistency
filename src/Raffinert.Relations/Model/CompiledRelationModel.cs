@@ -33,6 +33,15 @@ public sealed class CompiledRelationModel
     public string DebugView { get; }
     public CompiledModelDiagnostics Diagnostics { get; }
     public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph);
+    public RelationRuntime CreateRuntime(Action<RuntimeSeedBuilder> configureSeed)
+    {
+        ArgumentNullException.ThrowIfNull(configureSeed);
+        var seed = new RuntimeSeedBuilder();
+        configureSeed(seed);
+        var runtime = CreateRuntime();
+        runtime.Bootstrap(seed.Entries);
+        return runtime;
+    }
     public RelationRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
     {
         ArgumentNullException.ThrowIfNull(diagnosticOptions);

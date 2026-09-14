@@ -3,6 +3,7 @@ Raffinert.Relations.EntityFrameworkCore.ChangeTrackerAdapter
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Apply(Raffinert.Relations.RelationRuntime! runtime) -> void
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Commit(Raffinert.Relations.RelationRuntime! runtime) -> Raffinert.Relations.ChangeImpact?
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.CommitDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult?
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Dispatch(Raffinert.Relations.RelationRuntime! runtime) -> void
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.HasChanges.get -> bool
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Prepare(Raffinert.Relations.RelationRuntime! runtime) -> void

@@ -134,6 +134,48 @@ public sealed class CausalImpactTests
         Assert.Equal(["left", "right"], causes.Select(cause => cause.DefinitionKey));
     }
 
+    [Fact]
+    public void Direct_cause_keeps_local_dirty_severity_when_upstream_makes_final_invalid()
+    {
+        var model = new RelationModelBuilder();
+        var set = model.Objects<Source>().Key(source => source.Id);
+        var upstream = model.Derived(set)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(source => source.Quantity).Named("upstream");
+        var downstream = model.Derived(set).Using(upstream)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Dirty))
+            .Compute((source, value) => value + source.Reserved).Named("downstream");
+        var source = new Source { Quantity = 1, Reserved = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
+        _ = runtime.Get(downstream, source);
+        source.Quantity = 2;
+        source.Reserved = 2;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(set, source, value => value.Quantity, 1, 2),
+            Change.Property(set, source, value => value.Reserved, 1, 2)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        var impact = result.DerivedImpacts.Single(value => value.DefinitionKey == "downstream").Sources.Single();
+        Assert.Equal(DependencySeverity.Invalid, impact.Severity);
+        Assert.Equal(DependencySeverity.Dirty,
+            impact.Causes.OfType<DirectSourceMemberCause>().Single().ClassifiedSeverity);
+    }
+
+    [Fact]
+    public void Schedule_repair_escalation_is_explicit()
+    {
+        var scenario = CreateScenario();
+        scenario.Source.Quantity = 11;
+
+        var result = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Quantity, 10, 11)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        Assert.Contains(result.InvariantImpacts.Single().Sources.Single().Causes,
+            cause => cause is InvariantReactionCause { Reaction: InvariantReaction.ScheduleRepair });
+    }
+
     private static Scenario CreateScenario()
     {
         var model = new RelationModelBuilder();

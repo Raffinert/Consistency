@@ -84,6 +84,19 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return new DerivedUpstreamBuilder<TSource, TValue>(_model, _source, upstream);
     }
 
+    /// <summary>Uses a derived value owned by an object reached through a tracked reference.</summary>
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> Using<TUpstreamSource, TValue>(
+        Expression<Func<TSource, TUpstreamSource>> selector,
+        Derived<TUpstreamSource, TValue> upstream)
+        where TUpstreamSource : class
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        ArgumentNullException.ThrowIfNull(upstream);
+        _model.EnsureDerived(upstream.Definition);
+        return new ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue>(
+            _model, _source, selector, upstream);
+    }
+
     public DerivedUpstreamBuilder<TSource, TValue1, TValue2> Using<TValue1, TValue2>(
         Derived<TSource, TValue1> first,
         Derived<TSource, TValue2> second)
@@ -107,6 +120,46 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             computation,
             computation.Compile(),
             _impactPolicy);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+    }
+}
+
+public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>
+    where TSource : class
+    where TUpstreamSource : class
+{
+    private readonly RelationModelBuilder _model;
+    private readonly ObjectSet<TSource> _source;
+    private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
+    private readonly Derived<TUpstreamSource, TUpstream> _upstream;
+    private DerivedImpactPolicy _impactPolicy = new(
+        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
+        DependencySeverity.Dirty, false, []);
+
+    internal ProjectedDerivedUpstreamBuilder(
+        RelationModelBuilder model,
+        ObjectSet<TSource> source,
+        Expression<Func<TSource, TUpstreamSource>> selector,
+        Derived<TUpstreamSource, TUpstream> upstream) =>
+        (_model, _source, _selector, _upstream) = (model, source, selector, upstream);
+
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream> Impact(
+        Action<DerivedImpactPolicyBuilder<TSource>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
+        configure(builder);
+        _impactPolicy = builder.Build();
+        return this;
+    }
+
+    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TUpstream, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
+            _source.Definition, _upstream.Definition, _selector, _selector.Compile(),
+            computation, computation.Compile(), _impactPolicy);
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
     }

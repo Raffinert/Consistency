@@ -315,14 +315,25 @@ public sealed partial class RelationRuntime
         ChangeValidationMode validationMode,
         RuntimeImpactDetailLevel detailLevel)
     {
+        var prepared = Prepare(mutationSet, validationMode);
+        var result = CommitDetailed(prepared, detailLevel);
+        return new RuntimeApplication(result, new PolicyDispatchHandle(() => Dispatch(prepared)));
+    }
+
+    /// <summary>
+    /// Commits a prepared mutation and returns immutable detailed data without dispatching policy callbacks.
+    /// </summary>
+    public RuntimeApplyResult CommitDetailed(
+        PreparedMutation prepared,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
         if (!Enum.IsDefined(detailLevel))
             throw new ArgumentOutOfRangeException(nameof(detailLevel));
-        var prepared = Prepare(mutationSet, validationMode);
         var origins = detailLevel == RuntimeImpactDetailLevel.Causal
             ? CaptureMutationOrigins(prepared)
             : [];
         var result = CommitWithResult(prepared);
-        return CreateDetailedApplication(prepared, result, detailLevel, origins);
+        return CreateDetailedResult(prepared, result, detailLevel, origins);
     }
 
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
@@ -344,6 +355,7 @@ public sealed partial class RelationRuntime
             Version,
             batch.LifecycleMutations,
             batch.Changes,
+            batch.Provenance,
             batch.Changes.Select(PreparedDomainAssumption.Capture).ToArray());
     }
 

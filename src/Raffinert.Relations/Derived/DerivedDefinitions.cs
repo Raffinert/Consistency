@@ -23,7 +23,20 @@ internal interface IDerivedDefinition
 
 internal abstract record DerivedInput;
 internal sealed record RelationDerivedInput(IRelationDefinition Relation) : DerivedInput;
-internal sealed record UpstreamDerivedInput(IDerivedDefinition Upstream) : DerivedInput;
+internal record UpstreamDerivedInput(IDerivedDefinition Upstream) : DerivedInput
+{
+    public virtual bool IsProjected => false;
+    public virtual object? Project(object source) => source;
+}
+
+internal sealed record ProjectedUpstreamDerivedInput(
+    IDerivedDefinition Upstream,
+    LambdaExpression SelectorExpression,
+    Delegate Selector) : UpstreamDerivedInput(Upstream)
+{
+    public override bool IsProjected => true;
+    public override object? Project(object source) => Selector.DynamicInvoke(source);
+}
 
 internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
@@ -110,7 +123,7 @@ internal sealed class ComposedDerivedDefinition<TSource, TUpstream, TValue>(
     public IObjectSetDefinition SourceSet => sourceSet;
     public IReadOnlyList<DerivedInput> Inputs { get; } = [new UpstreamDerivedInput(upstream)];
     public LambdaExpression ComputationExpression => expression;
-    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeComposedDerived(expression);
     public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public string ComputationPlanName => "DependencyFullRecompute";
     public bool RequiresExactPropagation => false;
@@ -122,6 +135,50 @@ internal sealed class ComposedDerivedDefinition<TSource, TUpstream, TValue>(
             source => computation(source, (TUpstream)resolveDerived(upstream).GetValue(source)!));
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
         new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+}
+
+internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
+    ObjectSetDefinition<TSource> sourceSet,
+    IDerivedDefinition upstream,
+    Expression<Func<TSource, TUpstreamSource>> selectorExpression,
+    Func<TSource, TUpstreamSource> selector,
+    Expression<Func<TSource, TUpstream, TValue>> expression,
+    Func<TSource, TUpstream, TValue> computation,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    where TSource : class
+    where TUpstreamSource : class
+{
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs { get; } =
+        [new ProjectedUpstreamDerivedInput(upstream, selectorExpression, selector)];
+    public LambdaExpression ComputationExpression => expression;
+    public ExpressionDependencyAnalysis Analysis { get; } = Combine(
+        ExpressionDependencyAnalyzer.AnalyzeComposedDerived(expression),
+        ExpressionDependencyAnalyzer.AnalyzeSourceDerived(selectorExpression));
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
+    public string ComputationPlanName => "ProjectedDependencyFullRecompute";
+    public bool RequiresExactPropagation => false;
+    public bool PrefersConservativePropagation => false;
+    public bool AllowIncompleteDependencies { get; set; }
+
+    public IDerivedRuntimeState CreateState(
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
+        new SourceDerivedRuntimeState<TSource, TValue>(this, source => computation(
+            source,
+            (TUpstream)resolveDerived(upstream).GetValue(selector(source))!));
+
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+
+    private static ExpressionDependencyAnalysis Combine(
+        ExpressionDependencyAnalysis first,
+        ExpressionDependencyAnalysis second) => new(
+        first.Dependencies.Concat(second.Dependencies).Distinct().ToArray(),
+        first.Flags | second.Flags,
+        first.HasRelationMembershipDependency || second.HasRelationMembershipDependency,
+        first.LinqSemantics | second.LinqSemantics);
 }
 
 internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(
@@ -137,7 +194,7 @@ internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue
     public IReadOnlyList<DerivedInput> Inputs { get; } =
         [new UpstreamDerivedInput(first), new UpstreamDerivedInput(second)];
     public LambdaExpression ComputationExpression => expression;
-    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+    public ExpressionDependencyAnalysis Analysis { get; } = ExpressionDependencyAnalyzer.AnalyzeComposedDerived(expression);
     public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public string ComputationPlanName => "DependencyFullRecompute";
     public bool RequiresExactPropagation => false;

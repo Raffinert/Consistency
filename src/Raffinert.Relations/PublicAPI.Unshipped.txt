@@ -19,6 +19,10 @@ Raffinert.Relations.ImpactCausePrecision.Exact = 0 -> Raffinert.Relations.Impact
 Raffinert.Relations.MutationOrigin
 Raffinert.Relations.MutationOrigin.Kind.get -> Raffinert.Relations.MutationOriginKind
 Raffinert.Relations.MutationOrigin.Kind.init -> void
+Raffinert.Relations.MutationOrigin.CollectionItem.get -> object?
+Raffinert.Relations.MutationOrigin.CollectionItem.init -> void
+Raffinert.Relations.MutationOrigin.CollectionKind.get -> Raffinert.Relations.CollectionChangeKind?
+Raffinert.Relations.MutationOrigin.CollectionKind.init -> void
 Raffinert.Relations.MutationOrigin.MemberName.get -> string?
 Raffinert.Relations.MutationOrigin.MemberName.init -> void
 Raffinert.Relations.MutationOrigin.MutationOrigin(int OriginId, Raffinert.Relations.MutationOriginKind Kind, object! Source, string? MemberName) -> void
@@ -99,6 +103,7 @@ Raffinert.Relations.CompiledModelDiagnostics.Relations.get -> System.Collections
 Raffinert.Relations.CompiledModelDiagnostics.Relations.init -> void
 Raffinert.Relations.CompiledRelationModel
 Raffinert.Relations.CompiledRelationModel.CreateRuntime() -> Raffinert.Relations.RelationRuntime!
+Raffinert.Relations.CompiledRelationModel.CreateRuntime(System.Action<Raffinert.Relations.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Relations.RelationRuntime!
 Raffinert.Relations.CompiledRelationModel.CreateRuntime(Raffinert.Relations.RuntimeDiagnosticOptions! diagnosticOptions) -> Raffinert.Relations.RelationRuntime!
 Raffinert.Relations.CompiledRelationModel.DebugView.get -> string!
 Raffinert.Relations.CompiledRelationModel.Diagnostics.get -> Raffinert.Relations.CompiledModelDiagnostics!
@@ -117,6 +122,7 @@ Raffinert.Relations.DerivedBuilder<TSource>
 Raffinert.Relations.DerivedBuilder<TSource>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedBuilder<TSource!>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Relations.Relation<TSource!, TItem!>! relation) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Relations.DerivedBuilder<TSource>.Using<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Relations.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! upstream) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue>!
 Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue1, TValue2>(Raffinert.Relations.Derived<TSource!, TValue1>! first, Raffinert.Relations.Derived<TSource!, TValue2>! second) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue1, TValue2>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>
@@ -125,6 +131,9 @@ Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(Syst
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
 Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TUpstream>!
+Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>
+Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
+Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TUpstream>!
 Raffinert.Relations.DerivedImpactPolicyBuilder
 Raffinert.Relations.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> void
 Raffinert.Relations.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
@@ -270,6 +279,14 @@ Raffinert.Relations.InvariantMutationImpact.InvariantMutationImpact(int Invarian
 Raffinert.Relations.InvariantMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
 Raffinert.Relations.InvariantMutationImpact.Sources.init -> void
 Raffinert.Relations.InvariantReaction
+Raffinert.Relations.InvariantReactionCause
+Raffinert.Relations.InvariantReactionCause.InvariantReactionCause(Raffinert.Relations.InvariantReaction Reaction, Raffinert.Relations.DependencySeverity InputSeverity, Raffinert.Relations.DependencySeverity OutputSeverity) -> void
+Raffinert.Relations.InvariantReactionCause.InputSeverity.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.InvariantReactionCause.InputSeverity.init -> void
+Raffinert.Relations.InvariantReactionCause.OutputSeverity.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.InvariantReactionCause.OutputSeverity.init -> void
+Raffinert.Relations.InvariantReactionCause.Reaction.get -> Raffinert.Relations.InvariantReaction
+Raffinert.Relations.InvariantReactionCause.Reaction.init -> void
 Raffinert.Relations.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantReaction.MarkDirty = 1 -> Raffinert.Relations.InvariantReaction
 Raffinert.Relations.InvariantReaction.MarkInvalid = 2 -> Raffinert.Relations.InvariantReaction
@@ -402,6 +419,7 @@ Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSe
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
+Raffinert.Relations.RelationRuntime.CommitDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
 Raffinert.Relations.RelationRuntime.Evaluate<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> bool
@@ -506,6 +524,9 @@ Raffinert.Relations.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.ge
 Raffinert.Relations.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.init -> void
 Raffinert.Relations.RuntimeDiagnosticOptions.RuntimeDiagnosticOptions() -> void
 Raffinert.Relations.RuntimeDiagnostics
+Raffinert.Relations.RuntimeSeedBuilder
+Raffinert.Relations.RuntimeSeedBuilder.Add<T>(Raffinert.Relations.ObjectSet<T!>! set, System.Collections.Generic.IEnumerable<T!>! instances) -> Raffinert.Relations.RuntimeSeedBuilder!
+Raffinert.Relations.RuntimeSeedBuilder.RuntimeSeedBuilder() -> void
 Raffinert.Relations.RuntimeDiagnostics.AffectedSources.get -> long
 Raffinert.Relations.RuntimeDiagnostics.AffectedSources.init -> void
 Raffinert.Relations.RuntimeDiagnostics.DerivedFullRecomputations.get -> long

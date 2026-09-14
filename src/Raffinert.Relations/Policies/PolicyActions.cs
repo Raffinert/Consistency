@@ -61,6 +61,8 @@ public sealed record MutationOrigin(
     string? MemberName)
 {
     public SourceIdentity? SourceIdentity { get; init; }
+    public CollectionChangeKind? CollectionKind { get; init; }
+    public object? CollectionItem { get; init; }
 }
 
 public abstract record DependencyImpactCause(ImpactCausePrecision Precision);
@@ -88,6 +90,12 @@ public sealed record UpstreamDerivedCause(
 {
     public string? DefinitionKey { get; init; }
 }
+
+public sealed record InvariantReactionCause(
+    InvariantReaction Reaction,
+    DependencySeverity InputSeverity,
+    DependencySeverity OutputSeverity)
+    : DependencyImpactCause(ImpactCausePrecision.Exact);
 
 /// <summary>Describes a derived definition's source-scoped impacts.</summary>
 public sealed record DerivedMutationImpact(
@@ -312,6 +320,7 @@ public static class RuntimeImpactTraceRenderer
         DirectSourceMemberCause direct => $"{direct.MemberName} changed ({direct.Policy})",
         RelationDependencyCause relation => $"{relation.DefinitionKey ?? $"relation-{relation.RelationId}"} {relation.Kind}",
         UpstreamDerivedCause upstream => $"upstream {upstream.DefinitionKey ?? $"derived-{upstream.DerivedId}"}",
+        InvariantReactionCause reaction => $"{reaction.Reaction} escalated {reaction.InputSeverity} to {reaction.OutputSeverity}",
         _ => cause.GetType().Name
     };
 }
@@ -349,18 +358,21 @@ public sealed class PreparedMutation
         long baseVersion,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
+        IReadOnlyList<NormalizedMutationProvenance> provenance,
         IReadOnlyList<PreparedDomainAssumption> domainAssumptions)
     {
         Runtime = runtime;
         BaseVersion = baseVersion;
         LifecycleMutations = lifecycleMutations;
         Changes = changes;
+        Provenance = provenance;
         DomainAssumptions = domainAssumptions;
     }
 
     internal RelationRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
     internal IReadOnlyList<PropertyChange> Changes { get; }
+    internal IReadOnlyList<NormalizedMutationProvenance> Provenance { get; }
     internal IReadOnlyList<PreparedDomainAssumption> DomainAssumptions { get; }
     internal RuntimePolicyActions? PolicyActions { get; private set; }
 

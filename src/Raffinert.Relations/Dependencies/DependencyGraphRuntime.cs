@@ -6,7 +6,14 @@ namespace Raffinert.Relations;
 internal sealed record DerivedImpactSnapshot(
     IDerivedDefinition Definition,
     DependencyImpactKind Severity,
-    IReadOnlyCollection<object> Sources);
+    IReadOnlyCollection<object> Sources,
+    IReadOnlyList<DirectClassificationEvidence> DirectEvidence);
+
+internal sealed record DirectClassificationEvidence(
+    object Source,
+    MemberInfo Member,
+    DependencySeverity Severity,
+    string Policy);
 
 internal sealed record InvariantImpactSnapshot(
     IInvariantDefinition Definition,
@@ -34,7 +41,8 @@ internal sealed class DependencyGraphRuntime
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<DerivedNode>> _derivedByMember;
     private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<InvariantNode>> _invariantsByDerived;
     private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<DerivedNode>> _derivedByUpstream;
-    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<DerivedNode>> _upstreamsByDerived;
+    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<(UpstreamDerivedInput Input, DerivedNode Node)>>
+        _upstreamsByDerived;
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<InvariantNode>> _invariantsByMember;
     private HashSet<DerivedNode> _previousDerived = [];
     private HashSet<InvariantNode> _previousInvariants = [];
@@ -77,9 +85,13 @@ internal sealed class DependencyGraphRuntime
         _derivedByUpstream = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
             .OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
             .Select(upstream => (derivedByDefinition[upstream], node))));
-        _upstreamsByDerived = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
-            .OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
-            .Select(upstream => (node, derivedByDefinition[upstream]))));
+        _upstreamsByDerived = _derivedNodes.SelectMany(node => node.Definition.Inputs
+                .OfType<UpstreamDerivedInput>()
+                .Select(input => (Downstream: node, Value: (Input: input, Node: derivedByDefinition[input.Upstream]))))
+            .GroupBy(value => value.Downstream)
+            .ToDictionary(group => group.Key,
+                group => (IReadOnlyList<(UpstreamDerivedInput Input, DerivedNode Node)>)group
+                    .Select(value => value.Value).ToArray());
         _invariantsByMember = Group(_invariantNodes.SelectMany(node =>
             node.SourceDependencies.SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
@@ -124,7 +136,7 @@ internal sealed class DependencyGraphRuntime
 
     public IReadOnlyList<DerivedImpactSnapshot> GetDerivedImpacts() => _derivedNodes
         .SelectMany(node =>
-            Snapshot(node.Definition, node.InvalidSources, node.DirtySources))
+            Snapshot(node.Definition, node.InvalidSources, node.DirtySources, node.DirectEvidence))
         .ToArray();
 
     public IReadOnlyList<InvariantImpactSnapshot> GetInvariantImpacts() => _invariantNodes
@@ -238,7 +250,7 @@ internal sealed class DependencyGraphRuntime
                 relationImpact,
                 changes);
             if (_upstreamsByDerived.TryGetValue(node, out var upstreams))
-                node.ApplyInherited(upstreams);
+                node.ApplyInherited(upstreams, _sets[node.Definition.SourceSet].Instances);
         }
 
         var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
@@ -285,12 +297,13 @@ internal sealed class DependencyGraphRuntime
     private static IEnumerable<DerivedImpactSnapshot> Snapshot(
         IDerivedDefinition definition,
         IReadOnlyCollection<object> invalid,
-        IReadOnlyCollection<object> dirty)
+        IReadOnlyCollection<object> dirty,
+        IReadOnlyList<DirectClassificationEvidence> evidence)
     {
         if (invalid.Count > 0)
-            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid);
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid, evidence);
         if (dirty.Count > 0)
-            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty);
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty, evidence);
     }
 
     private static IEnumerable<InvariantImpactSnapshot> Snapshot(
@@ -326,6 +339,7 @@ internal sealed class DependencyGraphRuntime
         public IReadOnlyList<TrackedExpressionDependency> ItemDependencies { get; }
         public HashSet<object> InvalidSources { get; private set; } = NewSet();
         public HashSet<object> DirtySources { get; private set; } = NewSet();
+        public IReadOnlyList<DirectClassificationEvidence> DirectEvidence { get; private set; } = [];
 
         public object CaptureState() => new NodeState(
             State.CaptureState(),
@@ -379,6 +393,7 @@ internal sealed class DependencyGraphRuntime
         {
             var dirty = NewSet();
             var invalid = NewSet();
+            var evidence = new List<DirectClassificationEvidence>();
             var directDependencies = SourceDependencies
                 .Where(dependency => dependency.Path.Segments.Count == 1)
                 .Select(dependency => dependency.Path.Segments[0].Member)
@@ -394,11 +409,15 @@ internal sealed class DependencyGraphRuntime
                     var classified = rules.TryGetValue(change.Member, out var rule)
                         ? rule.Classify(change.OldValue, change.NewValue)
                         : Definition.ImpactPolicy.SourceChanged;
+                    evidence.Add(new DirectClassificationEvidence(
+                        source, change.Member, classified,
+                        rule is null ? "fixed fallback" : "member-specific conditional policy"));
                     severity = severity is null ? classified : Max(severity.Value, classified);
                 }
                 severity ??= Definition.ImpactPolicy.SourceChanged;
                 (severity == DependencySeverity.Invalid ? invalid : dirty).Add(source);
             }
+            DirectEvidence = evidence;
             return (dirty, invalid);
         }
 
@@ -418,10 +437,15 @@ internal sealed class DependencyGraphRuntime
                 State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
         }
 
-        public void ApplyInherited(IEnumerable<DerivedNode> upstreams)
+        public void ApplyInherited(
+            IEnumerable<(UpstreamDerivedInput Input, DerivedNode Node)> upstreams,
+            IEnumerable<object> downstreamSources)
         {
-            var inheritedInvalid = NewSet(upstreams.SelectMany(upstream => upstream.InvalidSources));
-            var inheritedDirty = NewSet(upstreams.SelectMany(upstream => upstream.DirtySources));
+            var downstream = downstreamSources.ToArray();
+            var inheritedInvalid = NewSet(upstreams.SelectMany(upstream =>
+                Map(upstream.Input, upstream.Node.InvalidSources, downstream)));
+            var inheritedDirty = NewSet(upstreams.SelectMany(upstream =>
+                Map(upstream.Input, upstream.Node.DirtySources, downstream)));
             inheritedDirty.ExceptWith(inheritedInvalid);
             var newInvalid = inheritedInvalid.Except(InvalidSources, ReferenceEqualityComparer.Instance).ToArray();
             var newDirty = inheritedDirty.Except(DirtySources, ReferenceEqualityComparer.Instance)
@@ -435,10 +459,19 @@ internal sealed class DependencyGraphRuntime
                 State.ApplyImpact(newDirty, DependencyImpactKind.Dirty);
         }
 
+        private static IEnumerable<object> Map(
+            UpstreamDerivedInput input,
+            IReadOnlySet<object> impacted,
+            IReadOnlyList<object> downstreamSources) => input.IsProjected
+            ? downstreamSources.Where(source =>
+                input.Project(source) is { } projected && impacted.Contains(projected))
+            : impacted;
+
         public void ClearImpact()
         {
             InvalidSources = NewSet();
             DirtySources = NewSet();
+            DirectEvidence = [];
         }
 
         private static HashSet<object> NewSet(IEnumerable<object>? values = null) =>
@@ -494,6 +527,11 @@ internal sealed class DependencyGraphRuntime
             InvalidSources = NewSet(_derived.SelectMany(node => node.InvalidSources));
             DirtySources = NewSet(_derived.SelectMany(node => node.DirtySources));
             DirtySources.ExceptWith(InvalidSources);
+            if (Definition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair)
+            {
+                InvalidSources.UnionWith(DirtySources);
+                DirtySources.Clear();
+            }
             if (InvalidSources.Count > 0)
                 State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid, policyActions);
             if (DirtySources.Count > 0)
@@ -503,9 +541,18 @@ internal sealed class DependencyGraphRuntime
         public void ApplyDirect(IEnumerable<object> sources, RuntimePolicyActions policyActions)
         {
             var affected = NewSet(sources);
-            DirtySources.UnionWith(affected);
-            DirtySources.ExceptWith(InvalidSources);
-            State.ApplyImpact(affected, DependencyImpactKind.Dirty, policyActions);
+            if (Definition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair)
+            {
+                InvalidSources.UnionWith(affected);
+                DirtySources.ExceptWith(InvalidSources);
+                State.ApplyImpact(affected, DependencyImpactKind.Invalid, policyActions);
+            }
+            else
+            {
+                DirtySources.UnionWith(affected);
+                DirtySources.ExceptWith(InvalidSources);
+                State.ApplyImpact(affected, DependencyImpactKind.Dirty, policyActions);
+            }
         }
 
         public void ClearImpact()

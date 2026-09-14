@@ -4,6 +4,7 @@ var repairQueue = new List<Guid>();
 var model = new RelationModelBuilder();
 var lines = model.Objects<PurchaseOrderLine>().Named("po-lines").Key(line => line.Id);
 var receipts = model.Objects<GoodsReceipt>().Named("goods-receipts").Key(receipt => receipt.Id);
+var links = model.Objects<PurchaseOrderInvoiceLink>().Named("invoice-links").Key(link => link.Id);
 var matchingReceipts = model.Relation(lines, receipts)
     .Where((line, receipt) => line.OrderNumber == receipt.OrderNumber &&
         line.ItemNumber == receipt.ItemNumber && !receipt.Cancelled)
@@ -34,26 +35,29 @@ var unitRate = model.Derived(lines)
     .Compute(line => line.PriceRate)
     .Named("unit-rate");
 
-var linkValidity = model.Derived(lines).Using(availableQuantity, unitRate)
+var decisionInputs = model.Derived(lines).Using(availableQuantity, unitRate)
+    .Compute((_, available, rate) => new PurchaseOrderDecisionInputs(available, rate))
+    .AllowIncompleteDependencies()
+    .Named("po-decision-inputs");
+
+var linkValidity = model.Derived(links).Using(link => link.PurchaseOrderLine, decisionInputs)
     .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-    .Compute((line, available, rate) =>
-        line.ReservedQuantity <= available && line.CapturedRate == rate)
+    .Compute((link, current) =>
+        link.ReservedQuantity <= current.AvailableQuantity && link.CapturedRate == current.UnitRate)
     .Named("link-validity");
 
-var linkInvariant = model.Invariant(lines).Using(linkValidity)
+var linkInvariant = model.Invariant(links).Using(linkValidity)
     .Must((_, valid) => valid)
     .Named("link-validity-invariant")
-    .ScheduleRepairWith(line => repairQueue.Add(line.Id));
+    .ScheduleRepairWith(link => repairQueue.Add(link.Id));
 
-var runtime = model.Build().CreateRuntime();
+var compiled = model.Build();
 var line = new PurchaseOrderLine
 {
     OrderNumber = "PO-100",
     ItemNumber = 1,
     OrderedQuantity = 10,
-    PriceRate = 25,
-    ReservedQuantity = 4,
-    CapturedRate = 25
+    PriceRate = 25
 };
 var receipt = new GoodsReceipt
 {
@@ -61,16 +65,29 @@ var receipt = new GoodsReceipt
     ItemNumber = line.ItemNumber,
     Quantity = 5
 };
-runtime.Apply(MutationSet.Create(Change.Add(lines, line), Change.Add(receipts, receipt)));
-_ = runtime.Get(linkValidity, line);
-_ = runtime.Evaluate(linkInvariant, line);
+var selectedLink = new PurchaseOrderInvoiceLink
+{
+    PurchaseOrderLine = line,
+    ReservedQuantity = 4,
+    CapturedRate = 25
+};
+// A restart hydrates authoritative rows without emitting business mutation callbacks.
+var runtime = compiled.CreateRuntime(seed =>
+{
+    seed.Add(lines, [line]);
+    seed.Add(receipts, [receipt]);
+    seed.Add(links, [selectedLink]);
+});
+Require(runtime.Version == 0, "bootstrap should not create a mutation version");
+_ = runtime.Get(linkValidity, selectedLink);
+_ = runtime.Evaluate(linkInvariant, selectedLink);
 
 // Additive capacity is explicitly deferrable.
 line.OrderedQuantity = 12;
 runtime.Apply(Change.Property(lines, line, value => value.OrderedQuantity, 10m, 12m));
 Require(runtime.GetState(availableQuantity, line) == DerivedValueState.Dirty, "increase should be dirty");
-_ = runtime.Get(linkValidity, line);
-_ = runtime.Evaluate(linkInvariant, line);
+_ = runtime.Get(linkValidity, selectedLink);
+_ = runtime.Evaluate(linkInvariant, selectedLink);
 
 // Subtractive capacity invalidates the persisted decision.
 line.OrderedQuantity = 8;
@@ -82,23 +99,23 @@ Console.WriteLine(RuntimeImpactTraceRenderer.Render(decrease.Result));
 decrease.Dispatch.Invoke();
 
 // Cancellation removes relation membership and flows through the whole graph.
-_ = runtime.Get(linkValidity, line);
-_ = runtime.Evaluate(linkInvariant, line);
+_ = runtime.Get(linkValidity, selectedLink);
+_ = runtime.Evaluate(linkInvariant, selectedLink);
 repairQueue.Clear();
 receipt.Cancelled = true;
 runtime.Apply(Change.Property(receipts, receipt, value => value.Cancelled, false, true));
 Require(runtime.GetState(receivedQuantity, line) == DerivedValueState.Invalid, "cancellation should invalidate received quantity");
-Require(repairQueue.SequenceEqual([line.Id]), "cancellation should schedule repair");
+Require(repairQueue.SequenceEqual([selectedLink.Id]), "cancellation should schedule link repair");
 
 // A rate change invalidates unit rate, link validity, and the invariant without caller orchestration.
-_ = runtime.Get(linkValidity, line);
-_ = runtime.Evaluate(linkInvariant, line);
+_ = runtime.Get(linkValidity, selectedLink);
+_ = runtime.Evaluate(linkInvariant, selectedLink);
 repairQueue.Clear();
 line.PriceRate = 27;
 runtime.Apply(Change.Property(lines, line, value => value.PriceRate, 25m, 27m));
 Require(runtime.GetState(unitRate, line) == DerivedValueState.Invalid, "rate should be invalid");
-Require(runtime.GetState(linkValidity, line) == DerivedValueState.Invalid, "link should be invalid");
-Require(repairQueue.SequenceEqual([line.Id]), "rate change should schedule repair");
+Require(runtime.GetState(linkValidity, selectedLink) == DerivedValueState.Invalid, "link should be invalid");
+Require(repairQueue.SequenceEqual([selectedLink.Id]), "rate change should schedule link repair");
 
 Console.WriteLine("Procurement dependency scenarios passed.");
 
@@ -115,9 +132,17 @@ internal sealed class PurchaseOrderLine
     public int ItemNumber { get; init; }
     public decimal OrderedQuantity { get; set; }
     public decimal PriceRate { get; set; }
+}
+
+internal sealed class PurchaseOrderInvoiceLink
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public required PurchaseOrderLine PurchaseOrderLine { get; init; }
     public decimal ReservedQuantity { get; init; }
     public decimal CapturedRate { get; init; }
 }
+
+internal sealed record PurchaseOrderDecisionInputs(decimal AvailableQuantity, decimal UnitRate);
 
 internal sealed class GoodsReceipt
 {

@@ -19,5 +19,9 @@ patch versions remain backward-compatible bug fixes where practical.
 - Added opt-in committed-impact causality with exact/conservative precision and trace rendering.
 - Added a compiling purchase-order/goods-receipt/link-validity vertical slice.
 - Added packed-package consumer smoke tests for .NET 8, .NET 10, and the EF Core adapter.
+- Added transaction-safe detailed prepared commits in core and the EF unit of work.
+- Added zero-version runtime bootstrap from authoritative object sets.
+- Added projected cross-object-set derived dependencies for persisted reference models.
+- Preserved normalized collection provenance and causal local severity, precision, and reaction escalation.
 
 This alpha is not yet published automatically. Its public API is tracked by checked-in approval files.

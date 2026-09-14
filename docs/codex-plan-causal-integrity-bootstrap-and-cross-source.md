@@ -1,5 +1,9 @@
 # Codex Implementation Plan — Causal Integrity, Runtime Bootstrap, and Cross-Source Dependency Proof
 
+Status: implemented. Tasks 27–33 are represented by the causal evidence/provenance fixes, detailed
+prepared commit APIs, runtime bootstrap, projected upstream composition, persisted-link sample, and
+release verification additions in this change set.
+
 Baseline: `main` at `3150b7d41cf9a6f3a89f7177927432315eef40ac`.
 
 The previous Tasks 20–26 roadmap is implemented and marked completed. The repository now has value-sensitive source severity, summary/causal detailed apply modes, a compiling procurement sample, packed-package smoke tests, and the post-DAG runtime hardening from earlier waves.
