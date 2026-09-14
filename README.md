@@ -293,6 +293,28 @@ capture and `Prepare` before saving, then call the unit's `Commit` and `Dispatch
 transaction commits. Discard the prepared unit on rollback. Calling `SaveChangesAndApply` inside an
 uncommitted external transaction advances runtime state too early, so use the manual three-phase API there.
 
+When durable impact/outbox rows must share the business transaction, preview the prepared unit after the
+first save, persist the returned immutable plan, and commit runtime state only after database durability:
+
+```csharp
+var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+unit.Prepare(runtime);
+await using var transaction = await context.Database.BeginTransactionAsync();
+await context.SaveChangesAsync();
+var impact = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+PersistDurableRepairOutboxRows(context, impact);
+await context.SaveChangesAsync();
+await transaction.CommitAsync();
+unit.Commit(runtime);
+unit.Dispatch(runtime);
+```
+
+`PreviewDetailed` predicts impact for the already-mutated, prepared domain state. It does not apply
+hypothetical old/new values to an untouched object graph. It is repeatable before commit, invokes no
+callbacks, and leaves runtime version, indexes, caches, diagnostics, and prepared-mutation state unchanged.
+If database commit succeeds but runtime commit subsequently fails, rebuild/reconcile the runtime from the
+authoritative database; the durable outbox record remains the recovery signal.
+
 When using `SaveChanges(acceptAllChangesOnSuccess: false)`, commit and dispatch the captured unit once, then
 call `ChangeTracker.AcceptAllChanges()` separately; do not recapture the still-`Added`/`Modified` entries.
 

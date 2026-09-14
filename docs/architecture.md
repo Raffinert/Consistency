@@ -81,6 +81,12 @@ the same core mutation protocol. The convenience save methods prepare before `Sa
 success, and dispatch last. For an externally controlled database transaction, use the captured unit of
 work manually and commit runtime state only after the actual database transaction commits.
 
+For a same-database transactional outbox, call `Prepare` before opening/saving the transaction, call
+`PreviewDetailed` after business `SaveChanges` (so generated values and relationship fixup are present),
+write the returned impact plan as outbox rows, and commit the database transaction. Only then call runtime
+`Commit` and `Dispatch`. Preview uses the same reversible execution engine as commit and restores all
+runtime-owned state. It is a post-domain-mutation plan, not a hypothetical what-if overlay.
+
 If a convenience save completes in the database but runtime synchronization fails, the adapter throws
 `RelationRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
 reconciliation/rebuild from authoritative data, not a blind database-command retry. A later policy callback

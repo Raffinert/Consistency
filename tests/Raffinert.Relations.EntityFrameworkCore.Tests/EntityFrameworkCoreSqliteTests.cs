@@ -108,6 +108,37 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
+    public void Explicit_transaction_can_preview_generated_identity_before_runtime_commit()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
+        model.Derived(objects).Compute(entity => entity.Code).Named("code");
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var entity = new GeneratedEntity { Code = "outbox" };
+        context.Add(entity);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        RuntimeApplyResult? preview;
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            preview = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+            Assert.NotNull(preview);
+            Assert.True(entity.Id > 0);
+            Assert.Equal(0, runtime.Version);
+            transaction.Commit();
+        }
+
+        var committed = unit.CommitDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+        Assert.Equal(preview!.DerivedImpacts.Count, committed!.DerivedImpacts.Count);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
     public void Save_without_accept_all_changes_can_commit_runtime_then_accept_tracking_state()
     {
         using var database = new SqliteFixture();
