@@ -8,7 +8,8 @@ var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
 value.Amount = 4;
 var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
     values, value, item => item.Amount, 3, 4)));
-var result = runtime.CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+var result = runtime.Commit(plan);
 runtime.Dispatch(prepared);
 return runtime.Version == 1 && result.DetailLevel == RuntimeImpactDetailLevel.Causal &&
     runtime.Get(doubled, value) == 8 ? 0 : 1;

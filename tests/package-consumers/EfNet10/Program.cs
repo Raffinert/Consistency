@@ -11,9 +11,11 @@ context.Add(value);
 var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
     context.ChangeTracker, new RelationUnitOfWorkMappings().Map(values));
 unit.Prepare(runtime);
+await context.SaveChangesAsync();
+var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
 var result = unit.CommitDetailed(runtime, RuntimeImpactDetailLevel.Causal);
 unit.Dispatch(runtime);
-return result is not null && runtime.Version == 1 ? 0 : 1;
+return plan is not null && ReferenceEquals(plan.Result, result) && runtime.Version == 1 ? 0 : 1;
 
 internal sealed class ConsumerContext : DbContext
 {
