@@ -397,7 +397,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
             context.Outbox.Add(new OutboxRecord
             {
-                Payload = $"{plan.Result.DerivedImpacts.Single().DefinitionKey}:{entity.Id:D}"
+                Payload = CreateOutboxPayload(plan.Result)
             });
             context.SaveChanges();
             transaction.Commit();
@@ -407,6 +407,14 @@ public sealed class EntityFrameworkCoreSqliteTests
 
         Assert.Equal(1, runtime.Version);
         Assert.Equal($"code:{entity.Id:D}", context.Outbox.Single().Payload);
+    }
+
+    private static string CreateOutboxPayload(RuntimeApplyResult result)
+    {
+        var impact = result.DerivedImpacts.Single();
+        var identity = impact.Sources.Single().SourceIdentity?.DurableIdentity
+            ?? throw new InvalidOperationException("Outbox impact source must have a durable identity.");
+        return $"{impact.DefinitionKey}:{identity.KeyParts.Single().Value}";
     }
 
     [Fact]
