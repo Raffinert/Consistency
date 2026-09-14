@@ -36,10 +36,10 @@ public class PreparedImpactPlanningBenchmarks
     public RuntimeApplyResult PreviewCausal() => Preview(_previewCausal, RuntimeImpactDetailLevel.Causal);
 
     [Benchmark]
-    public RuntimeApplyResult CommitPlannedSummary() => PlanAndCommit(_plannedSummary, RuntimeImpactDetailLevel.Summary);
+    public PreparedImpactPlan PlanSummary() => Plan(_plannedSummary, RuntimeImpactDetailLevel.Summary);
 
     [Benchmark]
-    public RuntimeApplyResult CommitPlannedCausal() => PlanAndCommit(_plannedCausal, RuntimeImpactDetailLevel.Causal);
+    public PreparedImpactPlan PlanCausal() => Plan(_plannedCausal, RuntimeImpactDetailLevel.Causal);
 
     private static RuntimeApplyResult Commit(Scenario scenario, RuntimeImpactDetailLevel detail)
     {
@@ -49,17 +49,11 @@ public class PreparedImpactPlanningBenchmarks
 
     private static RuntimeApplyResult Preview(Scenario scenario, RuntimeImpactDetailLevel detail)
     {
-        var prepared = scenario.Next();
-        var result = scenario.Runtime.PreviewDetailed(prepared, detail);
-        scenario.Runtime.Commit(prepared);
-        return result;
+        return scenario.Runtime.PreviewDetailed(scenario.Pending(), detail);
     }
 
-    private static RuntimeApplyResult PlanAndCommit(Scenario scenario, RuntimeImpactDetailLevel detail)
-    {
-        var plan = scenario.Runtime.PlanDetailed(scenario.Next(), detail);
-        return scenario.Runtime.Commit(plan);
-    }
+    private static PreparedImpactPlan Plan(Scenario scenario, RuntimeImpactDetailLevel detail) =>
+        scenario.Runtime.PlanDetailed(scenario.Pending(), detail);
 
     private static Scenario CreateScenario()
     {
@@ -74,6 +68,7 @@ public class PreparedImpactPlanningBenchmarks
     private sealed class Scenario(RelationRuntime runtime, ObjectSet<Source> set, Source source)
     {
         private int _value;
+        private PreparedMutation? _pending;
         public RelationRuntime Runtime => runtime;
 
         public PreparedMutation Next()
@@ -83,9 +78,50 @@ public class PreparedImpactPlanningBenchmarks
             return runtime.Prepare(MutationSet.Create(
                 Change.Property(set, source, value => value.Value, oldValue, _value)));
         }
+
+        public PreparedMutation Pending() => _pending ??= Next();
     }
 
     private sealed class Source
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public int Value { get; set; }
+    }
+}
+
+[MemoryDiagnoser, InvocationCount(1)]
+public class PreparedPatchInstallBenchmarks
+{
+    private RelationRuntime _runtime = null!;
+    private PreparedImpactPlan _summary = null!;
+    private PreparedImpactPlan _causal = null!;
+
+    [IterationSetup(Target = nameof(CommitPlannedSummary))]
+    public void SetupSummary() => (_runtime, _summary) = CreatePlan(RuntimeImpactDetailLevel.Summary);
+
+    [IterationSetup(Target = nameof(CommitPlannedCausal))]
+    public void SetupCausal() => (_runtime, _causal) = CreatePlan(RuntimeImpactDetailLevel.Causal);
+
+    [Benchmark]
+    public RuntimeApplyResult CommitPlannedSummary() => _runtime.Commit(_summary);
+
+    [Benchmark]
+    public RuntimeApplyResult CommitPlannedCausal() => _runtime.Commit(_causal);
+
+    private static (RelationRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(RuntimeImpactDetailLevel detail)
+    {
+        var model = new RelationModelBuilder();
+        var set = model.Objects<PatchSource>().Key(source => source.Id);
+        model.Derived(set).Compute(source => source.Value);
+        var source = new PatchSource();
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
+        source.Value = 1;
+        var prepared = runtime.Prepare(MutationSet.Create(
+            Change.Property(set, source, value => value.Value, 0, 1)));
+        return (runtime, runtime.PlanDetailed(prepared, detail));
+    }
+
+    private sealed class PatchSource
     {
         public Guid Id { get; } = Guid.NewGuid();
         public int Value { get; set; }
