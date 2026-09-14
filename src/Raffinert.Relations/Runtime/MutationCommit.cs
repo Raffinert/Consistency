@@ -63,12 +63,20 @@ public sealed partial class RelationRuntime
         var affectedRelations = impact.AffectedRelations.ToHashSet();
         affectedRelations.UnionWith(_relations.Keys.Where(relation =>
             lifecycleSets.Contains(relation.LeftSet) || lifecycleSets.Contains(relation.RightSet)));
-        var navigationChanged = lifecycleMutations.Count > 0 || navigationRoots.Count > 0;
+        var navigationChanged = lifecycleMutations.Count > 0 ||
+            changes.Any(change => _navigation.IsIndexedNavigation(change.Member));
+        var projectionChanged = lifecycleMutations.Any(mutation => mutation switch
+            {
+                ObjectAdded added => _projections.IsDownstreamSet(added.Set),
+                ObjectRemoved removed => _projections.IsDownstreamSet(removed.Set),
+                _ => false
+            }) || changes.Any(change => change.Set is not null &&
+                _projections.IsSelectorChange(change.Set, change.Member));
         return new RuntimeStateSnapshot(
         lifecycleSets.ToDictionary(set => set, set => _sets[set].CaptureState()),
         affectedRelations.ToDictionary(relation => relation, relation => _relations[relation].CaptureState()),
         navigationChanged ? _navigation.CaptureState() : null,
-        _projections.CaptureState(),
+        projectionChanged ? _projections.CaptureState() : null,
         _dependencyGraph.CaptureState(affectedRelations, changes),
         LastRelationImpacts,
         _reindexedRoots,
@@ -86,7 +94,8 @@ public sealed partial class RelationRuntime
             _relations[pair.Key].RestoreState(pair.Value);
         if (snapshot.Navigation is not null)
             _navigation.RestoreState(snapshot.Navigation);
-        _projections.RestoreState(snapshot.Projections);
+        if (snapshot.Projections is not null)
+            _projections.RestoreState(snapshot.Projections);
         _dependencyGraph.RestoreState(snapshot.Dependencies);
         LastRelationImpacts = snapshot.LastRelationImpacts;
         _reindexedRoots = snapshot.ReindexedRoots;
@@ -100,7 +109,7 @@ public sealed partial class RelationRuntime
         IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
         IReadOnlyDictionary<IRelationDefinition, object> Relations,
         object? Navigation,
-        object Projections,
+        object? Projections,
         object Dependencies,
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts,
         long ReindexedRoots,
@@ -188,6 +197,10 @@ public sealed partial class RelationRuntime
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {
+        var needsValidation = prepared.LifecycleMutations.Count > 0 || prepared.Changes.Any(change =>
+            change.Set is not null && _projections.IsSelectorChange(change.Set, change.Member));
+        if (!needsValidation)
+            return;
         var snapshot = _projections.CaptureState();
         var setSnapshots = _sets.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState());
         try

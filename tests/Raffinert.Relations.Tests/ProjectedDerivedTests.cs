@@ -177,6 +177,52 @@ public sealed class ProjectedDerivedTests
         Assert.Equal(9, runtime.Get(combined, link));
     }
 
+    [Fact]
+    public void Randomized_indexed_projection_matches_authoritative_recompute()
+    {
+        var model = new RelationModelBuilder();
+        var orders = model.Objects<Order>().Key(value => value.Id);
+        var links = model.Objects<Link>().Key(value => value.Id);
+        var total = model.Derived(orders).Compute(value => value.Total);
+        var doubled = model.Derived(orders)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(value => value.Total * 2);
+        var combined = model.Derived(links).Using(value => value.Order, total, doubled)
+            .Compute((link, first, second) => first + second + link.CapturedTotal);
+        var owners = Enumerable.Range(0, 8).Select(index => new Order { Total = index }).ToArray();
+        var downstream = Enumerable.Range(0, 40)
+            .Select(index => new Link { Order = owners[index % owners.Length], CapturedTotal = index }).ToArray();
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(links, downstream);
+            seed.Add(orders, owners);
+        });
+        foreach (var link in downstream)
+            _ = runtime.Get(combined, link);
+        var random = new Random(34040);
+
+        for (var step = 0; step < 150; step++)
+        {
+            if (random.Next(2) == 0)
+            {
+                var owner = owners[random.Next(owners.Length)];
+                var oldValue = owner.Total;
+                owner.Total = random.Next(100);
+                runtime.Apply(Change.Property(orders, owner, value => value.Total, oldValue, owner.Total));
+            }
+            else
+            {
+                var link = downstream[random.Next(downstream.Length)];
+                var oldOwner = link.Order;
+                link.Order = owners[random.Next(owners.Length)];
+                runtime.Apply(Change.Property(links, link, value => value.Order, oldOwner, link.Order));
+            }
+
+            foreach (var link in downstream)
+                Assert.Equal(link.Order.Total * 3 + link.CapturedTotal, runtime.Get(combined, link));
+        }
+    }
+
     private static IntegrityScenario CreateIntegrityScenario()
     {
         var model = new RelationModelBuilder();

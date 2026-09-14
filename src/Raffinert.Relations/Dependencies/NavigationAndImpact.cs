@@ -288,6 +288,8 @@ internal sealed class NavigationIndexRegistry
         _registrations[set].Add(root, memberships.ToArray());
     }
 
+    public bool IsIndexedNavigation(MemberInfo member) => _indexes.ContainsKey(member);
+
     public void RemoveRoot(IObjectSetDefinition set, object root)
     {
         if (!_registrations[set].Remove(root, out var memberships))

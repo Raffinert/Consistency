@@ -1,5 +1,7 @@
 namespace Raffinert.Relations;
 
+using System.Reflection;
+
 internal sealed class ProjectionIndexRegistry
 {
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
@@ -19,6 +21,13 @@ internal sealed class ProjectionIndexRegistry
     public int EdgeCount => _entries.Count;
     public int ReverseEntryCount => _entries.Sum(entry => entry.DownstreamToTarget.Count);
     public int TargetCount => _entries.Sum(entry => entry.TargetToDownstreams.Count);
+
+    public bool IsSelectorChange(IObjectSetDefinition set, MemberInfo member) =>
+        _entries.Any(entry => ReferenceEquals(entry.DownstreamSet, set) &&
+            entry.Input.SelectorPath.Segments.Any(segment => segment.Member == member));
+
+    public bool IsDownstreamSet(IObjectSetDefinition set) =>
+        _entries.Any(entry => ReferenceEquals(entry.DownstreamSet, set));
 
     public void AddRoot(IObjectSetDefinition set, object source)
     {
