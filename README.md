@@ -301,17 +301,21 @@ var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mapping
 unit.Prepare(runtime);
 await using var transaction = await context.Database.BeginTransactionAsync();
 await context.SaveChangesAsync();
-var impact = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-PersistDurableRepairOutboxRows(context, impact);
+var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+PersistDurableRepairOutboxRows(context, plan?.Result);
 await context.SaveChangesAsync();
 await transaction.CommitAsync();
 unit.Commit(runtime);
 unit.Dispatch(runtime);
 ```
 
-`PreviewDetailed` predicts impact for the already-mutated, prepared domain state. It does not apply
-hypothetical old/new values to an untouched object graph. It is repeatable before commit, invokes no
-callbacks, and leaves runtime version, indexes, caches, diagnostics, and prepared-mutation state unchanged.
+`PlanDetailed` is binding: it executes semantic classification and propagation once, restores runtime
+state, and retains an internal forward patch. The later `Commit` installs that exact patch without
+rerunning classifiers or predicates. Use it whenever durable external work depends on exact parity.
+`PreviewDetailed` remains a non-binding diagnostic and may execute semantic code again at normal commit.
+Both APIs predict impact for the already-mutated, prepared domain state; neither applies hypothetical
+old/new values to an untouched object graph. Planning and preview invoke no callbacks and leave runtime
+version, indexes, caches, diagnostics, and prepared-mutation state unchanged.
 If database commit succeeds but runtime commit subsequently fails, rebuild/reconcile the runtime from the
 authoritative database; the durable outbox record remains the recovery signal.
 

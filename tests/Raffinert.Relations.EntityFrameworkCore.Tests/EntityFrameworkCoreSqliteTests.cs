@@ -122,19 +122,19 @@ public sealed class EntityFrameworkCoreSqliteTests
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
 
-        RuntimeApplyResult? preview;
+        PreparedImpactPlan? plan;
         using (var transaction = context.Database.BeginTransaction())
         {
             context.SaveChanges();
-            preview = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-            Assert.NotNull(preview);
+            plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+            Assert.NotNull(plan);
             Assert.True(entity.Id > 0);
             Assert.Equal(0, runtime.Version);
             transaction.Commit();
         }
 
         var committed = unit.CommitDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-        Assert.Equal(preview!.DerivedImpacts.Count, committed!.DerivedImpacts.Count);
+        Assert.Same(plan!.Result, committed);
         Assert.Equal(1, runtime.Version);
     }
 

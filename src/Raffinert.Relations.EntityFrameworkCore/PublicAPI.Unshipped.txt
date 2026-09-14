@@ -7,6 +7,7 @@ Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.CommitDetailed(Raffin
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Dispatch(Raffinert.Relations.RelationRuntime! runtime) -> void
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.HasChanges.get -> bool
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.Prepare(Raffinert.Relations.RelationRuntime! runtime) -> void
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.PreparedImpactPlan?
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PreviewDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult?
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings.Map<TEntity>(Raffinert.Relations.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWorkMappings!

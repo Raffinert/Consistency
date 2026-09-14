@@ -80,6 +80,7 @@ public sealed class RelationUnitOfWork
 {
     private readonly MutationSet? _mutations;
     private PreparedMutation? _prepared;
+    private PreparedImpactPlan? _plan;
     private bool _isPrepared;
     private bool _emptyCommitted;
     private bool _emptyDispatched;
@@ -113,7 +114,9 @@ public sealed class RelationUnitOfWork
             _emptyCommitted = true;
             return null;
         }
-        return runtime.Commit(_prepared!);
+        return _plan is null
+            ? runtime.Commit(_prepared!)
+            : runtime.Commit(_plan).ChangeImpact;
     }
 
     /// <summary>
@@ -134,6 +137,12 @@ public sealed class RelationUnitOfWork
             _emptyCommitted = true;
             return null;
         }
+        if (_plan is not null)
+        {
+            if (_plan.DetailLevel != detailLevel)
+                throw new InvalidOperationException("The requested detail level differs from the binding plan.");
+            return runtime.Commit(_plan);
+        }
         return runtime.CommitDetailed(_prepared!, detailLevel);
     }
 
@@ -149,6 +158,22 @@ public sealed class RelationUnitOfWork
         if (!_isPrepared)
             throw new InvalidOperationException("This unit of work must be prepared before it is previewed.");
         return _mutations is null ? null : runtime.PreviewDetailed(_prepared!, detailLevel);
+    }
+
+    /// <summary>
+    /// Creates a binding impact plan that can be persisted before database durability and later
+    /// committed without rerunning semantic model code. Empty units return <see langword="null"/>.
+    /// </summary>
+    public PreparedImpactPlan? PlanDetailed(
+        RelationRuntime runtime,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (!_isPrepared)
+            throw new InvalidOperationException("This unit of work must be prepared before it is planned.");
+        if (_plan is not null)
+            throw new InvalidOperationException("This unit of work already has a binding impact plan.");
+        return _mutations is null ? null : _plan = runtime.PlanDetailed(_prepared!, detailLevel);
     }
 
     /// <summary>Dispatches post-commit policy callbacks.</summary>

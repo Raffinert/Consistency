@@ -8,6 +8,8 @@ patch versions remain backward-compatible bug fixes where practical.
 
 - Added non-mutating prepared impact preview in core and EF Core, including an explicit transactional
   outbox workflow that can persist impact plans before runtime commit.
+- Added binding prepared impact plans whose later commit installs the exact planned runtime state without
+  rerunning user classifiers, predicates, or dependency propagation.
 - Shared physical direct-reference projection indexes across semantic consumers and replaced whole-runtime
   projection validation snapshots with touched-edge final-state validation.
 - Added typed keyed object sets and expression-defined binary relations.
