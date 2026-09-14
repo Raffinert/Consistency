@@ -86,10 +86,17 @@ public sealed partial class RelationRuntime
             }) || changes.Any(change => change.Set is not null &&
                 _projections.IsSelectorChange(change.Set, change.Member));
         return new RuntimeStateSnapshot(
-        lifecycleSets.ToDictionary(set => set, set => _sets[set].CaptureState()),
+        lifecycleSets.ToDictionary(
+            set => set,
+            set => _sets[set].CaptureEntriesState(lifecycleMutations.Select(mutation => mutation switch
+            {
+                ObjectAdded added when ReferenceEquals(added.Set, set) => added.Instance,
+                ObjectRemoved removed when ReferenceEquals(removed.Set, set) => removed.Instance,
+                _ => null
+            }).OfType<object>())),
         affectedRelations.ToDictionary(relation => relation, relation => _relations[relation].CaptureState()),
         navigationChanged ? _navigation.CaptureState() : null,
-        projectionChanged ? _projections.CaptureState() : null,
+        projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
         _dependencyGraph.CaptureState(affectedRelations, changes),
         LastRelationImpacts,
         _reindexedRoots,
@@ -102,7 +109,7 @@ public sealed partial class RelationRuntime
     private void RestoreState(RuntimeStateSnapshot snapshot)
     {
         foreach (var pair in snapshot.Sets)
-            _sets[pair.Key].RestoreState(pair.Value);
+            _sets[pair.Key].RestoreEntriesState(pair.Value);
         foreach (var pair in snapshot.Relations)
             _relations[pair.Key].RestoreState(pair.Value);
         if (snapshot.Navigation is not null)

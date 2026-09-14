@@ -28,6 +28,34 @@ internal sealed class ObjectSetRuntime
         _byKey.ToArray(),
         _registeredKeys.ToArray());
 
+    public object CaptureEntriesState(IEnumerable<object> instances) => instances
+        .Distinct(ReferenceEqualityComparer.Instance)
+        .Select(instance => _registeredKeys.TryGetValue(instance, out var key)
+            ? new EntryState(instance, true, key)
+            : new EntryState(instance, false, null))
+        .ToArray();
+
+    public void RestoreEntriesState(object snapshot)
+    {
+        foreach (var state in (EntryState[])snapshot)
+        {
+            if (_registeredKeys.TryGetValue(state.Instance, out var currentKey))
+            {
+                _instances.Remove(state.Instance);
+                _registeredKeys.Remove(state.Instance);
+                if (_byKey.TryGetValue(currentKey, out var current) && ReferenceEquals(current, state.Instance))
+                    _byKey.Remove(currentKey);
+            }
+            if (!state.IsRegistered)
+                continue;
+            if (_byKey.TryGetValue(state.Key!, out var existing) && !ReferenceEquals(existing, state.Instance))
+                throw new InvalidOperationException($"An object with key '{state.Key}' is already registered.");
+            _instances.Add(state.Instance);
+            _byKey[state.Key!] = state.Instance;
+            _registeredKeys[state.Instance] = state.Key!;
+        }
+    }
+
     public void RestoreState(object snapshot)
     {
         var state = (State)snapshot;
@@ -69,5 +97,7 @@ internal sealed class ObjectSetRuntime
         IReadOnlyList<object> Instances,
         IReadOnlyList<KeyValuePair<object, object>> ByKey,
         IReadOnlyList<KeyValuePair<object, object>> RegisteredKeys);
+
+    private sealed record EntryState(object Instance, bool IsRegistered, object? Key);
 }
 

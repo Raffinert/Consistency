@@ -141,13 +141,26 @@ internal sealed class ProjectionIndexRegistry
                 "in the exact upstream object set.");
     }
 
-    public object CaptureState() => _entries.Select(entry => entry.CaptureState()).ToArray();
+    public object CaptureState(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes) => _entries.Select(entry => new EntryPatchState(
+            entry,
+            entry.CaptureSources(lifecycleMutations.Select(mutation => mutation switch
+                {
+                    ObjectAdded added when ReferenceEquals(added.Set, entry.DownstreamSet) => added.Instance,
+                    ObjectRemoved removed when ReferenceEquals(removed.Set, entry.DownstreamSet) => removed.Instance,
+                    _ => null
+                }).OfType<object>()
+                .Concat(changes.Where(change => ReferenceEquals(change.Set, entry.DownstreamSet) &&
+                        change.Member == entry.SelectorMember)
+                    .Select(change => change.Instance)))))
+        .Where(state => state.Sources.Length > 0)
+        .ToArray();
 
     public void RestoreState(object snapshot)
     {
-        var states = (EntryState[])snapshot;
-        for (var index = 0; index < _entries.Count; index++)
-            _entries[index].RestoreState(states[index]);
+        foreach (var state in (EntryPatchState[])snapshot)
+            state.Entry.RestoreSources(state.Sources);
     }
 
     private sealed class Entry(
@@ -181,26 +194,33 @@ internal sealed class ProjectionIndexRegistry
             if (downstream.Count == 0) TargetToDownstreams.Remove(target);
         }
 
-        public EntryState CaptureState() => new(
-            DownstreamToTarget.ToArray(),
-            TargetToDownstreams.Select(pair =>
-                new KeyValuePair<object, object[]>(pair.Key, pair.Value.ToArray())).ToArray());
+        public SourceState[] CaptureSources(IEnumerable<object> sources) => sources
+            .Distinct(ReferenceEqualityComparer.Instance)
+            .Select(source => DownstreamToTarget.TryGetValue(source, out var target)
+                ? new SourceState(source, true, target)
+                : new SourceState(source, false, null))
+            .ToArray();
 
-        public void RestoreState(EntryState state)
+        public void RestoreSources(IEnumerable<SourceState> states)
         {
-            DownstreamToTarget.Clear();
-            foreach (var pair in state.DownstreamToTarget)
-                DownstreamToTarget.Add(pair.Key, pair.Value);
-            TargetToDownstreams.Clear();
-            foreach (var pair in state.TargetToDownstreams)
-                TargetToDownstreams.Add(pair.Key,
-                    new HashSet<object>(pair.Value, ReferenceEqualityComparer.Instance));
+            foreach (var state in states)
+            {
+                Remove(state.Source);
+                if (!state.Exists)
+                    continue;
+                DownstreamToTarget.Add(state.Source, state.Target);
+                if (state.Target is null)
+                    continue;
+                if (!TargetToDownstreams.TryGetValue(state.Target, out var downstreams))
+                    TargetToDownstreams.Add(state.Target,
+                        downstreams = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                downstreams.Add(state.Source);
+            }
         }
     }
 
-    private sealed record EntryState(
-        KeyValuePair<object, object?>[] DownstreamToTarget,
-        KeyValuePair<object, object[]>[] TargetToDownstreams);
+    private sealed record EntryPatchState(Entry Entry, SourceState[] Sources);
+    private sealed record SourceState(object Source, bool Exists, object? Target);
 
     private sealed class FinalSetMembershipView
     {
