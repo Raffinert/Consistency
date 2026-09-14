@@ -200,6 +200,72 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
     }
 }
 
+internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TFirst, TSecond, TValue>(
+    ObjectSetDefinition<TSource> sourceSet,
+    IDerivedDefinition first,
+    IDerivedDefinition second,
+    Expression<Func<TSource, TUpstreamSource>> selectorExpression,
+    Func<TSource, TUpstreamSource> selector,
+    Expression<Func<TSource, TFirst, TSecond, TValue>> expression,
+    Func<TSource, TFirst, TSecond, TValue> computation,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    where TSource : class
+    where TUpstreamSource : class
+{
+    private readonly ProjectedUpstreamDerivedInput _firstInput = CreateInput(first, selectorExpression, selector);
+    private readonly ProjectedUpstreamDerivedInput _secondInput = CreateInput(second, selectorExpression, selector);
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs => [_firstInput, _secondInput];
+    public LambdaExpression ComputationExpression => expression;
+    public ExpressionDependencyAnalysis Analysis { get; } = Combine(
+        ExpressionDependencyAnalyzer.AnalyzeComposedDerived(expression),
+        ExpressionDependencyAnalyzer.AnalyzeSourceDerived(selectorExpression));
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
+    public string ComputationPlanName => "ProjectedDependencyFullRecompute";
+    public bool RequiresExactPropagation => false;
+    public bool PrefersConservativePropagation => false;
+    public bool AllowIncompleteDependencies { get; set; }
+
+    public IDerivedRuntimeState CreateState(
+        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
+        new SourceDerivedRuntimeState<TSource, TValue>(this, source =>
+        {
+            var target = selector(source);
+            return computation(
+                source,
+                (TFirst)resolveDerived(first).GetValue(target)!,
+                (TSecond)resolveDerived(second).GetValue(target)!);
+        });
+
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+
+    private static ExpressionDependencyAnalysis Combine(
+        ExpressionDependencyAnalysis firstAnalysis,
+        ExpressionDependencyAnalysis secondAnalysis) => new(
+        firstAnalysis.Dependencies.Concat(secondAnalysis.Dependencies).Distinct().ToArray(),
+        firstAnalysis.Flags | secondAnalysis.Flags,
+        firstAnalysis.HasRelationMembershipDependency || secondAnalysis.HasRelationMembershipDependency,
+        firstAnalysis.LinqSemantics | secondAnalysis.LinqSemantics);
+
+    private static ProjectedUpstreamDerivedInput CreateInput(
+        IDerivedDefinition definition,
+        Expression<Func<TSource, TUpstreamSource>> selectorExpressionValue,
+        Func<TSource, TUpstreamSource> compiled)
+    {
+        var analysis = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(selectorExpressionValue);
+        var dependencies = analysis.Dependencies
+            .Where(value => value.Role == ExpressionParameterRole.DerivedSource).ToArray();
+        if (selectorExpressionValue.Body is not MemberExpression || analysis.Flags != 0 ||
+            dependencies.Length != 1 || dependencies[0].Path.Segments.Count == 0)
+            throw new ArgumentException("A projected selector must be a non-null tracked reference member path.");
+        return new ProjectedUpstreamDerivedInput(
+            definition, selectorExpressionValue, source => compiled((TSource)source), dependencies[0].Path);
+    }
+}
+
 internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
     IDerivedDefinition first,

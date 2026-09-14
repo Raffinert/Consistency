@@ -35,15 +35,13 @@ var unitRate = model.Derived(lines)
     .Compute(line => line.PriceRate)
     .Named("unit-rate");
 
-var decisionInputs = model.Derived(lines).Using(availableQuantity, unitRate)
-    .Compute((_, available, rate) => new PurchaseOrderDecisionInputs(available, rate))
-    .AllowIncompleteDependencies()
-    .Named("po-decision-inputs");
-
-var linkValidity = model.Derived(links).Using(link => link.PurchaseOrderLine, decisionInputs)
+var linkValidity = model.Derived(links).Using(
+        link => link.PurchaseOrderLine,
+        availableQuantity,
+        unitRate)
     .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-    .Compute((link, current) =>
-        link.ReservedQuantity <= current.AvailableQuantity && link.CapturedRate == current.UnitRate)
+    .Compute((link, available, rate) =>
+        link.ReservedQuantity <= available && link.CapturedRate == rate)
     .Named("link-validity");
 
 var linkInvariant = model.Invariant(links).Using(linkValidity)
@@ -141,8 +139,6 @@ internal sealed class PurchaseOrderInvoiceLink
     public decimal ReservedQuantity { get; init; }
     public decimal CapturedRate { get; init; }
 }
-
-internal sealed record PurchaseOrderDecisionInputs(decimal AvailableQuantity, decimal UnitRate);
 
 internal sealed class GoodsReceipt
 {

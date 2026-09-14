@@ -97,6 +97,24 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _model, _source, selector, upstream);
     }
 
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
+        Using<TUpstreamSource, TFirst, TSecond>(
+            Expression<Func<TSource, TUpstreamSource>> selector,
+            Derived<TUpstreamSource, TFirst> first,
+            Derived<TUpstreamSource, TSecond> second)
+        where TUpstreamSource : class
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(second);
+        _model.EnsureDerived(first.Definition);
+        _model.EnsureDerived(second.Definition);
+        if (!ReferenceEquals(first.Definition.SourceSet, second.Definition.SourceSet))
+            throw new ArgumentException("Both projected upstream values must belong to the same object set.");
+        return new ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>(
+            _model, _source, selector, first, second);
+    }
+
     public DerivedUpstreamBuilder<TSource, TValue1, TValue2> Using<TValue1, TValue2>(
         Derived<TSource, TValue1> first,
         Derived<TSource, TValue2> second)
@@ -159,6 +177,49 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
             _source.Definition, _upstream.Definition, _selector, _selector.Compile(),
+            computation, computation.Compile(), _impactPolicy);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+    }
+}
+
+public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
+    where TSource : class
+    where TUpstreamSource : class
+{
+    private readonly RelationModelBuilder _model;
+    private readonly ObjectSet<TSource> _source;
+    private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
+    private readonly Derived<TUpstreamSource, TFirst> _first;
+    private readonly Derived<TUpstreamSource, TSecond> _second;
+    private DerivedImpactPolicy _impactPolicy = new(
+        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
+        DependencySeverity.Dirty, false, []);
+
+    internal ProjectedDerivedUpstreamBuilder(
+        RelationModelBuilder model,
+        ObjectSet<TSource> source,
+        Expression<Func<TSource, TUpstreamSource>> selector,
+        Derived<TUpstreamSource, TFirst> first,
+        Derived<TUpstreamSource, TSecond> second) =>
+        (_model, _source, _selector, _first, _second) = (model, source, selector, first, second);
+
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond> Impact(
+        Action<DerivedImpactPolicyBuilder<TSource>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
+        configure(builder);
+        _impactPolicy = builder.Build();
+        return this;
+    }
+
+    public Derived<TSource, TValue> Compute<TValue>(
+        Expression<Func<TSource, TFirst, TSecond, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TFirst, TSecond, TValue>(
+            _source.Definition, _first.Definition, _second.Definition, _selector, _selector.Compile(),
             computation, computation.Compile(), _impactPolicy);
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model.EnsureMutable);

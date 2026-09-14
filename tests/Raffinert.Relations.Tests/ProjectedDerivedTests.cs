@@ -149,6 +149,34 @@ public sealed class ProjectedDerivedTests
             seed.Add(validLinks, [link])));
     }
 
+    [Fact]
+    public void Two_projected_upstreams_merge_severity_and_recompute_from_one_target()
+    {
+        var model = new RelationModelBuilder();
+        var orders = model.Objects<Order>().Key(value => value.Id);
+        var links = model.Objects<Link>().Key(value => value.Id);
+        var total = model.Derived(orders).Compute(value => value.Total);
+        var doubled = model.Derived(orders)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(value => value.Total * 2);
+        var combined = model.Derived(links).Using(value => value.Order, total, doubled)
+            .Compute((_, first, second) => first + second);
+        var order = new Order { Total = 2 };
+        var link = new Link { Order = order, CapturedTotal = 2 };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(orders, [order]);
+            seed.Add(links, [link]);
+        });
+        Assert.Equal(6, runtime.Get(combined, link));
+
+        order.Total = 3;
+        runtime.Apply(Change.Property(orders, order, value => value.Total, 2, 3));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(combined, link));
+        Assert.Equal(9, runtime.Get(combined, link));
+    }
+
     private static IntegrityScenario CreateIntegrityScenario()
     {
         var model = new RelationModelBuilder();
