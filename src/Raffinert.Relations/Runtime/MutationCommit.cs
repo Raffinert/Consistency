@@ -141,6 +141,16 @@ public sealed partial class RelationRuntime
         long RelationPairsRemoved,
         long PolicyRequestsEmitted);
 
+    private RuntimeRollbackJournal CaptureInstallRollbackJournal(PreparedMutation prepared)
+    {
+        var impact = new ResolvedChangeImpact();
+        foreach (var change in prepared.Changes)
+            impact.MergeFrom(_impactResolver.Resolve(change));
+        var navigationRoots = _dependencyGraph.ResolveNavigationRoots(impact, prepared.Changes);
+        return new RuntimeRollbackJournal(CaptureState(
+            prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots));
+    }
+
     /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
     public void Dispatch(PreparedMutation prepared)
     {

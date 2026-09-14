@@ -416,7 +416,7 @@ public sealed partial class RelationRuntime
             var result = CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
             return new PreparedImpactPlan(
                 this, prepared, prepared.BaseVersion, detailLevel, result,
-                execution.Snapshot!, execution.PostState!, execution.Result.PolicyActions);
+                execution.PostState!, execution.Result.PolicyActions);
         }
         finally
         {
@@ -435,6 +435,7 @@ public sealed partial class RelationRuntime
         ValidatePreparedMutation(plan.Prepared);
         plan.Prepared.ValidateDomainState(_sets);
         ValidateProjectedFinalState(plan.Prepared);
+        var installRollback = CaptureInstallRollbackJournal(plan.Prepared);
         try
         {
             RestoreState(((RuntimeForwardPatch)plan.ForwardPatch).State);
@@ -445,7 +446,7 @@ public sealed partial class RelationRuntime
         }
         catch
         {
-            RestoreState(((RuntimeRollbackJournal)plan.RollbackJournal).State);
+            RestoreState(installRollback.State);
             throw;
         }
     }
