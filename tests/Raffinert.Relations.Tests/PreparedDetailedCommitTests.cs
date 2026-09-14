@@ -52,6 +52,32 @@ public sealed class PreparedDetailedCommitTests
         Assert.Throws<InvalidOperationException>(() => scenario.Runtime.PreviewDetailed(current));
     }
 
+    [Fact]
+    public void Randomized_preview_and_commit_keep_source_scoped_semantics_equivalent()
+    {
+        var scenario = CreateScenario([]);
+        var random = new Random(90441);
+        var current = scenario.Source.Value;
+        for (var step = 0; step < 75; step++)
+        {
+            var next = random.Next(0, 20);
+            scenario.Source.Value = next;
+            var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+                scenario.Set, scenario.Source, source => source.Value, current, next)));
+            var before = scenario.Runtime.Diagnostics;
+
+            var summary = scenario.Runtime.PreviewDetailed(prepared);
+            var causal = scenario.Runtime.PreviewDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+            Assert.Equal(before, scenario.Runtime.Diagnostics);
+            Assert.Equal(summary.DerivedImpacts.SelectMany(value => value.Sources).Select(value => value.Severity),
+                causal.DerivedImpacts.SelectMany(value => value.Sources).Select(value => value.Severity));
+
+            var committed = scenario.Runtime.CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+            AssertEquivalent(causal, committed);
+            current = next;
+        }
+    }
+
     [Theory]
     [InlineData(RuntimeImpactDetailLevel.Summary)]
     [InlineData(RuntimeImpactDetailLevel.Causal)]
