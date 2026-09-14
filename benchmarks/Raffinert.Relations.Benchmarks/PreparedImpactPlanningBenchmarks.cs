@@ -9,6 +9,8 @@ public class PreparedImpactPlanningBenchmarks
     private Scenario _causal = null!;
     private Scenario _previewSummary = null!;
     private Scenario _previewCausal = null!;
+    private Scenario _plannedSummary = null!;
+    private Scenario _plannedCausal = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -17,6 +19,8 @@ public class PreparedImpactPlanningBenchmarks
         _causal = CreateScenario();
         _previewSummary = CreateScenario();
         _previewCausal = CreateScenario();
+        _plannedSummary = CreateScenario();
+        _plannedCausal = CreateScenario();
     }
 
     [Benchmark(Baseline = true)]
@@ -31,6 +35,12 @@ public class PreparedImpactPlanningBenchmarks
     [Benchmark]
     public RuntimeApplyResult PreviewCausal() => Preview(_previewCausal, RuntimeImpactDetailLevel.Causal);
 
+    [Benchmark]
+    public RuntimeApplyResult CommitPlannedSummary() => PlanAndCommit(_plannedSummary, RuntimeImpactDetailLevel.Summary);
+
+    [Benchmark]
+    public RuntimeApplyResult CommitPlannedCausal() => PlanAndCommit(_plannedCausal, RuntimeImpactDetailLevel.Causal);
+
     private static RuntimeApplyResult Commit(Scenario scenario, RuntimeImpactDetailLevel detail)
     {
         var prepared = scenario.Next();
@@ -43,6 +53,12 @@ public class PreparedImpactPlanningBenchmarks
         var result = scenario.Runtime.PreviewDetailed(prepared, detail);
         scenario.Runtime.Commit(prepared);
         return result;
+    }
+
+    private static RuntimeApplyResult PlanAndCommit(Scenario scenario, RuntimeImpactDetailLevel detail)
+    {
+        var plan = scenario.Runtime.PlanDetailed(scenario.Next(), detail);
+        return scenario.Runtime.Commit(plan);
     }
 
     private static Scenario CreateScenario()
