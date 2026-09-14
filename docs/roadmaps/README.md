@@ -1,7 +1,8 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 67–72 — mechanical alpha finish without architectural improvisation](../codex-plan-mechanical-alpha-finish.md)
-- Partially implemented final-alpha proof wave with remaining acceptance gaps superseded by the active plan: [Tasks 61–66](../codex-plan-final-alpha-proof-causal-patches-and-rc.md)
+- Active implementation plan: [Tasks 73–79 — weaker-model final alpha v3](../codex-plan-weaker-model-final-alpha-v3.md)
+- Partially implemented mechanical alpha-finish wave with remaining acceptance gaps superseded by the active plan: [Tasks 67–72](../codex-plan-mechanical-alpha-finish.md)
+- Partially implemented final-alpha proof wave with remaining acceptance gaps superseded by later plans: [Tasks 61–66](../codex-plan-final-alpha-proof-causal-patches-and-rc.md)
 - Partially implemented alpha-proof/journaling wave with remaining acceptance gaps superseded by later plans: [Tasks 55–60](../codex-plan-alpha-proof-causal-journaling-and-outbox.md)
 - Implemented binding-plan/EF hardening wave with remaining acceptance gaps superseded by later plans: [Tasks 48–54](../codex-plan-binding-impact-plans-and-causal-proof.md)
 - Implemented pre-commit planning wave with acceptance gaps superseded by later plans: [Tasks 41–47](../codex-plan-precommit-impact-planning-and-causal-integrity.md)
