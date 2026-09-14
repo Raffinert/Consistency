@@ -386,7 +386,7 @@ public sealed partial class RelationRuntime
         }
         finally
         {
-            RestoreState(execution.Snapshot!);
+            RestoreState(execution.Snapshot!.State);
         }
     }
 
@@ -420,7 +420,7 @@ public sealed partial class RelationRuntime
         }
         finally
         {
-            RestoreState(execution.Snapshot!);
+            RestoreState(execution.Snapshot!.State);
         }
     }
 
@@ -437,7 +437,7 @@ public sealed partial class RelationRuntime
         ValidateProjectedFinalState(plan.Prepared);
         try
         {
-            RestoreState((RuntimeStateSnapshot)plan.PostState);
+            RestoreState(((RuntimeForwardPatch)plan.ForwardPatch).State);
             _version++;
             plan.Prepared.MarkCommitted(plan.PolicyActions);
             plan.MarkCommitted();
@@ -445,7 +445,7 @@ public sealed partial class RelationRuntime
         }
         catch
         {
-            RestoreState((RuntimeStateSnapshot)plan.PreState);
+            RestoreState(((RuntimeRollbackJournal)plan.RollbackJournal).State);
             throw;
         }
     }

@@ -365,8 +365,8 @@ public sealed class PreparedImpactPlan
         long baseVersion,
         RuntimeImpactDetailLevel detailLevel,
         RuntimeApplyResult result,
-        object preState,
-        object postState,
+        object rollbackJournal,
+        object forwardPatch,
         RuntimePolicyActions policyActions)
     {
         Runtime = runtime;
@@ -374,15 +374,15 @@ public sealed class PreparedImpactPlan
         BaseVersion = baseVersion;
         DetailLevel = detailLevel;
         Result = result;
-        PreState = preState;
-        PostState = postState;
+        RollbackJournal = rollbackJournal;
+        ForwardPatch = forwardPatch;
         PolicyActions = policyActions;
     }
 
     internal RelationRuntime Runtime { get; }
     internal PreparedMutation Prepared { get; }
-    internal object PreState { get; }
-    internal object PostState { get; }
+    internal object RollbackJournal { get; }
+    internal object ForwardPatch { get; }
     internal RuntimePolicyActions PolicyActions { get; }
     public long BaseVersion { get; }
     public RuntimeImpactDetailLevel DetailLevel { get; }

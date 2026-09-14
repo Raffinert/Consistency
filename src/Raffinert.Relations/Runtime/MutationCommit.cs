@@ -47,7 +47,10 @@ public sealed partial class RelationRuntime
             var postState = capturePostState
                 ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
                 : null;
-            return new PreparedMutationExecution(result, snapshot, postState);
+            return new PreparedMutationExecution(
+                result,
+                snapshot is null ? null : new RuntimeRollbackJournal(snapshot),
+                postState is null ? null : new RuntimeForwardPatch(postState));
         }
         catch
         {
@@ -217,8 +220,11 @@ public sealed partial class RelationRuntime
 
     private sealed record PreparedMutationExecution(
         RuntimeCommitResult Result,
-        RuntimeStateSnapshot? Snapshot,
-        RuntimeStateSnapshot? PostState);
+        RuntimeRollbackJournal? Snapshot,
+        RuntimeForwardPatch? PostState);
+
+    private sealed record RuntimeRollbackJournal(RuntimeStateSnapshot State);
+    private sealed record RuntimeForwardPatch(RuntimeStateSnapshot State);
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {
