@@ -293,8 +293,9 @@ capture and `Prepare` before saving, then call the unit's `Commit` and `Dispatch
 transaction commits. Discard the prepared unit on rollback. Calling `SaveChangesAndApply` inside an
 uncommitted external transaction advances runtime state too early, so use the manual three-phase API there.
 
-When durable impact/outbox rows must share the business transaction, preview the prepared unit after the
-first save, persist the returned immutable plan, and commit runtime state only after database durability:
+When durable impact/outbox rows must share the business transaction and keys are application-assigned,
+prepare before saving, create a binding plan after the first save, persist it, and commit runtime state
+only after database durability:
 
 ```csharp
 var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -318,6 +319,14 @@ old/new values to an untouched object graph. Planning and preview invoke no call
 version, indexes, caches, diagnostics, and prepared-mutation state unchanged.
 If database commit succeeds but runtime commit subsequently fails, rebuild/reconcile the runtime from the
 authoritative database; the durable outbox record remains the recovery signal.
+
+For store-generated identity/sequence keys, capture before `SaveChanges` but postpone `Prepare` until the
+first save inside the transaction assigns final keys and performs relationship fixup. Then call
+`PlanDetailed`, persist the outbox rows, commit the database transaction, and finally commit/dispatch the
+plan. Multiple additions may start with the same default key because uniqueness is validated only when
+their final generated keys are available. Keys of objects already registered in a runtime remain immutable.
+Modified reference navigations use tracked original foreign-key metadata to recover the real old principal;
+if EF cannot resolve that old reference unambiguously, capture fails instead of fabricating `null`.
 
 When using `SaveChanges(acceptAllChangesOnSuccess: false)`, commit and dispatch the captured unit once, then
 call `ChangeTracker.AcceptAllChanges()` separately; do not recapture the still-`Added`/`Modified` entries.

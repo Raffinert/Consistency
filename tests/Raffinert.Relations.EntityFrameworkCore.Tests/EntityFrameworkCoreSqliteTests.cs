@@ -214,6 +214,68 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
+    public void Multiple_store_generated_additions_can_be_prepared_and_planned_after_save()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
+        model.Derived(objects).Compute(entity => entity.Code).Named("code");
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var first = new GeneratedEntity { Code = "first" };
+        var second = new GeneratedEntity { Code = "second" };
+        context.AddRange(first, second);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            Assert.NotEqual(first.Id, second.Id);
+            unit.Prepare(runtime);
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+            Assert.Equal(2, plan!.Result.MutationOrigins.Count);
+            transaction.Commit();
+        }
+        unit.Commit(runtime);
+
+        Assert.True(runtime.Remove(objects, first));
+        Assert.True(runtime.Remove(objects, second));
+    }
+
+    [Fact]
+    public void Reference_classifier_receives_truthful_tracked_old_and_new_principals()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var oldParent = new CascadeParent { Id = Guid.NewGuid() };
+        var newParent = new CascadeParent { Id = Guid.NewGuid() };
+        var child = new CascadeChild { Id = Guid.NewGuid(), Parent = oldParent };
+        context.AddRange(oldParent, newParent, child);
+        context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var children = model.Objects<CascadeChild>().Key(entity => entity.Id);
+        model.Derived(children)
+            .Impact(policy => policy.SourceMemberChanged(entity => entity.Parent, (oldValue, newValue) =>
+                ReferenceEquals(oldValue, oldParent) && ReferenceEquals(newValue, newParent)
+                    ? DependencySeverity.Invalid
+                    : DependencySeverity.Dirty))
+            .Compute(entity => entity.Parent);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(children, [child]));
+        var mappings = new RelationUnitOfWorkMappings().Map(children);
+        child.Parent = newParent;
+        child.ParentId = newParent.Id;
+        context.Entry(child).Reference(entity => entity.Parent).IsModified = true;
+
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+        var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+
+        Assert.Equal(DependencySeverity.Invalid,
+            plan!.Result.DerivedImpacts.Single().Sources.Single().Severity);
+    }
+
+    [Fact]
     public void Cascade_delete_removes_tracked_principal_and_dependents()
     {
         using var database = new SqliteFixture();

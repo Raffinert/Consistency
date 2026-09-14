@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Raffinert.Relations.EntityFrameworkCore;
 
@@ -324,12 +325,40 @@ public static class ChangeTrackerAdapter
                 var member = GetMember(reference.Metadata);
                 if (member is null)
                     continue;
+                var oldValue = ResolveOriginalReference(changeTracker, entry, reference);
                 changes.Add(mapping is null
-                    ? Change.Property(entry.Entity, member, null, reference.CurrentValue)
-                    : mapping.Property(entry.Entity, member, null, reference.CurrentValue));
+                    ? Change.Property(entry.Entity, member, oldValue, reference.CurrentValue)
+                    : mapping.Property(entry.Entity, member, oldValue, reference.CurrentValue));
             }
         }
         return changes;
+    }
+
+    private static object? ResolveOriginalReference(
+        ChangeTracker changeTracker,
+        EntityEntry owner,
+        ReferenceEntry reference)
+    {
+        if (reference.Metadata is not INavigation navigation || !navigation.IsOnDependent)
+            throw new InvalidOperationException(
+                $"The original value for modified reference '{reference.Metadata.Name}' cannot be resolved unambiguously.");
+        var foreignKey = navigation.ForeignKey;
+        var originalValues = foreignKey.Properties
+            .Select(property => owner.Property(property.Name).OriginalValue)
+            .ToArray();
+        if (originalValues.All(value => value is null))
+            return null;
+        var principalKey = foreignKey.PrincipalKey.Properties;
+        var matches = changeTracker.Entries()
+            .Where(candidate => navigation.TargetEntityType.ClrType.IsInstanceOfType(candidate.Entity))
+            .Where(candidate => principalKey.Select(property => candidate.Property(property.Name).CurrentValue)
+                .SequenceEqual(originalValues))
+            .Select(candidate => candidate.Entity)
+            .ToArray();
+        return matches.Length == 1
+            ? matches[0]
+            : throw new InvalidOperationException(
+                $"The original value for modified reference '{reference.Metadata.Name}' is not tracked unambiguously.");
     }
 
     private static MemberInfo? GetMember(Microsoft.EntityFrameworkCore.Metadata.IPropertyBase property) =>

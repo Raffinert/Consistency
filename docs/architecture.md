@@ -88,6 +88,12 @@ write the returned impact plan as outbox rows, and commit the database transacti
 binding forward patch, and restores runtime-owned state. Committing that plan installs the exact planned
 result without semantic reexecution. It is post-domain-mutation planning, not a hypothetical what-if overlay.
 
+That ordering assumes stable application-assigned object-set keys. With store-generated keys, capture the
+unit before saving, run the first `SaveChanges` inside the transaction, and only then prepare and plan so
+final generated keys and relationship fixup become the binding identities. Registered runtime keys never
+change. EF reference changes carry the actual tracked old principal when it is unambiguous and fail capture
+when it is not; unavailable history is never represented as a real `null` old value.
+
 If a convenience save completes in the database but runtime synchronization fails, the adapter throws
 `RelationRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
 reconciliation/rebuild from authoritative data, not a blind database-command retry. A later policy callback
