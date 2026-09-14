@@ -145,7 +145,7 @@ ordered-quantity decrease can be `Invalid` while an increase remains `Dirty`. Ba
 neither summary nor causal records.
 
 Derived values can reuse an upstream derived value owned by an object reached through a tracked
-reference. The selected target must be non-null and registered in the exact object set that owns the
+direct reference. The selected target must be non-null and registered in the exact object set that owns the
 upstream value. Lifecycle batches are validated against their final state, so target + dependent can be
 added or removed together while removing a target with surviving dependents is rejected. Projection
 fan-out is maintained in reference-identity reverse indexes rather than found by scanning the downstream

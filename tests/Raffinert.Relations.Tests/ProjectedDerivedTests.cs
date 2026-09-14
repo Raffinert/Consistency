@@ -137,6 +137,9 @@ public sealed class ProjectedDerivedTests
         Assert.Throws<ArgumentException>(() => model.Derived(links)
             .Using(value => Select(value), total)
             .Compute((_, value) => value));
+        Assert.Throws<ArgumentException>(() => model.Derived(links)
+            .Using(value => value.Container.Order, total)
+            .Compute((_, value) => value));
 
         var validModel = new RelationModelBuilder();
         var validOrders = validModel.Objects<Order>().Key(value => value.Id);
@@ -252,6 +255,12 @@ public sealed class ProjectedDerivedTests
     {
         public Guid Id { get; } = Guid.NewGuid();
         public required Order Order { get; set; }
+        public Container Container { get; init; } = new();
         public int CapturedTotal { get; init; }
+    }
+
+    private sealed class Container
+    {
+        public Order Order { get; init; } = new();
     }
 }

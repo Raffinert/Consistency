@@ -192,9 +192,9 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
             .Where(value => value.Role == ExpressionParameterRole.DerivedSource)
             .ToArray();
         if (expression.Body is not MemberExpression || analysis.Flags != 0 || dependencies.Length != 1 ||
-            dependencies[0].Path.Segments.Count == 0)
+            dependencies[0].Path.Segments.Count != 1)
             throw new ArgumentException(
-                "A projected selector must be a non-null tracked reference member path.", nameof(expression));
+                "A projected selector must be a direct non-null tracked reference member.", nameof(expression));
         return new ProjectedUpstreamDerivedInput(
             definition, expression, source => compiled((TSource)source), dependencies[0].Path);
     }
@@ -259,8 +259,8 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
         var dependencies = analysis.Dependencies
             .Where(value => value.Role == ExpressionParameterRole.DerivedSource).ToArray();
         if (selectorExpressionValue.Body is not MemberExpression || analysis.Flags != 0 ||
-            dependencies.Length != 1 || dependencies[0].Path.Segments.Count == 0)
-            throw new ArgumentException("A projected selector must be a non-null tracked reference member path.");
+            dependencies.Length != 1 || dependencies[0].Path.Segments.Count != 1)
+            throw new ArgumentException("A projected selector must be a direct non-null tracked reference member.");
         return new ProjectedUpstreamDerivedInput(
             definition, selectorExpressionValue, source => compiled((TSource)source), dependencies[0].Path);
     }

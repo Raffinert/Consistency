@@ -54,7 +54,8 @@ The original predicate remains authoritative when a lazy value is recomputed. In
 
 Derived caches transition monotonically among `Fresh`, `Dirty`, and `Invalid` until recomputed.
 Derived values may compute directly from a source, consume a relation, or compose one/two upstream
-derived values. A projected composition selects a non-null target through a tracked reference path; that
+derived values. The alpha projected-composition contract selects a non-null target through one direct
+tracked reference member; that
 target must belong to the exact upstream object set. Final batch state enforces lifecycle integrity, and
 a maintained reverse projection index routes changes in proportion to actual fan-out. Seed construction
 establishes the same structural index baseline without a mutation version or policy wave. Impacts
