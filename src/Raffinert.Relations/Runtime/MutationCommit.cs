@@ -214,34 +214,7 @@ public sealed partial class RelationRuntime
             change.Set is not null && _projections.IsSelectorChange(change.Set, change.Member));
         if (!needsValidation)
             return;
-        var snapshot = _projections.CaptureState();
-        var setSnapshots = _sets.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState());
-        try
-        {
-            foreach (var mutation in prepared.LifecycleMutations)
-            {
-                if (mutation is ObjectAdded added)
-                {
-                    _sets[added.Set].Add(added.Instance);
-                    _projections.AddRoot(added.Set, added.Instance);
-                }
-                else
-                {
-                    var removed = (ObjectRemoved)mutation;
-                    _projections.RemoveRoot(removed.Set, removed.Instance);
-                    _sets[removed.Set].Remove(removed.Instance);
-                }
-            }
-            foreach (var change in prepared.Changes.Where(change => change.Set is not null))
-                _projections.RefreshRoot(change.Set!, change.Instance);
-            _projections.ValidateAll();
-        }
-        finally
-        {
-            foreach (var pair in setSnapshots)
-                _sets[pair.Key].RestoreState(pair.Value);
-            _projections.RestoreState(snapshot);
-        }
+        _projections.ValidateFinalState(prepared.LifecycleMutations, prepared.Changes);
     }
 
     private RuntimeApplyResult CreateDetailedResult(

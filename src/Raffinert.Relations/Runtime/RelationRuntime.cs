@@ -52,7 +52,8 @@ public sealed partial class RelationRuntime
             .Select(pair => CreateRelationDiagnostics(pair.Key, pair.Value))
             .ToArray())
     {
-        ProjectionEdgeCount = _projections.EdgeCount,
+        ProjectedDependencyConsumerCount = _projections.ConsumerCount,
+        ProjectionIndexCount = _projections.EdgeCount,
         ReverseProjectionEntryCount = _projections.ReverseEntryCount,
         ProjectedTargetCount = _projections.TargetCount
     };

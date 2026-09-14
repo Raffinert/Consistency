@@ -171,6 +171,9 @@ public sealed class ProjectedDerivedTests
             seed.Add(orders, [order]);
             seed.Add(links, [link]);
         });
+        Assert.Equal(2, runtime.Diagnostics.ProjectedDependencyConsumerCount);
+        Assert.Equal(1, runtime.Diagnostics.ProjectionIndexCount);
+        Assert.Equal(1, runtime.Diagnostics.ReverseProjectionEntryCount);
         Assert.Equal(6, runtime.Get(combined, link));
 
         order.Total = 3;

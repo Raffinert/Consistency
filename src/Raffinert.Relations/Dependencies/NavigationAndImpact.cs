@@ -597,7 +597,8 @@ public sealed record RuntimeDiagnostics(
     long PolicyRequestsEmitted,
     IReadOnlyList<RelationRuntimeDiagnostics> Relations)
 {
-    public int ProjectionEdgeCount { get; init; }
+    public int ProjectedDependencyConsumerCount { get; init; }
+    public int ProjectionIndexCount { get; init; }
     public int ReverseProjectionEntryCount { get; init; }
     public int ProjectedTargetCount { get; init; }
 }
