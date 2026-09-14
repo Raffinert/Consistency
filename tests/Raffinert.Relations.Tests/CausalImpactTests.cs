@@ -65,6 +65,36 @@ public sealed class CausalImpactTests
     }
 
     [Fact]
+    public void Relation_cause_does_not_claim_unrelated_batch_origin()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        model.Derived(sources).Using(relation).PreferConservativePropagation()
+            .Compute((_, matches) => matches.Count).Named("count");
+        var source = new Source { Code = "A" };
+        var relevant = new Item { Code = "A" };
+        var unrelated = new Source { Code = "Z", Reserved = 1 };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [source, unrelated]);
+            seed.Add(items, [relevant]);
+        });
+        relevant.Code = "B";
+        unrelated.Reserved = 2;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, relevant, item => item.Code, "A", "B"),
+            Change.Property(sources, unrelated, value => value.Reserved, 1, 2)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        var cause = Assert.IsType<RelationDependencyCause>(Assert.Single(
+            result.DerivedImpacts.Single().Sources.Single().Causes));
+        Assert.Equal([0], cause.OriginIds);
+    }
+
+    [Fact]
     public void Removed_source_origin_captures_durable_identity_before_lifecycle_cleanup()
     {
         var model = new RelationModelBuilder();
