@@ -373,6 +373,75 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.True(runtime.Remove(objects, entity));
     }
 
+    [Fact]
+    public void Binding_plan_and_outbox_row_commit_in_one_sqlite_transaction()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
+        context.Add(entity);
+        context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
+        model.Derived(objects).Compute(value => value.Code).Named("code");
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        entity.Code = "after";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        PreparedImpactPlan plan;
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
+            context.Outbox.Add(new OutboxRecord
+            {
+                Payload = $"{plan.Result.DerivedImpacts.Single().DefinitionKey}:{entity.Id:D}"
+            });
+            context.SaveChanges();
+            transaction.Commit();
+        }
+        unit.Commit(runtime);
+        unit.Dispatch(runtime);
+
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal($"code:{entity.Id:D}", context.Outbox.Single().Payload);
+    }
+
+    [Fact]
+    public void Outbox_save_failure_rolls_back_business_row_and_leaves_runtime_uncommitted()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
+        context.Add(entity);
+        context.Outbox.Add(new OutboxRecord { Payload = "duplicate" });
+        context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Key(value => value.Id);
+        model.Derived(objects).Compute(value => value.Code);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        entity.Code = "after";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            _ = unit.PlanDetailed(runtime);
+            context.Outbox.Add(new OutboxRecord { Payload = "duplicate" });
+            Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+            transaction.Rollback();
+        }
+
+        Assert.Equal(0, runtime.Version);
+        using var verification = database.CreateContext();
+        Assert.Equal("before", verification.Set<UniqueEntity>().Single(value => value.Id == entity.Id).Code);
+        Assert.Single(verification.Outbox);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -391,6 +460,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     private sealed class SqliteContext(SqliteConnection connection) : DbContext
     {
         public DbSet<ConcurrencyEntity> ConcurrencyEntities => Set<ConcurrencyEntity>();
+        public DbSet<OutboxRecord> Outbox => Set<OutboxRecord>();
 
         protected override void OnConfiguring(DbContextOptionsBuilder options) => options.UseSqlite(connection);
 
@@ -399,6 +469,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             model.Entity<UniqueEntity>().HasIndex(entity => entity.Code).IsUnique();
             model.Entity<GeneratedEntity>();
             model.Entity<ConcurrencyEntity>().Property(entity => entity.Version).IsConcurrencyToken();
+            model.Entity<OutboxRecord>().HasIndex(entity => entity.Payload).IsUnique();
             model.Entity<CascadeChild>().HasOne(entity => entity.Parent).WithMany(entity => entity.Children)
                 .HasForeignKey(entity => entity.ParentId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<OwnedOwner>().OwnsOne(entity => entity.Settings);
@@ -432,6 +503,12 @@ public sealed class EntityFrameworkCoreSqliteTests
         public Guid Id { get; init; }
         public string Code { get; set; } = "";
         public int Version { get; set; }
+    }
+
+    private sealed class OutboxRecord
+    {
+        public long Id { get; set; }
+        public string Payload { get; set; } = "";
     }
 
     private sealed class CascadeParent
