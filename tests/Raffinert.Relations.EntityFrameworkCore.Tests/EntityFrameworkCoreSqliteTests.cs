@@ -240,12 +240,20 @@ public sealed class EntityFrameworkCoreSqliteTests
                 Assert.True(origin.SourceIdentity!.IsDurable);
                 Assert.NotEqual("0", origin.SourceIdentity.DurableIdentity!.KeyParts.Single().Value);
             });
+            context.Outbox.AddRange(plan.Result.MutationOrigins.Select(origin => new OutboxRecord
+            {
+                Payload = $"added:{origin.SourceIdentity!.DurableIdentity!.KeyParts.Single().Value}"
+            }));
+            context.SaveChanges();
             transaction.Commit();
         }
         unit.Commit(runtime);
 
         Assert.True(runtime.Remove(objects, first));
         Assert.True(runtime.Remove(objects, second));
+        Assert.Equal(
+            [$"added:{first.Id}", $"added:{second.Id}"],
+            context.Outbox.OrderBy(row => row.Id).Select(row => row.Payload).ToArray());
     }
 
     [Fact]
@@ -450,6 +458,38 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Single(verification.Outbox);
     }
 
+    [Fact]
+    public void Plan_failure_after_generated_key_save_rolls_back_database_and_runtime()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var gate = new ThrowingGeneratedGate { Throw = true };
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Key(value => value.Id);
+        var relation = model.Relation(objects, objects).Where((left, right) => gate.Match(left, right))
+            .AllowIncompleteDependencies();
+        model.Derived(objects).Using(relation).Compute((_, matches) => matches.Count)
+            .AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var entity = new GeneratedEntity { Code = "rollback-plan" };
+        context.Add(entity);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            Assert.True(entity.Id > 0);
+            unit.Prepare(runtime);
+            Assert.Throws<DeliberateRuntimeFailure>(() => unit.PlanDetailed(runtime));
+            transaction.Rollback();
+        }
+
+        Assert.Equal(0, runtime.Version);
+        using var verification = database.CreateContext();
+        Assert.Empty(verification.Set<GeneratedEntity>());
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -499,6 +539,13 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     private sealed class DeliberateRuntimeFailure : Exception;
+
+    private sealed class ThrowingGeneratedGate
+    {
+        public bool Throw { get; set; }
+        public bool Match(GeneratedEntity left, GeneratedEntity right) =>
+            Throw ? throw new DeliberateRuntimeFailure() : left.Id == right.Id;
+    }
 
     private sealed class GeneratedEntity
     {
