@@ -8,7 +8,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <PackageId>Raffinert.Relations</PackageId>
-    <Version>0.1.0-alpha.1</Version>
     <Description>Declarative, expression-driven relations and incremental dependency propagation for .NET object models.</Description>
     <Authors>Raffinert</Authors>
     <PackageTags>relations;dependency-graph;incremental;invariants;object-model</PackageTags>
