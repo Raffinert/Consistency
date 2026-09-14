@@ -249,24 +249,7 @@ public sealed class PreparedDetailedCommitTests
     }
 
     private static void AssertEquivalent(RuntimeApplyResult expected, RuntimeApplyResult actual)
-    {
-        Assert.Equal(expected.DetailLevel, actual.DetailLevel);
-        Assert.Equal(expected.RelationImpacts.Count, actual.RelationImpacts.Count);
-        Assert.Equal(
-            expected.DerivedImpacts.SelectMany(impact => impact.Sources)
-                .Select(source => source.Severity),
-            actual.DerivedImpacts.SelectMany(impact => impact.Sources)
-                .Select(source => source.Severity));
-        Assert.Equal(
-            expected.InvariantImpacts.SelectMany(impact => impact.Sources)
-                .Select(source => source.Severity),
-            actual.InvariantImpacts.SelectMany(impact => impact.Sources)
-                .Select(source => source.Severity));
-        Assert.Equal(expected.RepairRequests.Select(request => request.Reason),
-            actual.RepairRequests.Select(request => request.Reason));
-        Assert.Equal(expected.ImmediateEvaluationRequests.Count, actual.ImmediateEvaluationRequests.Count);
-        Assert.Equal(expected.MutationOrigins.Count, actual.MutationOrigins.Count);
-    }
+        => RuntimeApplyResultAssert.Equivalent(expected, actual);
 
     private sealed record Scenario(RelationRuntime Runtime, ObjectSet<Source> Set, Source Source);
 
