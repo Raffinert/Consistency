@@ -134,7 +134,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
                 AddPair(left, right, delta);
         else if (_definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             foreach (var left in ConservativeCandidates(right))
-                delta.Affect(left);
+                delta.Affect(left, right);
         return delta;
     }
 
@@ -144,7 +144,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var right = (TRight)instance;
         if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             foreach (var left in ConservativeCandidates(right))
-                delta.Affect(left);
+                delta.Affect(left, right);
         if (_hasExactPropagation && _leftsByRight.Remove(right, out var lefts))
             foreach (var left in lefts)
             {
@@ -176,11 +176,11 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         var right = (TRight)instance;
         if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             foreach (var left in ConservativeCandidates(right))
-                delta.Affect(left);
+                delta.Affect(left, right);
         Reindex(right);
         if (!_hasExactPropagation && _definition.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             foreach (var left in ConservativeCandidates(right))
-                delta.Affect(left);
+                delta.Affect(left, right);
         return delta;
     }
 
@@ -199,10 +199,10 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         if (!_hasExactPropagation)
         {
             foreach (var left in lefts)
-                delta.Affect(left);
+                delta.Affect(left, left);
             foreach (var right in rights.Cast<TRight>())
                 foreach (var left in ConservativeCandidates(right))
-                    delta.Affect(left);
+                    delta.Affect(left, right);
             return delta;
         }
 

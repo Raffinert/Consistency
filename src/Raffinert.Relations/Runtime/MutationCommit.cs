@@ -441,7 +441,7 @@ public sealed partial class RelationRuntime
                             : ImpactCausePrecision.Exact)
                     {
                         DefinitionKey = input.Relation.DefinitionKey,
-                        OriginIds = CaptureRelationOriginIds(input.Relation, impact, source, origins)
+                        OriginIds = MapRelationTriggerOrigins(input.Relation, impact, source, origins)
                     });
             }
             foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
@@ -485,33 +485,27 @@ public sealed partial class RelationRuntime
         return causes.Distinct().ToArray();
     }
 
-    private static IReadOnlyList<int> CaptureRelationOriginIds(
+    private static IReadOnlyList<int> MapRelationTriggerOrigins(
         IRelationDefinition relation,
         RelationImpact impact,
         object source,
         IReadOnlyList<MutationOrigin> origins)
     {
-        var paired = impact.AddedPairs.Concat(impact.RemovedPairs)
-            .Where(pair => ReferenceEquals(pair.Left, source))
-            .Select(pair => pair.Right)
+        var triggers = impact.RouteTriggers.Where(trigger => ReferenceEquals(trigger.Left, source))
+            .Select(trigger => trigger.Trigger)
+            .Append(source)
             .ToHashSet(ReferenceEqualityComparer.Instance);
-        var exact = origins.Where(origin => ReferenceEquals(origin.Source, source) || paired.Contains(origin.Source))
-            .Select(origin => origin.OriginId)
-            .ToArray();
-        if (exact.Length > 0)
-            return exact;
-
-        // Conservative routing does not materialize old/new pairs. Preserve provenance only when the
-        // execution wave contains one unambiguous right-side dependency signal; otherwise emit none.
-        var members = relation.Analysis.DependencyPaths.SelectMany(path => path.Segments)
-            .Select(segment => segment.Member.Name).ToHashSet(StringComparer.Ordinal);
-        var candidates = origins.Where(origin =>
-                relation.RightSet.ObjectType.IsInstanceOfType(origin.Source) &&
-                origin.MemberName is not null && members.Contains(origin.MemberName))
+        var members = relation.Analysis.DependencyPaths
+            .SelectMany(path => path.Segments)
+            .Select(segment => segment.Member.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return origins.Where(origin => triggers.Contains(origin.Source) &&
+                (origin.Kind is MutationOriginKind.ObjectAdded or MutationOriginKind.ObjectRemoved ||
+                    origin.MemberName is not null && members.Contains(origin.MemberName)))
             .Select(origin => origin.OriginId)
             .Distinct()
+            .OrderBy(id => id)
             .ToArray();
-        return candidates.Length == 1 ? candidates : [];
     }
 
     private IReadOnlyList<ImpactNodeIdentity> CreateImpactIds(RuntimeCommitResult commit)

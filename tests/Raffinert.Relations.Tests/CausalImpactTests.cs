@@ -95,7 +95,7 @@ public sealed class CausalImpactTests
     }
 
     [Fact]
-    public void Ambiguous_conservative_routes_emit_no_origin_instead_of_a_guessed_superset()
+    public void Two_conservative_right_changes_produce_precise_origin_sets_per_left()
     {
         var model = new RelationModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
@@ -120,9 +120,11 @@ public sealed class CausalImpactTests
             Change.Property(items, secondItem, item => item.Code, "B", "D")),
             RuntimeImpactDetailLevel.Causal).Result;
 
-        Assert.All(result.DerivedImpacts.SelectMany(impact => impact.Sources)
-            .SelectMany(source => source.Causes).OfType<RelationDependencyCause>(),
-            cause => Assert.Empty(cause.OriginIds));
+        var impacts = result.DerivedImpacts.Single().Sources;
+        Assert.Equal([0], Assert.IsType<RelationDependencyCause>(Assert.Single(
+            impacts.Single(impact => ReferenceEquals(impact.Source, firstSource)).Causes)).OriginIds);
+        Assert.Equal([1], Assert.IsType<RelationDependencyCause>(Assert.Single(
+            impacts.Single(impact => ReferenceEquals(impact.Source, secondSource)).Causes)).OriginIds);
     }
 
     [Fact]
