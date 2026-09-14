@@ -1,5 +1,8 @@
 # Codex Implementation Plan — Projected Dependency Integrity, Indexed Fan-out, and Alpha Gate
 
+Status: completed. Tasks 34–40 landed as independently buildable CI, integrity/indexing,
+two-upstream composition, causal-cost, benchmark/consumer, and documentation commits.
+
 Baseline: `main` at `ab3fcda5d9e474658e1b8a9bcfcb137639071405`.
 
 The Tasks 27–33 wave is substantially implemented: detailed prepared commits, normalized mutation provenance, runtime bootstrap, projected cross-object-set derived dependencies, and a persisted-link procurement sample all exist. This verification also found important acceptance gaps that must be closed before the new projection API is treated as an alpha contract.

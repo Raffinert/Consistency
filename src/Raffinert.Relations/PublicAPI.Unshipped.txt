@@ -107,6 +107,7 @@ Raffinert.Relations.CompiledRelationModel
 Raffinert.Relations.CompiledRelationModel.CreateRuntime() -> Raffinert.Relations.RelationRuntime!
 Raffinert.Relations.CompiledRelationModel.CreateRuntime(System.Action<Raffinert.Relations.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Relations.RelationRuntime!
 Raffinert.Relations.CompiledRelationModel.CreateRuntime(Raffinert.Relations.RuntimeDiagnosticOptions! diagnosticOptions) -> Raffinert.Relations.RelationRuntime!
+Raffinert.Relations.CompiledRelationModel.CreateRuntime(Raffinert.Relations.RuntimeDiagnosticOptions! diagnosticOptions, System.Action<Raffinert.Relations.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Relations.RelationRuntime!
 Raffinert.Relations.CompiledRelationModel.DebugView.get -> string!
 Raffinert.Relations.CompiledRelationModel.Diagnostics.get -> Raffinert.Relations.CompiledModelDiagnostics!
 Raffinert.Relations.DependencyCompletenessIssue

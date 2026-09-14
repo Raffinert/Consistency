@@ -23,5 +23,8 @@ patch versions remain backward-compatible bug fixes where practical.
 - Added zero-version runtime bootstrap from authoritative object sets.
 - Added projected cross-object-set derived dependencies for persisted reference models.
 - Preserved normalized collection provenance and causal local severity, precision, and reaction escalation.
+- Enforced non-null, exact-object-set integrity for projected targets across bootstrap and lifecycle batches.
+- Replaced projected all-source scans and dynamic invocation with maintained reverse ownership indexes.
+- Added two-upstream projected composition and removed incomplete tracking from the procurement sample.
 
 This alpha is not yet published automatically. Its public API is tracked by checked-in approval files.

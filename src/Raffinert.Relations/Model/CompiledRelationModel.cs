@@ -47,6 +47,18 @@ public sealed class CompiledRelationModel
         ArgumentNullException.ThrowIfNull(diagnosticOptions);
         return new RelationRuntime(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, null, diagnosticOptions);
     }
+    public RelationRuntime CreateRuntime(
+        RuntimeDiagnosticOptions diagnosticOptions,
+        Action<RuntimeSeedBuilder> configureSeed)
+    {
+        ArgumentNullException.ThrowIfNull(diagnosticOptions);
+        ArgumentNullException.ThrowIfNull(configureSeed);
+        var seed = new RuntimeSeedBuilder();
+        configureSeed(seed);
+        var runtime = CreateRuntime(diagnosticOptions);
+        runtime.Bootstrap(seed.Entries);
+        return runtime;
+    }
     internal RelationRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
         new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, dependencyImpactPolicy);
 
