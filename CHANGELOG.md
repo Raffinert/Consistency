@@ -17,6 +17,9 @@ patch versions remain backward-compatible bug fixes where practical.
   real SQLite business-row/outbox commit and rollback coverage.
 - Corrected prepared-planning benchmarks so preview, planning, and patch installation measure distinct work,
   and verified the binding-plan surface through fresh packed-package consumers.
+- Added decision-time relation route triggers so conservative multi-item waves preserve per-left provenance,
+  retained only the forward patch in binding plans, and expanded generated-key outbox rollback coverage.
+- Added canonical full-result parity comparison across preview, planning, and committed execution tests.
 - Shared physical direct-reference projection indexes across semantic consumers and replaced whole-runtime
   projection validation snapshots with touched-edge final-state validation.
 - Added typed keyed object sets and expression-defined binary relations.
