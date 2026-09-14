@@ -1,6 +1,7 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 41–47 — pre-commit impact planning, causal integrity, and transactional integration](../codex-plan-precommit-impact-planning-and-causal-integrity.md)
+- Active implementation plan: [Tasks 48–54 — binding impact plans, causal proof, and EF transactional hardening](../codex-plan-binding-impact-plans-and-causal-proof.md)
+- Implemented pre-commit planning wave with acceptance gaps superseded by the active plan: [Tasks 41–47](../codex-plan-precommit-impact-planning-and-causal-integrity.md)
 - Completed projected-dependency integrity and alpha gate: [Tasks 34–40](../codex-plan-projected-dependency-integrity-and-alpha-gate.md)
 - Implemented causal/bootstrap/cross-source wave with acceptance gaps superseded by later plans: [Tasks 27–33](../codex-plan-causal-integrity-bootstrap-and-cross-source.md)
 - Completed explainability and domain-validation plan: [Tasks 20–26](../codex-plan-explainability-and-domain-validation.md)
