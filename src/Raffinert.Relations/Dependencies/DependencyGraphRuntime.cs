@@ -7,7 +7,8 @@ internal sealed record DerivedImpactSnapshot(
     IDerivedDefinition Definition,
     DependencyImpactKind Severity,
     IReadOnlyCollection<object> Sources,
-    IReadOnlyList<DirectClassificationEvidence> DirectEvidence);
+    IReadOnlyList<DirectClassificationEvidence> DirectEvidence,
+    IReadOnlyCollection<object> ConservativeSources);
 
 internal sealed record DirectClassificationEvidence(
     object Source,
@@ -139,7 +140,8 @@ internal sealed class DependencyGraphRuntime
 
     public IReadOnlyList<DerivedImpactSnapshot> GetDerivedImpacts() => _derivedNodes
         .SelectMany(node =>
-            Snapshot(node.Definition, node.InvalidSources, node.DirtySources, node.DirectEvidence))
+            Snapshot(node.Definition, node.InvalidSources, node.DirtySources, node.DirectEvidence,
+                node.ConservativeSources))
         .ToArray();
 
     public IReadOnlyList<InvariantImpactSnapshot> GetInvariantImpacts() => _invariantNodes
@@ -303,12 +305,15 @@ internal sealed class DependencyGraphRuntime
         IDerivedDefinition definition,
         IReadOnlyCollection<object> invalid,
         IReadOnlyCollection<object> dirty,
-        IReadOnlyList<DirectClassificationEvidence> evidence)
+        IReadOnlyList<DirectClassificationEvidence> evidence,
+        IReadOnlyCollection<object> conservativeSources)
     {
         if (invalid.Count > 0)
-            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid, evidence);
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Invalid, invalid, evidence,
+                conservativeSources);
         if (dirty.Count > 0)
-            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty, evidence);
+            yield return new DerivedImpactSnapshot(definition, DependencyImpactKind.Dirty, dirty, evidence,
+                conservativeSources);
     }
 
     private static IEnumerable<InvariantImpactSnapshot> Snapshot(
@@ -345,11 +350,13 @@ internal sealed class DependencyGraphRuntime
         public HashSet<object> InvalidSources { get; private set; } = NewSet();
         public HashSet<object> DirtySources { get; private set; } = NewSet();
         public IReadOnlyList<DirectClassificationEvidence> DirectEvidence { get; private set; } = [];
+        public HashSet<object> ConservativeSources { get; private set; } = NewSet();
 
         public object CaptureState() => new NodeState(
             State.CaptureState(),
             NewSet(InvalidSources),
-            NewSet(DirtySources));
+            NewSet(DirtySources),
+            NewSet(ConservativeSources));
 
         public void RestoreState(object snapshot)
         {
@@ -357,12 +364,14 @@ internal sealed class DependencyGraphRuntime
             State.RestoreState(state.RuntimeState);
             InvalidSources = state.InvalidSources;
             DirtySources = state.DirtySources;
+            ConservativeSources = state.ConservativeSources;
         }
 
         private sealed record NodeState(
             object RuntimeState,
             HashSet<object> InvalidSources,
-            HashSet<object> DirtySources);
+            HashSet<object> DirtySources,
+            HashSet<object> ConservativeSources);
 
         public void Apply(
             IEnumerable<object> dirtySourceRoots,
@@ -383,6 +392,9 @@ internal sealed class DependencyGraphRuntime
                 DirtySources.UnionWith(itemSources);
             DirtySources.UnionWith(dirtyMembershipRoots);
             DirtySources.ExceptWith(InvalidSources);
+            ConservativeSources = Relation?.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
+                ? NewSet(itemSources.Concat(dirtyMembershipRoots).Concat(invalidMembershipRoots))
+                : NewSet();
             var incrementallyUpdated = State.ApplyIncremental(DirtySources, relationImpact, changes);
             if (InvalidSources.Count > 0)
                 State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
@@ -451,6 +463,8 @@ internal sealed class DependencyGraphRuntime
                 Map(upstream.Input, upstream.Node.InvalidSources, projections)));
             var inheritedDirty = NewSet(upstreams.SelectMany(upstream =>
                 Map(upstream.Input, upstream.Node.DirtySources, projections)));
+            var inheritedConservative = NewSet(upstreams.SelectMany(upstream =>
+                Map(upstream.Input, upstream.Node.ConservativeSources, projections)));
             inheritedDirty.ExceptWith(inheritedInvalid);
             var newInvalid = inheritedInvalid.Except(InvalidSources, ReferenceEqualityComparer.Instance).ToArray();
             var newDirty = inheritedDirty.Except(DirtySources, ReferenceEqualityComparer.Instance)
@@ -458,6 +472,7 @@ internal sealed class DependencyGraphRuntime
             InvalidSources.UnionWith(inheritedInvalid);
             DirtySources.UnionWith(inheritedDirty);
             DirtySources.ExceptWith(InvalidSources);
+            ConservativeSources.UnionWith(inheritedConservative);
             if (newInvalid.Length > 0)
                 State.ApplyImpact(newInvalid, DependencyImpactKind.Invalid);
             if (newDirty.Length > 0)
@@ -476,6 +491,7 @@ internal sealed class DependencyGraphRuntime
             InvalidSources = NewSet();
             DirtySources = NewSet();
             DirectEvidence = [];
+            ConservativeSources = NewSet();
         }
 
         private static HashSet<object> NewSet(IEnumerable<object>? values = null) =>

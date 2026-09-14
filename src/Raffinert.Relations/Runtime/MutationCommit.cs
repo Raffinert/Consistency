@@ -445,7 +445,7 @@ public sealed partial class RelationRuntime
                         ReferenceEquals(impact.Definition, input.Upstream) &&
                         impact.Sources.Contains(upstreamSource, ReferenceEqualityComparer.Instance)))
                     causes.Add(new UpstreamDerivedCause(
-                        _derivedIds[input.Upstream], IsConservative(input.Upstream, upstreamSource, commit)
+                        _derivedIds[input.Upstream], GetPrecision(input.Upstream, upstreamSource, commit)
                             ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
                     {
                         DefinitionKey = input.Upstream.DefinitionKey,
@@ -459,7 +459,7 @@ public sealed partial class RelationRuntime
                         ReferenceEquals(impact.Definition, upstream) &&
                         impact.Sources.Contains(source, ReferenceEqualityComparer.Instance)))
                     causes.Add(new UpstreamDerivedCause(
-                        _derivedIds[upstream], IsConservative(upstream, source, commit)
+                        _derivedIds[upstream], GetPrecision(upstream, source, commit)
                             ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
                     {
                         DefinitionKey = upstream.DefinitionKey,
@@ -567,30 +567,12 @@ public sealed partial class RelationRuntime
             .ToArray();
     }
 
-    private static bool IsConservative(
+    private static bool GetPrecision(
         IDerivedDefinition definition,
         object source,
-        RuntimeCommitResult commit,
-        HashSet<IDerivedDefinition>? visited = null)
-    {
-        visited ??= [];
-        if (!visited.Add(definition)) return false;
-        foreach (var relation in definition.Inputs.OfType<RelationDerivedInput>())
-            if (relation.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation &&
-                commit.RelationImpacts.TryGetValue(relation.Relation, out var relationImpact) &&
-                relationImpact.AffectedLefts.Contains(source, ReferenceEqualityComparer.Instance))
-                return true;
-        foreach (var upstream in definition.Inputs.OfType<UpstreamDerivedInput>())
-        {
-            var upstreamSource = upstream.Project(source);
-            if (upstreamSource is not null && commit.DependencyPropagation.DerivedImpacts.Any(impact =>
-                    ReferenceEquals(impact.Definition, upstream.Upstream) &&
-                    impact.Sources.Contains(upstreamSource, ReferenceEqualityComparer.Instance)) &&
-                IsConservative(upstream.Upstream, upstreamSource, commit, visited))
-                return true;
-        }
-        return false;
-    }
+        RuntimeCommitResult commit) => commit.DependencyPropagation.DerivedImpacts.Any(impact =>
+            ReferenceEquals(impact.Definition, definition) &&
+            impact.ConservativeSources.Contains(source, ReferenceEqualityComparer.Instance));
 
     private void CommitAdd(
         ObjectAdded mutation,
