@@ -137,6 +137,20 @@ public sealed class RelationUnitOfWork
         return runtime.CommitDetailed(_prepared!, detailLevel);
     }
 
+    /// <summary>
+    /// Predicts detailed runtime impact for this prepared unit without committing or dispatching it.
+    /// Empty units return <see langword="null"/>.
+    /// </summary>
+    public RuntimeApplyResult? PreviewDetailed(
+        RelationRuntime runtime,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (!_isPrepared)
+            throw new InvalidOperationException("This unit of work must be prepared before it is previewed.");
+        return _mutations is null ? null : runtime.PreviewDetailed(_prepared!, detailLevel);
+    }
+
     /// <summary>Dispatches post-commit policy callbacks.</summary>
     public void Dispatch(RelationRuntime runtime)
     {

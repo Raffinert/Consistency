@@ -427,6 +427,7 @@ Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSe
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.CommitDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
+Raffinert.Relations.RelationRuntime.PreviewDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
 Raffinert.Relations.RelationRuntime.Evaluate<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> bool

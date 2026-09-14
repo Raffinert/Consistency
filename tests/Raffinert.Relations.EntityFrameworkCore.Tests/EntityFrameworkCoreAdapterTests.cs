@@ -132,7 +132,6 @@ public sealed class EntityFrameworkCoreAdapterTests
         entity.Code = "B";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
-
         context.SaveChanges();
         var result = unit.CommitDetailed(runtime, RuntimeImpactDetailLevel.Causal);
 
@@ -140,6 +139,32 @@ public sealed class EntityFrameworkCoreAdapterTests
         Assert.Equal(RuntimeImpactDetailLevel.Causal, result.DetailLevel);
         Assert.Single(result.MutationOrigins);
         unit.Dispatch(runtime);
+    }
+
+    [Fact]
+    public void Prepared_unit_of_work_can_be_previewed_repeatedly_before_commit()
+    {
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
+        model.Derived(objects).Compute(value => value.Code).Named("code");
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        using var context = new TestDbContext();
+        var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        context.Attach(entity);
+        runtime.Add(objects, entity);
+        entity.Code = "B";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+        var version = runtime.Version;
+
+        var first = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+        var second = unit.PreviewDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+
+        Assert.NotNull(first);
+        Assert.Equal(first.ChangeImpact, second!.ChangeImpact);
+        Assert.Equal(version, runtime.Version);
+        Assert.NotNull(unit.CommitDetailed(runtime));
     }
 
     private class TestDbContext : DbContext

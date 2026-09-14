@@ -5,6 +5,56 @@ public sealed class PreparedDetailedCommitTests
     [Theory]
     [InlineData(RuntimeImpactDetailLevel.Summary)]
     [InlineData(RuntimeImpactDetailLevel.Causal)]
+    public void Preview_is_repeatable_non_mutating_and_matches_commit(
+        RuntimeImpactDetailLevel detailLevel)
+    {
+        var callbacks = new List<int>();
+        var scenario = CreateScenario(callbacks);
+        scenario.Source.Value = 2;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Value, 1, 2)));
+        var version = scenario.Runtime.Version;
+        var diagnostics = scenario.Runtime.Diagnostics;
+
+        var first = scenario.Runtime.PreviewDetailed(prepared, detailLevel);
+        var second = scenario.Runtime.PreviewDetailed(prepared, detailLevel);
+
+        Assert.Equal(version, scenario.Runtime.Version);
+        Assert.False(prepared.IsCommitted);
+        Assert.False(prepared.IsDispatched);
+        Assert.Equal(diagnostics, scenario.Runtime.Diagnostics);
+        Assert.Empty(callbacks);
+        Assert.Equal(first.ChangeImpact, second.ChangeImpact);
+        AssertEquivalent(first, second);
+
+        var committed = scenario.Runtime.CommitDetailed(prepared, detailLevel);
+
+        Assert.Equal(first.ChangeImpact, committed.ChangeImpact);
+        AssertEquivalent(first, committed);
+        Assert.Empty(callbacks);
+    }
+
+    [Fact]
+    public void Preview_rejects_stale_and_committed_prepared_mutations()
+    {
+        var scenario = CreateScenario([]);
+        scenario.Source.Value = 2;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Value, 1, 2)));
+        var other = new Source();
+        scenario.Runtime.Add(scenario.Set, other);
+
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.PreviewDetailed(prepared));
+
+        var current = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Note, null, null)));
+        scenario.Runtime.Commit(current);
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.PreviewDetailed(current));
+    }
+
+    [Theory]
+    [InlineData(RuntimeImpactDetailLevel.Summary)]
+    [InlineData(RuntimeImpactDetailLevel.Causal)]
     public void Prepared_mutation_can_be_committed_with_details_before_dispatch(
         RuntimeImpactDetailLevel detailLevel)
     {
@@ -112,6 +162,26 @@ public sealed class PreparedDetailedCommitTests
         runtime.Add(set, source);
         Assert.Equal(1, runtime.Get(value, source));
         return new Scenario(runtime, set, source);
+    }
+
+    private static void AssertEquivalent(RuntimeApplyResult expected, RuntimeApplyResult actual)
+    {
+        Assert.Equal(expected.DetailLevel, actual.DetailLevel);
+        Assert.Equal(expected.RelationImpacts.Count, actual.RelationImpacts.Count);
+        Assert.Equal(
+            expected.DerivedImpacts.SelectMany(impact => impact.Sources)
+                .Select(source => source.Severity),
+            actual.DerivedImpacts.SelectMany(impact => impact.Sources)
+                .Select(source => source.Severity));
+        Assert.Equal(
+            expected.InvariantImpacts.SelectMany(impact => impact.Sources)
+                .Select(source => source.Severity),
+            actual.InvariantImpacts.SelectMany(impact => impact.Sources)
+                .Select(source => source.Severity));
+        Assert.Equal(expected.RepairRequests.Select(request => request.Reason),
+            actual.RepairRequests.Select(request => request.Reason));
+        Assert.Equal(expected.ImmediateEvaluationRequests.Count, actual.ImmediateEvaluationRequests.Count);
+        Assert.Equal(expected.MutationOrigins.Count, actual.MutationOrigins.Count);
     }
 
     private sealed record Scenario(RelationRuntime Runtime, ObjectSet<Source> Set, Source Source);

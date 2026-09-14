@@ -357,6 +357,36 @@ public sealed partial class RelationRuntime
         return CreateDetailedResult(prepared, result, detailLevel, origins);
     }
 
+    /// <summary>
+    /// Predicts the impact of an already-mutated, prepared domain state without committing runtime
+    /// state or invoking policy callbacks. This is not a hypothetical pre-mutation simulation.
+    /// </summary>
+    public RuntimeApplyResult PreviewDetailed(
+        PreparedMutation prepared,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
+        if (!Enum.IsDefined(detailLevel))
+            throw new ArgumentOutOfRangeException(nameof(detailLevel));
+        ValidatePreparedMutation(prepared);
+        prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(prepared);
+        var origins = detailLevel == RuntimeImpactDetailLevel.Causal
+            ? CaptureMutationOrigins(prepared)
+            : [];
+        var execution = ExecutePreparedMutation(
+            prepared,
+            detailLevel == RuntimeImpactDetailLevel.Causal,
+            requireSnapshot: true);
+        try
+        {
+            return CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
+        }
+        finally
+        {
+            RestoreState(execution.Snapshot!);
+        }
+    }
+
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
     public PreparedMutation Prepare(MutationSet mutationSet) =>
         Prepare(mutationSet, ChangeValidationMode.Default);

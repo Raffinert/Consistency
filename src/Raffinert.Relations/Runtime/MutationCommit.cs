@@ -17,11 +17,22 @@ public sealed partial class RelationRuntime
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
         ValidateProjectedFinalState(prepared);
+        var execution = ExecutePreparedMutation(prepared, captureCausalEvidence);
+        _version++;
+        prepared.MarkCommitted(execution.Result.PolicyActions);
+        return execution.Result;
+    }
+
+    private PreparedMutationExecution ExecutePreparedMutation(
+        PreparedMutation prepared,
+        bool captureCausalEvidence,
+        bool requireSnapshot = false)
+    {
         var plannedImpact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
             plannedImpact.MergeFrom(_impactResolver.Resolve(change));
         var navigationRoots = _dependencyGraph.ResolveNavigationRoots(plannedImpact, prepared.Changes);
-        var snapshot = _rollbackSnapshotsEnabled
+        var snapshot = _rollbackSnapshotsEnabled || requireSnapshot
             ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
             : null;
         try
@@ -32,9 +43,7 @@ public sealed partial class RelationRuntime
                 plannedImpact,
                 navigationRoots,
                 captureCausalEvidence);
-            _version++;
-            prepared.MarkCommitted(result.PolicyActions);
-            return result;
+            return new PreparedMutationExecution(result, snapshot);
         }
         catch
         {
@@ -195,6 +204,10 @@ public sealed partial class RelationRuntime
         return new RuntimeCommitResult(publicImpact, relationImpacts, dependencyPropagation, policyActions);
     }
 
+    private sealed record PreparedMutationExecution(
+        RuntimeCommitResult Result,
+        RuntimeStateSnapshot? Snapshot);
+
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {
         var needsValidation = prepared.LifecycleMutations.Count > 0 || prepared.Changes.Any(change =>
@@ -266,7 +279,7 @@ public sealed partial class RelationRuntime
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
-        var actions = prepared.PolicyActions!;
+        var actions = commit.PolicyActions;
         var repairRequests = actions.RepairRequests
             .Select(request => new RepairRequestInfo(
                 _invariantIds[request.Invariant],
