@@ -1,7 +1,8 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 55–60 — alpha proof, decision-time causality, and journaled plans](../codex-plan-alpha-proof-causal-journaling-and-outbox.md)
-- Implemented binding-plan/EF hardening wave with remaining acceptance gaps superseded by the active plan: [Tasks 48–54](../codex-plan-binding-impact-plans-and-causal-proof.md)
+- Active implementation plan: [Tasks 61–66 — final alpha proof, decision-time causality, scoped patches, and RC gate](../codex-plan-final-alpha-proof-causal-patches-and-rc.md)
+- Partially implemented alpha-proof/journaling wave with remaining acceptance gaps superseded by the active plan: [Tasks 55–60](../codex-plan-alpha-proof-causal-journaling-and-outbox.md)
+- Implemented binding-plan/EF hardening wave with remaining acceptance gaps superseded by later plans: [Tasks 48–54](../codex-plan-binding-impact-plans-and-causal-proof.md)
 - Implemented pre-commit planning wave with acceptance gaps superseded by later plans: [Tasks 41–47](../codex-plan-precommit-impact-planning-and-causal-integrity.md)
 - Completed projected-dependency integrity and alpha gate: [Tasks 34–40](../codex-plan-projected-dependency-integrity-and-alpha-gate.md)
 - Implemented causal/bootstrap/cross-source wave with acceptance gaps superseded by later plans: [Tasks 27–33](../codex-plan-causal-integrity-bootstrap-and-cross-source.md)
