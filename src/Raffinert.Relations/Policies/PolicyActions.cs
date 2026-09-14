@@ -329,6 +329,44 @@ public static class RuntimeImpactTraceRenderer
 /// <summary>A committed mutation's stable result data and separate in-process dispatch capability.</summary>
 public sealed record RuntimeApplication(RuntimeApplyResult Result, PolicyDispatchHandle Dispatch);
 
+/// <summary>
+/// An immutable, binding impact result and internal runtime-state patch produced by
+/// <see cref="RelationRuntime.PlanDetailed(PreparedMutation, RuntimeImpactDetailLevel)"/>.
+/// </summary>
+public sealed class PreparedImpactPlan
+{
+    internal PreparedImpactPlan(
+        RelationRuntime runtime,
+        PreparedMutation prepared,
+        long baseVersion,
+        RuntimeImpactDetailLevel detailLevel,
+        RuntimeApplyResult result,
+        object preState,
+        object postState,
+        RuntimePolicyActions policyActions)
+    {
+        Runtime = runtime;
+        Prepared = prepared;
+        BaseVersion = baseVersion;
+        DetailLevel = detailLevel;
+        Result = result;
+        PreState = preState;
+        PostState = postState;
+        PolicyActions = policyActions;
+    }
+
+    internal RelationRuntime Runtime { get; }
+    internal PreparedMutation Prepared { get; }
+    internal object PreState { get; }
+    internal object PostState { get; }
+    internal RuntimePolicyActions PolicyActions { get; }
+    public long BaseVersion { get; }
+    public RuntimeImpactDetailLevel DetailLevel { get; }
+    public RuntimeApplyResult Result { get; }
+    public bool IsCommitted { get; private set; }
+    internal void MarkCommitted() => IsCommitted = true;
+}
+
 /// <summary>Dispatches a committed mutation's configured post-commit callbacks.</summary>
 public sealed class PolicyDispatchHandle
 {

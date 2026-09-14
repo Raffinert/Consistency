@@ -26,7 +26,8 @@ public sealed partial class RelationRuntime
     private PreparedMutationExecution ExecutePreparedMutation(
         PreparedMutation prepared,
         bool captureCausalEvidence,
-        bool requireSnapshot = false)
+        bool requireSnapshot = false,
+        bool capturePostState = false)
     {
         var plannedImpact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
@@ -43,7 +44,10 @@ public sealed partial class RelationRuntime
                 plannedImpact,
                 navigationRoots,
                 captureCausalEvidence);
-            return new PreparedMutationExecution(result, snapshot);
+            var postState = capturePostState
+                ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
+                : null;
+            return new PreparedMutationExecution(result, snapshot, postState);
         }
         catch
         {
@@ -206,7 +210,8 @@ public sealed partial class RelationRuntime
 
     private sealed record PreparedMutationExecution(
         RuntimeCommitResult Result,
-        RuntimeStateSnapshot? Snapshot);
+        RuntimeStateSnapshot? Snapshot,
+        RuntimeStateSnapshot? PostState);
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {

@@ -81,6 +81,64 @@ public sealed class PreparedDetailedCommitTests
     [Theory]
     [InlineData(RuntimeImpactDetailLevel.Summary)]
     [InlineData(RuntimeImpactDetailLevel.Causal)]
+    public void Binding_plan_installs_exact_result_without_rerunning_classifier(
+        RuntimeImpactDetailLevel detailLevel)
+    {
+        var calls = 0;
+        var model = new RelationModelBuilder();
+        var set = model.Objects<Source>().Key(source => source.Id);
+        var value = model.Derived(set)
+            .Impact(policy => policy.SourceMemberChanged(source => source.Value, (_, _) =>
+                ++calls == 1 ? DependencySeverity.Invalid : DependencySeverity.Dirty))
+            .Compute(source => source.Value);
+        var source = new Source { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
+        Assert.Equal(1, runtime.Get(value, source));
+        source.Value = 2;
+        var prepared = runtime.Prepare(MutationSet.Create(
+            Change.Property(set, source, item => item.Value, 1, 2)));
+
+        var plan = runtime.PlanDetailed(prepared, detailLevel);
+
+        Assert.Equal(1, calls);
+        Assert.False(plan.IsCommitted);
+        Assert.False(prepared.IsCommitted);
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(DependencySeverity.Invalid,
+            plan.Result.DerivedImpacts.Single().Sources.Single().Severity);
+
+        var committed = runtime.Commit(plan);
+
+        Assert.Same(plan.Result, committed);
+        Assert.Equal(1, calls);
+        Assert.True(plan.IsCommitted);
+        Assert.True(prepared.IsCommitted);
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(value, source));
+        Assert.Throws<InvalidOperationException>(() => runtime.Commit(plan));
+    }
+
+    [Fact]
+    public void Binding_plan_rejects_stale_domain_drift_and_foreign_runtime()
+    {
+        var scenario = CreateScenario([]);
+        scenario.Source.Value = 2;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Value, 1, 2)));
+        var plan = scenario.Runtime.PlanDetailed(prepared);
+        var other = CreateScenario([]).Runtime;
+
+        Assert.Throws<ArgumentException>(() => other.Commit(plan));
+        scenario.Source.Value = 3;
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
+
+        scenario.Source.Value = 2;
+        scenario.Runtime.Add(scenario.Set, new Source());
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
+    }
+
+    [Theory]
+    [InlineData(RuntimeImpactDetailLevel.Summary)]
+    [InlineData(RuntimeImpactDetailLevel.Causal)]
     public void Prepared_mutation_can_be_committed_with_details_before_dispatch(
         RuntimeImpactDetailLevel detailLevel)
     {

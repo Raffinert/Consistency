@@ -323,6 +323,11 @@ Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetId.init -> void
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetModelDiagnostics(int ObjectSetId, System.Type! ObjectType, string! KeyExpression) -> void
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectType.get -> System.Type!
 Raffinert.Relations.ObjectSetModelDiagnostics.ObjectType.init -> void
+Raffinert.Relations.PreparedImpactPlan
+Raffinert.Relations.PreparedImpactPlan.BaseVersion.get -> long
+Raffinert.Relations.PreparedImpactPlan.DetailLevel.get -> Raffinert.Relations.RuntimeImpactDetailLevel
+Raffinert.Relations.PreparedImpactPlan.IsCommitted.get -> bool
+Raffinert.Relations.PreparedImpactPlan.Result.get -> Raffinert.Relations.RuntimeApplyResult!
 Raffinert.Relations.PreparedMutation
 Raffinert.Relations.PreparedMutation.BaseVersion.get -> long
 Raffinert.Relations.PreparedMutation.IsCommitted.get -> bool
@@ -427,6 +432,8 @@ Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSe
 Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
 Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
 Raffinert.Relations.RelationRuntime.CommitDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
+Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedImpactPlan! plan) -> Raffinert.Relations.RuntimeApplyResult!
+Raffinert.Relations.RelationRuntime.PlanDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.PreparedImpactPlan!
 Raffinert.Relations.RelationRuntime.PreviewDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
 Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
 Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void

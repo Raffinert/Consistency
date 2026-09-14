@@ -388,6 +388,66 @@ public sealed partial class RelationRuntime
         }
     }
 
+    /// <summary>
+    /// Executes a prepared mutation reversibly and binds its exact result and runtime-state patch for
+    /// a later commit that does not rerun classifiers, predicates, or dependency propagation.
+    /// </summary>
+    public PreparedImpactPlan PlanDetailed(
+        PreparedMutation prepared,
+        RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+    {
+        if (!Enum.IsDefined(detailLevel))
+            throw new ArgumentOutOfRangeException(nameof(detailLevel));
+        ValidatePreparedMutation(prepared);
+        prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(prepared);
+        var origins = detailLevel == RuntimeImpactDetailLevel.Causal
+            ? CaptureMutationOrigins(prepared)
+            : [];
+        var execution = ExecutePreparedMutation(
+            prepared,
+            detailLevel == RuntimeImpactDetailLevel.Causal,
+            requireSnapshot: true,
+            capturePostState: true);
+        try
+        {
+            var result = CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
+            return new PreparedImpactPlan(
+                this, prepared, prepared.BaseVersion, detailLevel, result,
+                execution.Snapshot!, execution.PostState!, execution.Result.PolicyActions);
+        }
+        finally
+        {
+            RestoreState(execution.Snapshot!);
+        }
+    }
+
+    /// <summary>Commits a binding impact plan without rerunning semantic model code.</summary>
+    public RuntimeApplyResult Commit(PreparedImpactPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!ReferenceEquals(plan.Runtime, this))
+            throw new ArgumentException("The impact plan belongs to a different runtime.", nameof(plan));
+        if (plan.IsCommitted)
+            throw new InvalidOperationException("The impact plan has already been committed.");
+        ValidatePreparedMutation(plan.Prepared);
+        plan.Prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(plan.Prepared);
+        try
+        {
+            RestoreState((RuntimeStateSnapshot)plan.PostState);
+            _version++;
+            plan.Prepared.MarkCommitted(plan.PolicyActions);
+            plan.MarkCommitted();
+            return plan.Result;
+        }
+        catch
+        {
+            RestoreState((RuntimeStateSnapshot)plan.PreState);
+            throw;
+        }
+    }
+
     /// <summary>Validates a mutation batch without changing runtime-owned state.</summary>
     public PreparedMutation Prepare(MutationSet mutationSet) =>
         Prepare(mutationSet, ChangeValidationMode.Default);
