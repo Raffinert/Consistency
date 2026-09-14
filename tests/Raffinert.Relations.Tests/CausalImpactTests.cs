@@ -95,6 +95,37 @@ public sealed class CausalImpactTests
     }
 
     [Fact]
+    public void Ambiguous_conservative_routes_emit_no_origin_instead_of_a_guessed_superset()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        model.Derived(sources).Using(relation).PreferConservativePropagation()
+            .Compute((_, matches) => matches.Count);
+        var firstSource = new Source { Code = "A" };
+        var secondSource = new Source { Code = "B" };
+        var firstItem = new Item { Code = "A" };
+        var secondItem = new Item { Code = "B" };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [firstSource, secondSource]);
+            seed.Add(items, [firstItem, secondItem]);
+        });
+        firstItem.Code = "C";
+        secondItem.Code = "D";
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(items, firstItem, item => item.Code, "A", "C"),
+            Change.Property(items, secondItem, item => item.Code, "B", "D")),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        Assert.All(result.DerivedImpacts.SelectMany(impact => impact.Sources)
+            .SelectMany(source => source.Causes).OfType<RelationDependencyCause>(),
+            cause => Assert.Empty(cause.OriginIds));
+    }
+
+    [Fact]
     public void Removed_source_origin_captures_durable_identity_before_lifecycle_cleanup()
     {
         var model = new RelationModelBuilder();

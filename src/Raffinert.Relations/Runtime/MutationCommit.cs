@@ -435,8 +435,7 @@ public sealed partial class RelationRuntime
                             : ImpactCausePrecision.Exact)
                     {
                         DefinitionKey = input.Relation.DefinitionKey,
-                        OriginIds = ResolveRelationOriginIds(
-                            input.Relation, impact, source, kind, origins)
+                        OriginIds = CaptureRelationOriginIds(input.Relation, impact, source, origins)
                     });
             }
             foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
@@ -478,6 +477,35 @@ public sealed partial class RelationRuntime
                     invariantDefinition.Reaction, inheritedSeverity, DependencySeverity.Invalid));
         }
         return causes.Distinct().ToArray();
+    }
+
+    private static IReadOnlyList<int> CaptureRelationOriginIds(
+        IRelationDefinition relation,
+        RelationImpact impact,
+        object source,
+        IReadOnlyList<MutationOrigin> origins)
+    {
+        var paired = impact.AddedPairs.Concat(impact.RemovedPairs)
+            .Where(pair => ReferenceEquals(pair.Left, source))
+            .Select(pair => pair.Right)
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+        var exact = origins.Where(origin => ReferenceEquals(origin.Source, source) || paired.Contains(origin.Source))
+            .Select(origin => origin.OriginId)
+            .ToArray();
+        if (exact.Length > 0)
+            return exact;
+
+        // Conservative routing does not materialize old/new pairs. Preserve provenance only when the
+        // execution wave contains one unambiguous right-side dependency signal; otherwise emit none.
+        var members = relation.Analysis.DependencyPaths.SelectMany(path => path.Segments)
+            .Select(segment => segment.Member.Name).ToHashSet(StringComparer.Ordinal);
+        var candidates = origins.Where(origin =>
+                relation.RightSet.ObjectType.IsInstanceOfType(origin.Source) &&
+                origin.MemberName is not null && members.Contains(origin.MemberName))
+            .Select(origin => origin.OriginId)
+            .Distinct()
+            .ToArray();
+        return candidates.Length == 1 ? candidates : [];
     }
 
     private IReadOnlyList<ImpactNodeIdentity> CreateImpactIds(RuntimeCommitResult commit)
@@ -528,43 +556,6 @@ public sealed partial class RelationRuntime
         public int GetHashCode(ImpactNodeIdentity value) => HashCode.Combine(
             System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Definition),
             System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Source));
-    }
-
-    private IReadOnlyList<int> ResolveRelationOriginIds(
-        IRelationDefinition relation,
-        RelationImpact impact,
-        object derivedSource,
-        RelationImpactCauseKind kind,
-        IReadOnlyList<MutationOrigin> origins)
-    {
-        var dependencyMembers = relation.Analysis.DependencyPaths
-            .SelectMany(path => path.Segments)
-            .Select(segment => segment.Member.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var pairedItems = impact.AddedPairs.Concat(impact.RemovedPairs)
-            .Where(pair => ReferenceEquals(pair.Left, derivedSource))
-            .Select(pair => pair.Right)
-            .ToHashSet(ReferenceEqualityComparer.Instance);
-        return origins.Where(origin =>
-            {
-                if (origin.Kind is MutationOriginKind.ObjectAdded or MutationOriginKind.ObjectRemoved)
-                    return (ReferenceEquals(origin.Source, derivedSource) || pairedItems.Contains(origin.Source)) &&
-                        (kind is RelationImpactCauseKind.MembershipAdded or RelationImpactCauseKind.MembershipRemoved);
-                if (origin.MemberName is null || !dependencyMembers.Contains(origin.MemberName))
-                    return false;
-                if (ReferenceEquals(origin.Source, derivedSource) || pairedItems.Contains(origin.Source))
-                    return true;
-                if (!relation.RightSet.ObjectType.IsInstanceOfType(origin.Source))
-                    return false;
-                // Conservative routing may intentionally avoid materializing the exact old/new pair.
-                // The originating right-side dependency signal is still relevant, while mutations on
-                // unrelated object-set types and unrelated members are excluded.
-                return true;
-            })
-            .Select(origin => origin.OriginId)
-            .Distinct()
-            .OrderBy(id => id)
-            .ToArray();
     }
 
     private static bool GetPrecision(
