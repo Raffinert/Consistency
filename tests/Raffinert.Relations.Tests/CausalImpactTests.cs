@@ -113,6 +113,39 @@ public sealed class CausalImpactTests
     }
 
     [Fact]
+    public void Added_source_origin_uses_its_final_key_without_prior_registration()
+    {
+        var model = new RelationModelBuilder();
+        var set = model.Objects<Source>().Named("sources").Key(source => source.Id);
+        var runtime = model.Build().CreateRuntime();
+        var source = new Source();
+
+        var result = runtime.ApplyDetailed(
+            MutationSet.Create(Change.Add(set, source)), RuntimeImpactDetailLevel.Causal).Result;
+
+        var origin = Assert.Single(result.MutationOrigins);
+        Assert.Equal(MutationOriginKind.ObjectAdded, origin.Kind);
+        Assert.True(origin.SourceIdentity!.IsDurable);
+        Assert.Equal(source.Id.ToString("D"), origin.SourceIdentity.DurableIdentity!.KeyParts.Single().Value);
+    }
+
+    [Fact]
+    public void Summary_impacts_do_not_allocate_public_causal_node_ids()
+    {
+        var scenario = CreateScenario();
+        scenario.Source.Quantity = 8;
+
+        var result = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Quantity, 10, 8))).Result;
+
+        Assert.All(result.DerivedImpacts.SelectMany(impact => impact.Sources), source =>
+        {
+            Assert.Null(source.ImpactId);
+            Assert.Empty(source.Causes);
+        });
+    }
+
+    [Fact]
     public void Randomized_summary_and_causal_waves_have_equivalent_states_and_requests()
     {
         var summary = CreateScenario();

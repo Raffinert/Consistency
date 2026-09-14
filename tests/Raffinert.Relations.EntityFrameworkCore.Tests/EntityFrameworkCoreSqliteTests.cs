@@ -235,6 +235,11 @@ public sealed class EntityFrameworkCoreSqliteTests
             unit.Prepare(runtime);
             var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
             Assert.Equal(2, plan!.Result.MutationOrigins.Count);
+            Assert.All(plan.Result.MutationOrigins, origin =>
+            {
+                Assert.True(origin.SourceIdentity!.IsDurable);
+                Assert.NotEqual("0", origin.SourceIdentity.DurableIdentity!.KeyParts.Single().Value);
+            });
             transaction.Commit();
         }
         unit.Commit(runtime);

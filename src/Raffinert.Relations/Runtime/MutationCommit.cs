@@ -241,7 +241,9 @@ public sealed partial class RelationRuntime
                 Array.AsReadOnly(pair.Value.AffectedLefts.ToArray()))
             { DefinitionKey = pair.Key.DefinitionKey })
             .ToArray();
-        var impactIds = CreateImpactIds(commit);
+        var impactIds = detailLevel == RuntimeImpactDetailLevel.Causal
+            ? CreateImpactIds(commit)
+            : [];
         var derivedImpacts = commit.DependencyPropagation.DerivedImpacts
             .GroupBy(value => value.Definition)
             .Select(group => new DerivedMutationImpact(
@@ -342,7 +344,9 @@ public sealed partial class RelationRuntime
         {
             SourceIdentity = provenance.Set is null
                 ? null
-                : TryCreateSourceIdentity(provenance.Set, provenance.Source),
+                : provenance.Kind == MutationOriginKind.ObjectAdded
+                    ? CreateUnregisteredSourceIdentity(provenance.Set, provenance.Source)
+                    : TryCreateSourceIdentity(provenance.Set, provenance.Source),
             CollectionKind = provenance.CollectionKind,
             CollectionItem = provenance.CollectionItem
         }).ToArray();
@@ -352,6 +356,17 @@ public sealed partial class RelationRuntime
     {
         try { return CreateSourceIdentity(set, source); }
         catch (InvalidOperationException) { return null; }
+    }
+
+    private static SourceIdentity CreateUnregisteredSourceIdentity(
+        IObjectSetDefinition set,
+        object source)
+    {
+        var key = set.ReadKey(source) ?? throw new InvalidOperationException("Object keys cannot be null.");
+        return new SourceIdentity(set.DefinitionKey, set.ObjectType, key)
+        {
+            DurableIdentity = DurableSourceIdentityFactory.Create(set.DefinitionKey, set.ObjectType, key)
+        };
     }
 
     private IReadOnlyList<DependencyImpactCause> CreateCauses(
