@@ -64,6 +64,8 @@ Raffinert.Relations.UpstreamDerivedCause.CausePrecision.get -> Raffinert.Relatio
 Raffinert.Relations.UpstreamDerivedCause.CausePrecision.init -> void
 Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.get -> string?
 Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.init -> void
+Raffinert.Relations.UpstreamDerivedCause.UpstreamImpactId.get -> int?
+Raffinert.Relations.UpstreamDerivedCause.UpstreamImpactId.init -> void
 Raffinert.Relations.UpstreamDerivedCause.DerivedId.get -> int
 Raffinert.Relations.UpstreamDerivedCause.DerivedId.init -> void
 Raffinert.Relations.UpstreamDerivedCause.UpstreamDerivedCause(int DerivedId, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
@@ -507,6 +509,8 @@ Raffinert.Relations.SourceKeyPart.Value.init -> void
 Raffinert.Relations.SourceDependencyImpact
 Raffinert.Relations.SourceDependencyImpact.Causes.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DependencyImpactCause!>!
 Raffinert.Relations.SourceDependencyImpact.Causes.init -> void
+Raffinert.Relations.SourceDependencyImpact.ImpactId.get -> int?
+Raffinert.Relations.SourceDependencyImpact.ImpactId.init -> void
 Raffinert.Relations.SourceDependencyImpact.Severity.get -> Raffinert.Relations.DependencySeverity
 Raffinert.Relations.SourceDependencyImpact.Severity.init -> void
 Raffinert.Relations.SourceDependencyImpact.Source.get -> object!

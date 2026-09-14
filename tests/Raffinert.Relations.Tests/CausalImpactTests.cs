@@ -163,6 +163,41 @@ public sealed class CausalImpactTests
         var causes = impact.Sources.Single().Causes.OfType<UpstreamDerivedCause>().ToArray();
         Assert.Equal(2, causes.Length);
         Assert.Equal(["left", "right"], causes.Select(cause => cause.DefinitionKey));
+        Assert.All(causes, cause => Assert.NotNull(cause.UpstreamImpactId));
+        Assert.Contains("because left -> Dirty", RuntimeImpactTraceRenderer.Render(result));
+    }
+
+    [Fact]
+    public void Projected_upstream_cause_references_the_upstream_source_scoped_impact()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var links = model.Objects<Link>().Key(link => link.Id);
+        var quantity = model.Derived(sources).Compute(source => source.Quantity).Named("quantity");
+        model.Derived(links).Using(link => link.Source, quantity)
+            .Compute((_, value) => value).Named("projected");
+        var first = new Source { Quantity = 1 };
+        var second = new Source { Quantity = 2 };
+        var link = new Link { Source = second };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [first, second]);
+            seed.Add(links, [link]);
+        });
+        first.Quantity = 3;
+        second.Quantity = 4;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(sources, first, value => value.Quantity, 1, 3),
+            Change.Property(sources, second, value => value.Quantity, 2, 4)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        var upstream = result.DerivedImpacts.Single(impact => impact.DefinitionKey == "quantity").Sources;
+        Assert.Equal(2, upstream.Select(source => source.ImpactId).Distinct().Count());
+        var cause = Assert.IsType<UpstreamDerivedCause>(Assert.Single(
+            result.DerivedImpacts.Single(impact => impact.DefinitionKey == "projected").Sources.Single().Causes));
+        Assert.Equal(upstream.Single(source => ReferenceEquals(source.Source, second)).ImpactId,
+            cause.UpstreamImpactId);
     }
 
     [Fact]
@@ -261,5 +296,11 @@ public sealed class CausalImpactTests
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Code { get; set; } = "";
+    }
+
+    private sealed class Link
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public Source Source { get; set; } = null!;
     }
 }

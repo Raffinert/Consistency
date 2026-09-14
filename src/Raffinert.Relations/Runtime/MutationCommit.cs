@@ -241,11 +241,12 @@ public sealed partial class RelationRuntime
                 Array.AsReadOnly(pair.Value.AffectedLefts.ToArray()))
             { DefinitionKey = pair.Key.DefinitionKey })
             .ToArray();
+        var impactIds = CreateImpactIds(commit);
         var derivedImpacts = commit.DependencyPropagation.DerivedImpacts
             .GroupBy(value => value.Definition)
             .Select(group => new DerivedMutationImpact(
                 _derivedIds[group.Key],
-                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins))
+                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins, impactIds))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.DerivedId)
             .ToArray();
@@ -253,7 +254,7 @@ public sealed partial class RelationRuntime
             .GroupBy(value => value.Definition)
             .Select(group => new InvariantMutationImpact(
                 _invariantIds[group.Key],
-                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins))
+                CreateSourceImpacts(group, group.Key.SourceSet, group.Key, prepared, commit, detailLevel, origins, impactIds))
             { DefinitionKey = group.Key.DefinitionKey })
             .OrderBy(value => value.InvariantId)
             .ToArray();
@@ -304,7 +305,8 @@ public sealed partial class RelationRuntime
         PreparedMutation prepared,
         RuntimeCommitResult commit,
         RuntimeImpactDetailLevel detailLevel,
-        IReadOnlyList<MutationOrigin> origins) where TSnapshot : class
+        IReadOnlyList<MutationOrigin> origins,
+        IReadOnlyList<ImpactNodeIdentity> impactIds) where TSnapshot : class
     {
         var values = snapshots.SelectMany(snapshot => snapshot switch
         {
@@ -320,9 +322,10 @@ public sealed partial class RelationRuntime
                     : DependencySeverity.Dirty;
                 return new SourceDependencyImpact(group.Key, severity)
                 {
+                    ImpactId = FindImpactId(impactIds, definition, group.Key),
                     SourceIdentity = CreateSourceIdentity(sourceSet, group.Key),
                     Causes = detailLevel == RuntimeImpactDetailLevel.Causal
-                        ? CreateCauses(definition, group.Key, severity, prepared, commit, origins)
+                        ? CreateCauses(definition, group.Key, severity, prepared, commit, origins, impactIds)
                         : []
                 };
             })
@@ -357,7 +360,8 @@ public sealed partial class RelationRuntime
         DependencySeverity finalSeverity,
         PreparedMutation prepared,
         RuntimeCommitResult commit,
-        IReadOnlyList<MutationOrigin> origins)
+        IReadOnlyList<MutationOrigin> origins,
+        IReadOnlyList<ImpactNodeIdentity> impactIds)
     {
         var causes = new List<DependencyImpactCause>();
         var analysis = definition switch
@@ -414,14 +418,17 @@ public sealed partial class RelationRuntime
                     });
             }
             foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
-                if (commit.DependencyPropagation.DerivedImpacts.Any(impact =>
+                if (input.Project(source) is { } upstreamSource &&
+                    commit.DependencyPropagation.DerivedImpacts.Any(impact =>
                         ReferenceEquals(impact.Definition, input.Upstream) &&
-                        input.Project(source) is { } upstreamSource &&
                         impact.Sources.Contains(upstreamSource, ReferenceEqualityComparer.Instance)))
                     causes.Add(new UpstreamDerivedCause(
-                        _derivedIds[input.Upstream], IsConservative(input.Upstream, source, commit)
+                        _derivedIds[input.Upstream], IsConservative(input.Upstream, upstreamSource, commit)
                             ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
-                    { DefinitionKey = input.Upstream.DefinitionKey });
+                    {
+                        DefinitionKey = input.Upstream.DefinitionKey,
+                        UpstreamImpactId = FindImpactId(impactIds, input.Upstream, upstreamSource)
+                    });
         }
         else if (definition is IInvariantDefinition invariantDefinition)
         {
@@ -432,7 +439,10 @@ public sealed partial class RelationRuntime
                     causes.Add(new UpstreamDerivedCause(
                         _derivedIds[upstream], IsConservative(upstream, source, commit)
                             ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
-                    { DefinitionKey = upstream.DefinitionKey });
+                    {
+                        DefinitionKey = upstream.DefinitionKey,
+                        UpstreamImpactId = FindImpactId(impactIds, upstream, source)
+                    });
             var inheritedSeverity = commit.DependencyPropagation.DerivedImpacts
                 .Where(impact => invariantDefinition.UpstreamDerived.Contains(impact.Definition) &&
                     impact.Sources.Contains(source, ReferenceEqualityComparer.Instance))
@@ -446,6 +456,56 @@ public sealed partial class RelationRuntime
                     invariantDefinition.Reaction, inheritedSeverity, DependencySeverity.Invalid));
         }
         return causes.Distinct().ToArray();
+    }
+
+    private IReadOnlyList<ImpactNodeIdentity> CreateImpactIds(RuntimeCommitResult commit)
+    {
+        var nodes = commit.DependencyPropagation.DerivedImpacts
+            .SelectMany(impact => impact.Sources.Select(source =>
+                new ImpactNodeIdentity(impact.Definition, source, _derivedIds[impact.Definition])))
+            .Concat(commit.DependencyPropagation.InvariantImpacts.SelectMany(impact => impact.Sources.Select(source =>
+                new ImpactNodeIdentity(impact.Definition, source, _derivedIds.Count + _invariantIds[impact.Definition]))))
+            .Distinct(ImpactNodeIdentityComparer.Instance)
+            .OrderBy(node => node.DefinitionOrder)
+            .ThenBy(node => GetIdentitySortKey(node), StringComparer.Ordinal)
+            .ToArray();
+        return nodes.Select((node, id) => node with { ImpactId = id }).ToArray();
+    }
+
+    private string GetIdentitySortKey(ImpactNodeIdentity node)
+    {
+        var set = node.Definition switch
+        {
+            IDerivedDefinition derived => derived.SourceSet,
+            IInvariantDefinition invariant => invariant.SourceSet,
+            _ => throw new InvalidOperationException("Unsupported impact definition.")
+        };
+        var identity = CreateSourceIdentity(set, node.Source);
+        return identity.DurableIdentity is { } durable
+            ? string.Join("|", durable.KeyParts.Select(part => part.Value))
+            : identity.SourceKey?.ToString() ?? "";
+    }
+
+    private static int? FindImpactId(
+        IReadOnlyList<ImpactNodeIdentity> identities,
+        object definition,
+        object source) => identities.FirstOrDefault(value =>
+            ReferenceEquals(value.Definition, definition) && ReferenceEquals(value.Source, source))?.ImpactId;
+
+    private sealed record ImpactNodeIdentity(object Definition, object Source, int DefinitionOrder)
+    {
+        public int ImpactId { get; init; }
+    }
+
+    private sealed class ImpactNodeIdentityComparer : IEqualityComparer<ImpactNodeIdentity>
+    {
+        public static ImpactNodeIdentityComparer Instance { get; } = new();
+        public bool Equals(ImpactNodeIdentity? left, ImpactNodeIdentity? right) =>
+            left is not null && right is not null && ReferenceEquals(left.Definition, right.Definition) &&
+            ReferenceEquals(left.Source, right.Source);
+        public int GetHashCode(ImpactNodeIdentity value) => HashCode.Combine(
+            System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Definition),
+            System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Source));
     }
 
     private IReadOnlyList<int> ResolveRelationOriginIds(

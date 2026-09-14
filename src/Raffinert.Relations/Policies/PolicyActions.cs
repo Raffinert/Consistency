@@ -39,6 +39,7 @@ public sealed record RelationMutationImpact(
 /// <summary>Describes one source's dependency impact.</summary>
 public sealed record SourceDependencyImpact(object Source, DependencySeverity Severity)
 {
+    public int? ImpactId { get; init; }
     public SourceIdentity? SourceIdentity { get; init; }
     public IReadOnlyList<DependencyImpactCause> Causes { get; init; } = [];
 }
@@ -90,6 +91,7 @@ public sealed record UpstreamDerivedCause(
     : DependencyImpactCause(CausePrecision)
 {
     public string? DefinitionKey { get; init; }
+    public int? UpstreamImpactId { get; init; }
 }
 
 public sealed record InvariantReactionCause(
@@ -301,19 +303,41 @@ public static class RuntimeImpactTraceRenderer
     {
         ArgumentNullException.ThrowIfNull(result);
         var lines = new List<string>();
+        var nodes = result.DerivedImpacts.SelectMany(impact => impact.Sources.Select(source =>
+                (source.ImpactId, Name: impact.DefinitionKey ?? $"derived-{impact.DerivedId}", Source: source)))
+            .Concat(result.InvariantImpacts.SelectMany(impact => impact.Sources.Select(source =>
+                (source.ImpactId, Name: impact.DefinitionKey ?? $"invariant-{impact.InvariantId}", Source: source))))
+            .Where(node => node.ImpactId is not null)
+            .ToDictionary(node => node.ImpactId!.Value);
         foreach (var impact in result.DerivedImpacts)
             foreach (var source in impact.Sources)
             {
                 lines.Add($"{impact.DefinitionKey ?? $"derived-{impact.DerivedId}"} -> {source.Severity}");
-                lines.AddRange(source.Causes.Select(cause => $"  because {Describe(cause)} [{cause.Precision}]"));
+                RenderCauses(source, "  ", []);
             }
         foreach (var impact in result.InvariantImpacts)
             foreach (var source in impact.Sources)
             {
                 lines.Add($"{impact.DefinitionKey ?? $"invariant-{impact.InvariantId}"} -> {source.Severity}");
-                lines.AddRange(source.Causes.Select(cause => $"  because {Describe(cause)} [{cause.Precision}]"));
+                RenderCauses(source, "  ", []);
             }
         return string.Join(Environment.NewLine, lines);
+
+        void RenderCauses(SourceDependencyImpact source, string indent, HashSet<int> visited)
+        {
+            foreach (var cause in source.Causes)
+            {
+                if (cause is UpstreamDerivedCause { UpstreamImpactId: int upstreamId } &&
+                    nodes.TryGetValue(upstreamId, out var upstream))
+                {
+                    lines.Add($"{indent}because {upstream.Name} -> {upstream.Source.Severity} [{cause.Precision}]");
+                    if (visited.Add(upstreamId))
+                        RenderCauses(upstream.Source, indent + "  ", visited);
+                }
+                else
+                    lines.Add($"{indent}because {Describe(cause)} [{cause.Precision}]");
+            }
+        }
     }
 
     private static string Describe(DependencyImpactCause cause) => cause switch
