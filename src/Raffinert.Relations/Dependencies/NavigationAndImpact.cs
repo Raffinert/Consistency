@@ -593,7 +593,12 @@ public sealed record RuntimeDiagnostics(
     long DerivedFullRecomputations,
     long IncrementalDerivedUpdates,
     long PolicyRequestsEmitted,
-    IReadOnlyList<RelationRuntimeDiagnostics> Relations);
+    IReadOnlyList<RelationRuntimeDiagnostics> Relations)
+{
+    public int ProjectionEdgeCount { get; init; }
+    public int ReverseProjectionEntryCount { get; init; }
+    public int ProjectedTargetCount { get; init; }
+}
 
 internal sealed class ImpactResolver(
     IReadOnlyList<IRelationDefinition> relations,

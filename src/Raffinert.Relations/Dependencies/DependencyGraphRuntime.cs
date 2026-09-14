@@ -34,6 +34,7 @@ internal sealed class DependencyGraphRuntime
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> _relations;
     private readonly NavigationIndexRegistry _navigation;
+    private readonly ProjectionIndexRegistry _projections;
     private readonly IDependencyImpactPolicy _impactPolicy;
     private readonly IReadOnlyList<DerivedNode> _derivedNodes;
     private readonly IReadOnlyList<InvariantNode> _invariantNodes;
@@ -51,6 +52,7 @@ internal sealed class DependencyGraphRuntime
         IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets,
         IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
         NavigationIndexRegistry navigation,
+        ProjectionIndexRegistry projections,
         IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> derivedStates,
         IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> invariants,
         CompiledDependencyGraph compiledGraph,
@@ -59,6 +61,7 @@ internal sealed class DependencyGraphRuntime
         _sets = sets;
         _relations = relations;
         _navigation = navigation;
+        _projections = projections;
         _impactPolicy = impactPolicy;
         var derivedByDefinition = derivedStates.ToDictionary(
             pair => pair.Key,
@@ -250,7 +253,7 @@ internal sealed class DependencyGraphRuntime
                 relationImpact,
                 changes);
             if (_upstreamsByDerived.TryGetValue(node, out var upstreams))
-                node.ApplyInherited(upstreams, _sets[node.Definition.SourceSet].Instances);
+                node.ApplyInherited(upstreams, _projections);
         }
 
         var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
@@ -439,13 +442,12 @@ internal sealed class DependencyGraphRuntime
 
         public void ApplyInherited(
             IEnumerable<(UpstreamDerivedInput Input, DerivedNode Node)> upstreams,
-            IEnumerable<object> downstreamSources)
+            ProjectionIndexRegistry projections)
         {
-            var downstream = downstreamSources.ToArray();
             var inheritedInvalid = NewSet(upstreams.SelectMany(upstream =>
-                Map(upstream.Input, upstream.Node.InvalidSources, downstream)));
+                Map(upstream.Input, upstream.Node.InvalidSources, projections)));
             var inheritedDirty = NewSet(upstreams.SelectMany(upstream =>
-                Map(upstream.Input, upstream.Node.DirtySources, downstream)));
+                Map(upstream.Input, upstream.Node.DirtySources, projections)));
             inheritedDirty.ExceptWith(inheritedInvalid);
             var newInvalid = inheritedInvalid.Except(InvalidSources, ReferenceEqualityComparer.Instance).ToArray();
             var newDirty = inheritedDirty.Except(DirtySources, ReferenceEqualityComparer.Instance)
@@ -462,9 +464,8 @@ internal sealed class DependencyGraphRuntime
         private static IEnumerable<object> Map(
             UpstreamDerivedInput input,
             IReadOnlySet<object> impacted,
-            IReadOnlyList<object> downstreamSources) => input.IsProjected
-            ? downstreamSources.Where(source =>
-                input.Project(source) is { } projected && impacted.Contains(projected))
+            ProjectionIndexRegistry projections) => input is ProjectedUpstreamDerivedInput projected
+            ? projections.Resolve(projected, impacted)
             : impacted;
 
         public void ClearImpact()

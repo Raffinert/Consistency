@@ -546,6 +546,12 @@ Raffinert.Relations.RuntimeDiagnostics.RelationPairsRemoved.init -> void
 Raffinert.Relations.RuntimeDiagnostics.Relations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationRuntimeDiagnostics!>!
 Raffinert.Relations.RuntimeDiagnostics.Relations.init -> void
 Raffinert.Relations.RuntimeDiagnostics.RuntimeDiagnostics(long PredicateEvaluations, long ReindexedRoots, long AffectedSources, long RelationPairsAdded, long RelationPairsRemoved, long DerivedFullRecomputations, long IncrementalDerivedUpdates, long PolicyRequestsEmitted, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationRuntimeDiagnostics!>! Relations) -> void
+Raffinert.Relations.RuntimeDiagnostics.ProjectedTargetCount.get -> int
+Raffinert.Relations.RuntimeDiagnostics.ProjectedTargetCount.init -> void
+Raffinert.Relations.RuntimeDiagnostics.ProjectionEdgeCount.get -> int
+Raffinert.Relations.RuntimeDiagnostics.ProjectionEdgeCount.init -> void
+Raffinert.Relations.RuntimeDiagnostics.ReverseProjectionEntryCount.get -> int
+Raffinert.Relations.RuntimeDiagnostics.ReverseProjectionEntryCount.init -> void
 Raffinert.Relations.RuntimeMutation
 Raffinert.Relations.SemanticImpact
 Raffinert.Relations.SemanticImpact.AffectedRelations.get -> int

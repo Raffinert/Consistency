@@ -32,10 +32,12 @@ internal record UpstreamDerivedInput(IDerivedDefinition Upstream) : DerivedInput
 internal sealed record ProjectedUpstreamDerivedInput(
     IDerivedDefinition Upstream,
     LambdaExpression SelectorExpression,
-    Delegate Selector) : UpstreamDerivedInput(Upstream)
+    Func<object, object?> CompiledSelector,
+    DependencyPath SelectorPath) : UpstreamDerivedInput(Upstream)
 {
     public override bool IsProjected => true;
-    public override object? Project(object source) => Selector.DynamicInvoke(source);
+    public IObjectSetDefinition UpstreamSet => Upstream.SourceSet;
+    public override object? Project(object source) => CompiledSelector(source);
 }
 
 internal sealed class DerivedDefinition<TSource, TItem, TValue>(
@@ -151,7 +153,7 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
     public string? DefinitionKey { get; set; }
     public IObjectSetDefinition SourceSet => sourceSet;
     public IReadOnlyList<DerivedInput> Inputs { get; } =
-        [new ProjectedUpstreamDerivedInput(upstream, selectorExpression, selector)];
+        [CreateInput(upstream, selectorExpression, selector)];
     public LambdaExpression ComputationExpression => expression;
     public ExpressionDependencyAnalysis Analysis { get; } = Combine(
         ExpressionDependencyAnalyzer.AnalyzeComposedDerived(expression),
@@ -179,6 +181,23 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
         first.Flags | second.Flags,
         first.HasRelationMembershipDependency || second.HasRelationMembershipDependency,
         first.LinqSemantics | second.LinqSemantics);
+
+    private static ProjectedUpstreamDerivedInput CreateInput(
+        IDerivedDefinition definition,
+        Expression<Func<TSource, TUpstreamSource>> expression,
+        Func<TSource, TUpstreamSource> compiled)
+    {
+        var analysis = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+        var dependencies = analysis.Dependencies
+            .Where(value => value.Role == ExpressionParameterRole.DerivedSource)
+            .ToArray();
+        if (expression.Body is not MemberExpression || analysis.Flags != 0 || dependencies.Length != 1 ||
+            dependencies[0].Path.Segments.Count == 0)
+            throw new ArgumentException(
+                "A projected selector must be a non-null tracked reference member path.", nameof(expression));
+        return new ProjectedUpstreamDerivedInput(
+            definition, expression, source => compiled((TSource)source), dependencies[0].Path);
+    }
 }
 
 internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(

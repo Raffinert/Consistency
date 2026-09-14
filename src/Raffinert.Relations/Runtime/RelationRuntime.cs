@@ -14,6 +14,7 @@ public sealed partial class RelationRuntime
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> _relations;
     private readonly NavigationIndexRegistry _navigation;
+    private readonly ProjectionIndexRegistry _projections;
     private readonly ImpactResolver _impactResolver;
     private readonly IReadOnlyDictionary<IDerivedDefinition, IDerivedRuntimeState> _derivedStates;
     private readonly IReadOnlyDictionary<IInvariantDefinition, IInvariantRuntimeState> _invariants;
@@ -49,7 +50,12 @@ public sealed partial class RelationRuntime
         _policyRequestsEmitted,
         _relations.OrderBy(pair => _relationIds[pair.Key])
             .Select(pair => CreateRelationDiagnostics(pair.Key, pair.Value))
-            .ToArray());
+            .ToArray())
+    {
+        ProjectionEdgeCount = _projections.EdgeCount,
+        ReverseProjectionEntryCount = _projections.ReverseEntryCount,
+        ProjectedTargetCount = _projections.TargetCount
+    };
 
     /// <summary>Resets diagnostic counters without changing relation or dependency state.</summary>
     public void ResetDiagnostics()
@@ -89,6 +95,7 @@ public sealed partial class RelationRuntime
                      relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized))
             _relations[relation].EnableExactPropagation();
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
+        _projections = new ProjectionIndexRegistry(derivedStates, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
         var mutableDerivedStates = new Dictionary<IDerivedDefinition, IDerivedRuntimeState>();
         foreach (var node in compiledDependencyGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived))
@@ -109,6 +116,7 @@ public sealed partial class RelationRuntime
             _sets,
             _relations,
             _navigation,
+            _projections,
             _derivedStates,
             _invariants,
             compiledDependencyGraph,
@@ -207,6 +215,7 @@ public sealed partial class RelationRuntime
         if (!_derivedStates.TryGetValue(derived.Definition, out var state))
             throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
         EnsureRegistered(derived.Definition.SourceSet, source, "source");
+        ValidateProjectedTargets(derived.Definition, source);
         return (TValue)state.GetValue(source)!;
     }
 
@@ -320,6 +329,18 @@ public sealed partial class RelationRuntime
         return new RuntimeApplication(result, new PolicyDispatchHandle(() => Dispatch(prepared)));
     }
 
+    private void ValidateProjectedTargets(IDerivedDefinition definition, object source)
+    {
+        foreach (var input in definition.Inputs.OfType<ProjectedUpstreamDerivedInput>())
+        {
+            var target = input.Project(source) ?? throw new InvalidOperationException(
+                "A projected dependency target cannot be null.");
+            if (!_sets[input.UpstreamSet].Contains(target))
+                throw new InvalidOperationException(
+                    "The projected dependency target is not registered in the exact upstream object set.");
+        }
+    }
+
     /// <summary>
     /// Commits a prepared mutation and returns immutable detailed data without dispatching policy callbacks.
     /// </summary>
@@ -350,13 +371,15 @@ public sealed partial class RelationRuntime
         if (!Enum.IsDefined(validationMode))
             throw new ArgumentOutOfRangeException(nameof(validationMode));
         var batch = ValidateMutations(mutationSet.Mutations, validationMode);
-        return new PreparedMutation(
+        var prepared = new PreparedMutation(
             this,
             Version,
             batch.LifecycleMutations,
             batch.Changes,
             batch.Provenance,
             batch.Changes.Select(PreparedDomainAssumption.Capture).ToArray());
+        ValidateProjectedFinalState(prepared);
+        return prepared;
     }
 
     internal int DerivedStateEntryCount =>

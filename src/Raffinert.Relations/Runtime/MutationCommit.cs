@@ -16,6 +16,7 @@ public sealed partial class RelationRuntime
     {
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(prepared);
         var plannedImpact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
             plannedImpact.MergeFrom(_impactResolver.Resolve(change));
@@ -66,6 +67,7 @@ public sealed partial class RelationRuntime
         lifecycleSets.ToDictionary(set => set, set => _sets[set].CaptureState()),
         affectedRelations.ToDictionary(relation => relation, relation => _relations[relation].CaptureState()),
         navigationChanged ? _navigation.CaptureState() : null,
+        _projections.CaptureState(),
         _dependencyGraph.CaptureState(affectedRelations, changes),
         LastRelationImpacts,
         _reindexedRoots,
@@ -83,6 +85,7 @@ public sealed partial class RelationRuntime
             _relations[pair.Key].RestoreState(pair.Value);
         if (snapshot.Navigation is not null)
             _navigation.RestoreState(snapshot.Navigation);
+        _projections.RestoreState(snapshot.Projections);
         _dependencyGraph.RestoreState(snapshot.Dependencies);
         LastRelationImpacts = snapshot.LastRelationImpacts;
         _reindexedRoots = snapshot.ReindexedRoots;
@@ -96,6 +99,7 @@ public sealed partial class RelationRuntime
         IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
         IReadOnlyDictionary<IRelationDefinition, object> Relations,
         object? Navigation,
+        object Projections,
         object Dependencies,
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts,
         long ReindexedRoots,
@@ -146,7 +150,10 @@ public sealed partial class RelationRuntime
                 CommitRemove((ObjectRemoved)mutation, relationDeltas);
         }
         foreach (var (rootSet, root) in navigationRoots)
+        {
             _navigation.RefreshRoot(rootSet, root);
+            _projections.RefreshRoot(rootSet, root);
+        }
         foreach (var pair in impact.ReindexRoots)
             foreach (var root in pair.Value)
                 MergeDelta(relationDeltas, _relations.Single(relation => ReferenceEquals(relation.Value, pair.Key)).Key,
@@ -174,6 +181,38 @@ public sealed partial class RelationRuntime
         _relationPairsRemoved += relationImpacts.Values.Sum(value => value.RemovedPairs.Count);
         _policyRequestsEmitted += policyActions.ImmediateEvaluations.Count + policyActions.RepairRequests.Count;
         return new RuntimeCommitResult(publicImpact, relationImpacts, dependencyPropagation, policyActions);
+    }
+
+    private void ValidateProjectedFinalState(PreparedMutation prepared)
+    {
+        var snapshot = _projections.CaptureState();
+        var setSnapshots = _sets.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState());
+        try
+        {
+            foreach (var mutation in prepared.LifecycleMutations)
+            {
+                if (mutation is ObjectAdded added)
+                {
+                    _sets[added.Set].Add(added.Instance);
+                    _projections.AddRoot(added.Set, added.Instance);
+                }
+                else
+                {
+                    var removed = (ObjectRemoved)mutation;
+                    _projections.RemoveRoot(removed.Set, removed.Instance);
+                    _sets[removed.Set].Remove(removed.Instance);
+                }
+            }
+            foreach (var change in prepared.Changes.Where(change => change.Set is not null))
+                _projections.RefreshRoot(change.Set!, change.Instance);
+            _projections.ValidateAll();
+        }
+        finally
+        {
+            foreach (var pair in setSnapshots)
+                _sets[pair.Key].RestoreState(pair.Value);
+            _projections.RestoreState(snapshot);
+        }
     }
 
     private RuntimeApplyResult CreateDetailedResult(
@@ -424,6 +463,7 @@ public sealed partial class RelationRuntime
         state.Add(mutation.Instance);
         NotifySourceAdded(mutation.Set, mutation.Instance);
         _navigation.AddRoot(mutation.Set, mutation.Instance);
+        _projections.AddRoot(mutation.Set, mutation.Instance);
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.RightSet, mutation.Set)))
             MergeDelta(deltas, pair.Key, pair.Value.AddRight(mutation.Instance));
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, mutation.Set)))
@@ -439,6 +479,7 @@ public sealed partial class RelationRuntime
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, mutation.Set)))
             MergeDelta(deltas, pair.Key, pair.Value.RemoveLeft(mutation.Instance));
         _navigation.RemoveRoot(mutation.Set, mutation.Instance);
+        _projections.RemoveRoot(mutation.Set, mutation.Instance);
         NotifySourceRemoved(mutation.Set, mutation.Instance);
         GetSet(mutation.Set).Remove(mutation.Instance);
     }

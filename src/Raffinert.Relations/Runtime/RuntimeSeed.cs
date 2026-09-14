@@ -58,5 +58,7 @@ public sealed partial class RelationRuntime
         foreach (var set in _sets.Keys.OrderBy(set => set.Id))
             foreach (var instance in collected[set])
                 CommitAdd(new ObjectAdded(set, instance), deltas);
+        _projections.ValidateAll();
+        ResetDiagnostics();
     }
 }
