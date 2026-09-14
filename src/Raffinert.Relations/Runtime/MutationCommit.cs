@@ -10,9 +10,9 @@ public sealed partial class RelationRuntime
     /// Commits a prepared mutation to runtime-owned state without invoking application callbacks.
     /// </summary>
     public ChangeImpact Commit(PreparedMutation prepared)
-        => CommitWithResult(prepared).Impact;
+        => CommitWithResult(prepared, captureCausalEvidence: false).Impact;
 
-    private RuntimeCommitResult CommitWithResult(PreparedMutation prepared)
+    private RuntimeCommitResult CommitWithResult(PreparedMutation prepared, bool captureCausalEvidence)
     {
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
@@ -30,7 +30,8 @@ public sealed partial class RelationRuntime
                 prepared.LifecycleMutations,
                 prepared.Changes,
                 plannedImpact,
-                navigationRoots);
+                navigationRoots,
+                captureCausalEvidence);
             _version++;
             prepared.MarkCommitted(result.PolicyActions);
             return result;
@@ -139,7 +140,8 @@ public sealed partial class RelationRuntime
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
-        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
+        bool captureCausalEvidence)
     {
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
         foreach (var mutation in lifecycleMutations)
@@ -170,7 +172,8 @@ public sealed partial class RelationRuntime
                 relationImpacts.Add(pair.Key, RelationImpact.FromDelta(pair.Key, pair.Value));
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
-        var dependencyPropagation = _dependencyGraph.ApplyChangeImpacts(relationImpacts, changes, policyActions);
+        var dependencyPropagation = _dependencyGraph.ApplyChangeImpacts(
+            relationImpacts, changes, policyActions, captureCausalEvidence);
         var publicImpact = impact.ToPublic();
         _reindexedRoots += publicImpact.Access.ReindexedRoots;
         _affectedSources += dependencyPropagation.DerivedImpacts
@@ -400,7 +403,10 @@ public sealed partial class RelationRuntime
                         input.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
                             ? ImpactCausePrecision.Conservative
                             : ImpactCausePrecision.Exact)
-                    { DefinitionKey = input.Relation.DefinitionKey });
+                    {
+                        DefinitionKey = input.Relation.DefinitionKey,
+                        OriginIds = origins.Select(origin => origin.OriginId).ToArray()
+                    });
             }
             foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
                 if (commit.DependencyPropagation.DerivedImpacts.Any(impact =>
@@ -422,10 +428,17 @@ public sealed partial class RelationRuntime
                         _derivedIds[upstream], IsConservative(upstream, source, commit)
                             ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
                     { DefinitionKey = upstream.DefinitionKey });
+            var inheritedSeverity = commit.DependencyPropagation.DerivedImpacts
+                .Where(impact => invariantDefinition.UpstreamDerived.Contains(impact.Definition) &&
+                    impact.Sources.Contains(source, ReferenceEqualityComparer.Instance))
+                .Select(impact => impact.Severity.ToSeverity())
+                .DefaultIfEmpty(DependencySeverity.Dirty)
+                .Aggregate((left, right) => left == DependencySeverity.Invalid || right == DependencySeverity.Invalid
+                    ? DependencySeverity.Invalid : DependencySeverity.Dirty);
             if (invariantDefinition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair &&
-                finalSeverity == DependencySeverity.Invalid)
+                inheritedSeverity == DependencySeverity.Dirty && finalSeverity == DependencySeverity.Invalid)
                 causes.Add(new InvariantReactionCause(
-                    invariantDefinition.Reaction, DependencySeverity.Dirty, DependencySeverity.Invalid));
+                    invariantDefinition.Reaction, inheritedSeverity, DependencySeverity.Invalid));
         }
         return causes.Distinct().ToArray();
     }

@@ -202,7 +202,8 @@ internal sealed class DependencyGraphRuntime
     public DependencyPropagationResult ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
-        RuntimePolicyActions policyActions)
+        RuntimePolicyActions policyActions,
+        bool captureCausalEvidence)
     {
         var currentDerived = new HashSet<DerivedNode>(Candidates(changes, _derivedByMember));
         foreach (var relation in relationImpacts.Keys)
@@ -224,7 +225,8 @@ internal sealed class DependencyGraphRuntime
                     .ToArray() ?? []
                 : [];
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
-            var (dirtySourceRoots, invalidSourceRoots) = node.ClassifySourceRoots(sourceRoots, changes);
+            var (dirtySourceRoots, invalidSourceRoots) = node.ClassifySourceRoots(
+                sourceRoots, changes, captureCausalEvidence);
             var itemRoots = node.Relation is null
                 ? []
                 : ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes);
@@ -392,11 +394,12 @@ internal sealed class DependencyGraphRuntime
 
         public (IReadOnlyCollection<object> Dirty, IReadOnlyCollection<object> Invalid) ClassifySourceRoots(
             IEnumerable<object> sourceRoots,
-            IReadOnlyList<PropertyChange> changes)
+            IReadOnlyList<PropertyChange> changes,
+            bool captureCausalEvidence)
         {
             var dirty = NewSet();
             var invalid = NewSet();
-            var evidence = new List<DirectClassificationEvidence>();
+            List<DirectClassificationEvidence>? evidence = captureCausalEvidence ? [] : null;
             var directDependencies = SourceDependencies
                 .Where(dependency => dependency.Path.Segments.Count == 1)
                 .Select(dependency => dependency.Path.Segments[0].Member)
@@ -412,7 +415,7 @@ internal sealed class DependencyGraphRuntime
                     var classified = rules.TryGetValue(change.Member, out var rule)
                         ? rule.Classify(change.OldValue, change.NewValue)
                         : Definition.ImpactPolicy.SourceChanged;
-                    evidence.Add(new DirectClassificationEvidence(
+                    evidence?.Add(new DirectClassificationEvidence(
                         source, change.Member, classified,
                         rule is null ? "fixed fallback" : "member-specific conditional policy"));
                     severity = severity is null ? classified : Max(severity.Value, classified);
@@ -420,7 +423,7 @@ internal sealed class DependencyGraphRuntime
                 severity ??= Definition.ImpactPolicy.SourceChanged;
                 (severity == DependencySeverity.Invalid ? invalid : dirty).Add(source);
             }
-            DirectEvidence = evidence;
+            DirectEvidence = evidence ?? [];
             return (dirty, invalid);
         }
 

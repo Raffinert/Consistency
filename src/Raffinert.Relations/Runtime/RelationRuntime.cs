@@ -353,7 +353,7 @@ public sealed partial class RelationRuntime
         var origins = detailLevel == RuntimeImpactDetailLevel.Causal
             ? CaptureMutationOrigins(prepared)
             : [];
-        var result = CommitWithResult(prepared);
+        var result = CommitWithResult(prepared, detailLevel == RuntimeImpactDetailLevel.Causal);
         return CreateDetailedResult(prepared, result, detailLevel, origins);
     }
 

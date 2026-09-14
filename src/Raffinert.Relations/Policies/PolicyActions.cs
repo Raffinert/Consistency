@@ -81,6 +81,7 @@ public sealed record RelationDependencyCause(
     : DependencyImpactCause(CausePrecision)
 {
     public string? DefinitionKey { get; init; }
+    public IReadOnlyList<int> OriginIds { get; init; } = [];
 }
 
 public sealed record UpstreamDerivedCause(

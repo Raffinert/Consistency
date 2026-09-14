@@ -44,6 +44,8 @@ Raffinert.Relations.RelationDependencyCause.DefinitionKey.get -> string?
 Raffinert.Relations.RelationDependencyCause.DefinitionKey.init -> void
 Raffinert.Relations.RelationDependencyCause.Kind.get -> Raffinert.Relations.RelationImpactCauseKind
 Raffinert.Relations.RelationDependencyCause.Kind.init -> void
+Raffinert.Relations.RelationDependencyCause.OriginIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Relations.RelationDependencyCause.OriginIds.init -> void
 Raffinert.Relations.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Relations.RelationImpactCauseKind Kind, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
 Raffinert.Relations.RelationDependencyCause.RelationId.get -> int
 Raffinert.Relations.RelationDependencyCause.RelationId.init -> void

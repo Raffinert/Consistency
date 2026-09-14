@@ -61,6 +61,7 @@ public sealed class CausalImpactTests
             result.DerivedImpacts.Single().Sources.Single().Causes));
         Assert.Equal(ImpactCausePrecision.Conservative, cause.Precision);
         Assert.Equal(RelationImpactCauseKind.ConservativeCandidate, cause.Kind);
+        Assert.Equal([0], cause.OriginIds);
     }
 
     [Fact]
@@ -174,6 +175,20 @@ public sealed class CausalImpactTests
 
         Assert.Contains(result.InvariantImpacts.Single().Sources.Single().Causes,
             cause => cause is InvariantReactionCause { Reaction: InvariantReaction.ScheduleRepair });
+    }
+
+    [Fact]
+    public void Already_invalid_inherited_impact_has_no_fake_dirty_escalation()
+    {
+        var scenario = CreateScenario();
+        scenario.Source.Quantity = 8;
+
+        var result = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Quantity, 10, 8)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        Assert.DoesNotContain(result.InvariantImpacts.Single().Sources.Single().Causes,
+            cause => cause is InvariantReactionCause);
     }
 
     private static Scenario CreateScenario()
