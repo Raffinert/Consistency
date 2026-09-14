@@ -359,8 +359,10 @@ public sealed partial class RelationRuntime
     }
 
     /// <summary>
-    /// Predicts the impact of an already-mutated, prepared domain state without committing runtime
-    /// state or invoking policy callbacks. This is not a hypothetical pre-mutation simulation.
+    /// Non-binding diagnostic prediction for an already-mutated, prepared domain state. A later normal
+    /// commit executes semantics again. This method does not commit state or invoke policy callbacks and
+    /// is not a hypothetical pre-mutation simulation. Use <see cref="PlanDetailed"/> when durable external
+    /// work requires the later commit to install exactly the planned result.
     /// </summary>
     public RuntimeApplyResult PreviewDetailed(
         PreparedMutation prepared,

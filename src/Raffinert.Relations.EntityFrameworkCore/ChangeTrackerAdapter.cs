@@ -148,8 +148,9 @@ public sealed class RelationUnitOfWork
     }
 
     /// <summary>
-    /// Predicts detailed runtime impact for this prepared unit without committing or dispatching it.
-    /// Empty units return <see langword="null"/>.
+    /// Produces a non-binding diagnostic preview without committing or dispatching. A later normal commit
+    /// executes semantics again. Use <see cref="PlanDetailed"/> for durability-sensitive parity. Empty units
+    /// return <see langword="null"/>.
     /// </summary>
     public RuntimeApplyResult? PreviewDetailed(
         RelationRuntime runtime,

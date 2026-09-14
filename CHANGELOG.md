@@ -15,6 +15,8 @@ patch versions remain backward-compatible bug fixes where practical.
   identities for added and store-generated lifecycle origins.
 - Replaced whole object-set and projection-registry plan snapshots with touched-entry journals and added
   real SQLite business-row/outbox commit and rollback coverage.
+- Corrected prepared-planning benchmarks so preview, planning, and patch installation measure distinct work,
+  and verified the binding-plan surface through fresh packed-package consumers.
 - Shared physical direct-reference projection indexes across semantic consumers and replaced whole-runtime
   projection validation snapshots with touched-edge final-state validation.
 - Added typed keyed object sets and expression-defined binary relations.

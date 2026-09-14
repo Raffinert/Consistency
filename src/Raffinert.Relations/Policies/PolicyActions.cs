@@ -262,8 +262,8 @@ internal static class DurableSourceIdentityFactory
 }
 
 /// <summary>
-/// Stable data produced by a committed mutation. This object contains no callback capability
-/// and does not retain the relation runtime.
+/// Stable impact and policy-request data produced by preview, binding planning, or committed
+/// execution. This object contains no callback capability and does not retain the relation runtime.
 /// </summary>
 public sealed class RuntimeApplyResult
 {
