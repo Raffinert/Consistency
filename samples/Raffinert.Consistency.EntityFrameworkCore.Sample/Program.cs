@@ -24,7 +24,7 @@ var lines = builder.Objects<PurchaseOrderLine>().Key(x => x.Id);
 var available = builder.Derived(lines).Compute(x => x.OrderedQuantity - x.ReceivedQuantity);
 var availability = builder.Invariant(lines).Using(available).Must((_, value) => value >= 0);
 var runtime = builder.Build().CreateRuntime(seed => seed.Add(lines, [line]));
-var mappings = new RelationEfCoreMappings()
+var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Materialize(available, x => x.AvailableQuantity)
     .Enforce(availability);
@@ -35,7 +35,7 @@ try
     context.SaveChangesConsistently(runtime, mappings);
     throw new InvalidOperationException("The enforced invariant should have rejected this save.");
 }
-catch (RelationInvariantViolationException)
+catch (ConsistencyInvariantViolationException)
 {
     Console.WriteLine("Rejected invalid receipt before SQL; database and runtime remain unchanged.");
 }

@@ -72,7 +72,7 @@ public sealed class EndToEndDomainTests
         var repairs = new List<PurchaseLine>();
         var scenario = BuildScenario(repairs);
         var runtime = scenario.Model.CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings()
+        var mappings = new ConsistencyUnitOfWorkMappings()
             .Map(scenario.Lines)
             .Map(scenario.Receipts);
         using var context = new PurchasingContext();
@@ -133,7 +133,7 @@ public sealed class EndToEndDomainTests
         var version = runtime.Version;
 
         receipt.Quantity = 6m;
-        var mappings = new RelationUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
@@ -155,7 +155,7 @@ public sealed class EndToEndDomainTests
         var runtime = scenario.Model.CreateRuntime(seed => { seed.Add(scenario.Lines, [line]); seed.Add(scenario.Receipts, [receipt]); });
         receipt.Quantity = 3;
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
-            new RelationUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts));
+            new ConsistencyUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts));
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Summary,
             PlannedInvariantEvaluationMode.Affected, PlannedDerivedEvaluationMode.Affected)!;

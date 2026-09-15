@@ -3,41 +3,41 @@ using System.Transactions;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
-public enum RelationEfCoreSaveBehavior { Validate, RecalculateAndValidate }
+public enum ConsistencySaveBehavior { Validate, RecalculateAndValidate }
 
-public sealed class RelationEfCoreConsistencyOptions
+public sealed class ConsistencySaveOptions
 {
-    public RelationEfCoreSaveBehavior SaveBehavior { get; init; } = RelationEfCoreSaveBehavior.RecalculateAndValidate;
+    public ConsistencySaveBehavior SaveBehavior { get; init; } = ConsistencySaveBehavior.RecalculateAndValidate;
     public RuntimeImpactDetailLevel DetailLevel { get; init; } = RuntimeImpactDetailLevel.Summary;
 }
 
-public sealed class RelationInvariantViolationException : Exception
+public sealed class ConsistencyInvariantViolationException : Exception
 {
-    internal RelationInvariantViolationException(IReadOnlyList<PlannedInvariantEvaluation> violations)
+    internal ConsistencyInvariantViolationException(IReadOnlyList<PlannedInvariantEvaluation> violations)
         : base("One or more enforced relation invariants would be violated.") => Violations = violations;
     public IReadOnlyList<PlannedInvariantEvaluation> Violations { get; }
 }
 
-public sealed class RelationMaterializationSourceNotTrackedException : Exception
+public sealed class ConsistencyMaterializationSourceNotTrackedException : Exception
 {
-    internal RelationMaterializationSourceNotTrackedException() : base("An affected materialization source is not tracked by this DbContext instance.") { }
+    internal ConsistencyMaterializationSourceNotTrackedException() : base("An affected materialization source is not tracked by this DbContext instance.") { }
 }
 
-public sealed class RelationUnsupportedTransactionException : Exception
+public sealed class ConsistencyUnsupportedTransactionException : Exception
 {
-    internal RelationUnsupportedTransactionException() : base("Consistent save does not support ambient or externally controlled transactions; use the manual RelationUnitOfWork workflow.") { }
+    internal ConsistencyUnsupportedTransactionException() : base("Consistent save does not support ambient or externally controlled transactions; use the manual ConsistencyUnitOfWork workflow.") { }
 }
 
-public sealed class RelationStoreGeneratedKeyRequiresManualWorkflowException : Exception
+public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException : Exception
 {
-    internal RelationStoreGeneratedKeyRequiresManualWorkflowException(Type entityType, string propertyName)
-        : base($"Added entity '{entityType.Name}' uses store-generated Relations key '{propertyName}'; use the manual RelationUnitOfWork workflow after the key is generated.") { }
+    internal ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(Type entityType, string propertyName)
+        : base($"Added entity '{entityType.Name}' uses store-generated Relations key '{propertyName}'; use the manual ConsistencyUnitOfWork workflow after the key is generated.") { }
 }
 
-public static class RelationConsistencyDbContextExtensions
+public static class ConsistencyDbContextExtensions
 {
     public static int SaveChangesConsistently(this DbContext context, ConsistencyRuntime runtime,
-        RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions? options = null)
+        ConsistencyEfCoreMappings mappings, ConsistencySaveOptions? options = null)
     {
         var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
         int result;
@@ -48,7 +48,7 @@ public static class RelationConsistencyDbContextExtensions
     }
 
     public static async Task<int> SaveChangesConsistentlyAsync(this DbContext context, ConsistencyRuntime runtime,
-        RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions? options = null,
+        ConsistencyEfCoreMappings mappings, ConsistencySaveOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
@@ -59,23 +59,23 @@ public static class RelationConsistencyDbContextExtensions
 
 }
 
-internal sealed record PendingConsistencySave(RelationUnitOfWork Unit, PreparedImpactPlan? Plan);
+internal sealed record PendingConsistencySave(ConsistencyUnitOfWork Unit, PreparedImpactPlan? Plan);
 
 internal static class ConsistencyCoordinator
 {
     public static void Complete(ConsistencyRuntime runtime, PendingConsistencySave pending)
     {
         try { pending.Unit.Commit(runtime); }
-        catch (Exception error) { throw new RelationRuntimeSynchronizationException(runtime.Version, error); }
+        catch (Exception error) { throw new ConsistencyRuntimeSynchronizationException(runtime.Version, error); }
         pending.Unit.Dispatch(runtime);
     }
     public static PendingConsistencySave Prepare(DbContext context, ConsistencyRuntime runtime,
-        RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions options)
+        ConsistencyEfCoreMappings mappings, ConsistencySaveOptions options)
     {
         ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
         if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
-            throw new RelationUnsupportedTransactionException();
+            throw new ConsistencyUnsupportedTransactionException();
         context.ChangeTracker.DetectChanges();
         RejectStoreGeneratedRelationKeys(context, mappings.UnitOfWorkMappings);
         var enforced = mappings.Validate(context, runtime);
@@ -83,21 +83,21 @@ internal static class ConsistencyCoordinator
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, options.DetailLevel,
             mappings.HasEnforced ? PlannedInvariantEvaluationMode.Affected : PlannedInvariantEvaluationMode.None,
-            options.SaveBehavior == RelationEfCoreSaveBehavior.RecalculateAndValidate && mappings.HasMaterializations
+            options.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate && mappings.HasMaterializations
                 ? PlannedDerivedEvaluationMode.Affected : PlannedDerivedEvaluationMode.None);
         if (plan is not null)
         {
             var violations = plan.InvariantEvaluations.Where(x => enforced.Contains(x.InvariantId) &&
                 x.State == InvariantEvaluationState.Violated).ToArray();
-            if (violations.Length > 0) throw new RelationInvariantViolationException(violations);
-            if (options.SaveBehavior == RelationEfCoreSaveBehavior.RecalculateAndValidate)
+            if (violations.Length > 0) throw new ConsistencyInvariantViolationException(violations);
+            if (options.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
                 ApplyMaterializations(context, runtime, mappings, plan);
         }
         context.ChangeTracker.DetectChanges();
         return new PendingConsistencySave(unit, plan);
     }
 
-    private static void RejectStoreGeneratedRelationKeys(DbContext context, RelationUnitOfWorkMappings mappings)
+    private static void RejectStoreGeneratedRelationKeys(DbContext context, ConsistencyUnitOfWorkMappings mappings)
     {
         foreach (var entry in context.ChangeTracker.Entries().Where(x => x.State == EntityState.Added))
         {
@@ -113,13 +113,13 @@ internal static class ConsistencyCoordinator
                 if (propertyEntry.IsTemporary ||
                     (property.ValueGenerated != Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never &&
                      Equals(value, defaultValue)))
-                    throw new RelationStoreGeneratedKeyRequiresManualWorkflowException(entry.Metadata.ClrType, property.Name);
+                    throw new ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(entry.Metadata.ClrType, property.Name);
             }
         }
     }
 
     private static void ApplyMaterializations(DbContext context, ConsistencyRuntime runtime,
-        RelationEfCoreMappings mappings, PreparedImpactPlan plan)
+        ConsistencyEfCoreMappings mappings, PreparedImpactPlan plan)
     {
         var applied = new Stack<(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry Entry,
             System.Reflection.PropertyInfo Property, object Source, object? Value, bool Modified)>();
@@ -133,7 +133,7 @@ internal static class ConsistencyCoordinator
                     if (evaluation.State != DerivedValueState.Fresh) continue;
                     var entry = context.ChangeTracker.Entries().SingleOrDefault(x => ReferenceEquals(x.Entity, evaluation.Source));
                     if (entry is null || entry.State == EntityState.Detached)
-                        throw new RelationMaterializationSourceNotTrackedException();
+                        throw new ConsistencyMaterializationSourceNotTrackedException();
                     var property = entry.Property(mapping.Property.Name);
                     var comparer = property.Metadata.GetValueComparer();
                     if (comparer?.Equals(property.CurrentValue, evaluation.Value) ?? Equals(property.CurrentValue, evaluation.Value))

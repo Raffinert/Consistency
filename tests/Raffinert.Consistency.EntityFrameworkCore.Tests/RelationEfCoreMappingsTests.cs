@@ -16,8 +16,8 @@ public sealed class RelationEfCoreMappingsTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
 
-        Assert.Throws<RelationInvariantViolationException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Enforce(invariant)));
+        Assert.Throws<ConsistencyInvariantViolationException>(() => context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(objects).Enforce(invariant)));
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class RelationEfCoreMappingsTests
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror));
 
         Assert.Equal(6, entity.Mirror);
     }
@@ -47,7 +47,7 @@ public sealed class RelationEfCoreMappingsTests
         var value = model.Derived(objects).Compute(x => x.Input);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
-        var mappings = new RelationEfCoreMappings().Map(objects);
+        var mappings = new ConsistencyEfCoreMappings().Map(objects);
         if (propertyName == nameof(MappingEntity.Id)) mappings.Materialize(value, x => x.Id);
         else if (propertyName == nameof(MappingEntity.Alternate)) mappings.Materialize(value, x => x.Alternate);
         else if (propertyName == nameof(MappingEntity.Generated)) mappings.Materialize(value, x => x.Generated);
@@ -67,7 +67,7 @@ public sealed class RelationEfCoreMappingsTests
         entity.Input = 2;
 
         var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
         Assert.Contains("DerivedDependency", error.Message);
     }
 
@@ -84,7 +84,7 @@ public sealed class RelationEfCoreMappingsTests
         entity.Input = 2;
 
         var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
         Assert.Contains("RelationDependency", error.Message);
     }
 
@@ -99,7 +99,7 @@ public sealed class RelationEfCoreMappingsTests
         entity.Input = 2;
 
         var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
         Assert.Contains("InvariantDependency", error.Message);
     }
 
@@ -119,7 +119,7 @@ public sealed class RelationEfCoreMappingsTests
         target.Value = 2;
 
         var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(links).Materialize(mirror, x => x.Target)));
+            new ConsistencyEfCoreMappings().Map(links).Materialize(mirror, x => x.Target)));
         Assert.Contains("ProjectedSelector", error.Message);
     }
 
@@ -129,7 +129,7 @@ public sealed class RelationEfCoreMappingsTests
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var first = model.Derived(objects).Compute(x => x.Input);
         var second = model.Derived(objects).Compute(x => x.Input + 1);
-        var mappings = new RelationEfCoreMappings().Materialize(first, x => x.Mirror);
+        var mappings = new ConsistencyEfCoreMappings().Materialize(first, x => x.Mirror);
 
         Assert.Throws<InvalidOperationException>(() => mappings.Materialize(second, x => x.Mirror));
         Assert.Throws<InvalidOperationException>(() => mappings.Materialize(first, x => x.OtherMirror));
@@ -147,7 +147,7 @@ public sealed class RelationEfCoreMappingsTests
         entity.Input = 2;
 
         Assert.Throws<ArgumentException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(secondObjects).Materialize(foreign, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(secondObjects).Materialize(foreign, x => x.Mirror)));
     }
 
     private static MappingEntity Seed(MappingContext context)

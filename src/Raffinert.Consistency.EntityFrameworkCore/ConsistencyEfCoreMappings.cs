@@ -6,26 +6,26 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
-public sealed class RelationEfCoreMappings
+public sealed class ConsistencyEfCoreMappings
 {
-    private readonly RelationUnitOfWorkMappings _sets = new();
+    private readonly ConsistencyUnitOfWorkMappings _sets = new();
     private readonly List<IInvariantDefinition> _enforced = [];
     private readonly List<Materialization> _materializations = [];
 
-    public RelationEfCoreMappings Map<TEntity>(ObjectSet<TEntity> set,
+    public ConsistencyEfCoreMappings Map<TEntity>(ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector = null) where TEntity : class
     {
         _sets.Map(set, selector); return this;
     }
 
-    public RelationEfCoreMappings Enforce<TSource>(Invariant<TSource> invariant) where TSource : class
+    public ConsistencyEfCoreMappings Enforce<TSource>(Invariant<TSource> invariant) where TSource : class
     {
         ArgumentNullException.ThrowIfNull(invariant);
         if (!_enforced.Contains(invariant.Definition)) _enforced.Add(invariant.Definition);
         return this;
     }
 
-    public RelationEfCoreMappings Materialize<TSource, TValue>(Derived<TSource, TValue> derived,
+    public ConsistencyEfCoreMappings Materialize<TSource, TValue>(Derived<TSource, TValue> derived,
         Expression<Func<TSource, TValue>> property) where TSource : class
     {
         ArgumentNullException.ThrowIfNull(derived); ArgumentNullException.ThrowIfNull(property);
@@ -41,7 +41,7 @@ public sealed class RelationEfCoreMappings
         _materializations.Add(new Materialization(derived.Definition, info)); return this;
     }
 
-    internal RelationUnitOfWorkMappings UnitOfWorkMappings => _sets;
+    internal ConsistencyUnitOfWorkMappings UnitOfWorkMappings => _sets;
     internal bool HasEnforced => _enforced.Count > 0;
     internal bool HasMaterializations => _materializations.Count > 0;
     internal IReadOnlyList<Materialization> Materializations => _materializations;

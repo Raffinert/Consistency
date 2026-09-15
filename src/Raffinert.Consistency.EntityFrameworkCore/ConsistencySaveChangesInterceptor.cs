@@ -4,10 +4,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
-public sealed class RelationConsistencySaveChangesInterceptor(
+public sealed class ConsistencySaveChangesInterceptor(
     ConsistencyRuntime runtime,
-    RelationEfCoreMappings mappings,
-    RelationEfCoreConsistencyOptions options) : SaveChangesInterceptor
+    ConsistencyEfCoreMappings mappings,
+    ConsistencySaveOptions options) : SaveChangesInterceptor
 {
     private readonly ConditionalWeakTable<DbContext, PendingConsistencySave> _pending = new();
     private readonly ConditionalWeakTable<DbContext, object> _preparing = new();

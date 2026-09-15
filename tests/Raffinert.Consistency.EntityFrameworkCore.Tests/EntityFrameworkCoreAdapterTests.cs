@@ -28,7 +28,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();
         var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
 
@@ -51,7 +51,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new FailingDbContext();
         var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         context.Add(entity);
@@ -69,7 +69,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var first = model.Objects<CodeHolder>().Key(value => value.Id);
         var second = model.Objects<CodeHolder>().Key(value => value.Id);
         model.Build();
-        var mappings = new RelationUnitOfWorkMappings().Map(first).Map(second);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(first).Map(second);
         using var context = new TestDbContext();
         context.Add(new CodeHolder { Id = Guid.NewGuid() });
 
@@ -83,7 +83,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();
         var added = new CodeHolder { Id = Guid.NewGuid(), Code = "ADD" };
         var absentRemoval = new CodeHolder { Id = Guid.NewGuid(), Code = "REMOVE" };
@@ -103,7 +103,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new SaveProbeDbContext();
         var absentRemoval = new CodeHolder { Id = Guid.NewGuid(), Code = "REMOVE" };
         context.Attach(absentRemoval);
@@ -122,7 +122,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
         var code = model.Derived(objects).Compute(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();
         var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         context.Add(entity);
@@ -148,7 +148,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
         model.Derived(objects).Compute(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();
         var entity = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         context.Attach(entity);

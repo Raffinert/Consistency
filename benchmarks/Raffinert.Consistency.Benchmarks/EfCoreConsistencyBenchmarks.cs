@@ -34,7 +34,7 @@ public class EfCoreConsistencyBenchmarks
     }
 
     [Benchmark]
-    public RelationUnitOfWork CaptureTrackedUnit() =>
+    public ConsistencyUnitOfWork CaptureTrackedUnit() =>
         ChangeTrackerAdapter.CaptureUnitOfWork(_capture.Context.ChangeTracker, _capture.Mappings);
 
     [Benchmark]
@@ -53,16 +53,16 @@ public class EfCoreConsistencyBenchmarks
     private sealed class Scenario : IDisposable
     {
         private Scenario(BenchmarkContext context, ConsistencyRuntime runtime,
-            RelationUnitOfWorkMappings mappings, Source touched, RelationUnitOfWork prepared)
+            ConsistencyUnitOfWorkMappings mappings, Source touched, ConsistencyUnitOfWork prepared)
         {
             Context = context; Runtime = runtime; Mappings = mappings; Touched = touched; Prepared = prepared;
         }
 
         public BenchmarkContext Context { get; }
         public ConsistencyRuntime Runtime { get; }
-        public RelationUnitOfWorkMappings Mappings { get; }
+        public ConsistencyUnitOfWorkMappings Mappings { get; }
         public Source Touched { get; }
-        public RelationUnitOfWork Prepared { get; }
+        public ConsistencyUnitOfWork Prepared { get; }
 
         public static Scenario Create(int population)
         {
@@ -78,7 +78,7 @@ public class EfCoreConsistencyBenchmarks
             context.AttachRange(values);
             var touched = values[0];
             touched.Value = 1;
-            var mappings = new RelationUnitOfWorkMappings().Map(sources);
+            var mappings = new ConsistencyUnitOfWorkMappings().Map(sources);
             var prepared = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
             prepared.Prepare(runtime);
             return new Scenario(context, runtime, mappings, touched, prepared);

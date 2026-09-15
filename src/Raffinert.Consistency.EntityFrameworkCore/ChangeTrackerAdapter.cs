@@ -9,9 +9,9 @@ namespace Raffinert.Consistency.EntityFrameworkCore;
 /// Indicates that the database operation succeeded but synchronizing the committed domain state into
 /// the relation runtime failed. The runtime retains its pre-commit state and must be reconciled or rebuilt.
 /// </summary>
-public sealed class RelationRuntimeSynchronizationException : Exception
+public sealed class ConsistencyRuntimeSynchronizationException : Exception
 {
-    internal RelationRuntimeSynchronizationException(long runtimeVersion, Exception innerException)
+    internal ConsistencyRuntimeSynchronizationException(long runtimeVersion, Exception innerException)
         : base("The database operation succeeded, but relation runtime synchronization failed. " +
                "Do not retry the database command; reconcile or rebuild the runtime from authoritative state.",
             innerException) => RuntimeVersion = runtimeVersion;
@@ -21,11 +21,11 @@ public sealed class RelationRuntimeSynchronizationException : Exception
 }
 
 /// <summary>Maps EF entity entries to specific Raffinert object sets.</summary>
-public sealed class RelationUnitOfWorkMappings
+public sealed class ConsistencyUnitOfWorkMappings
 {
     private readonly List<IEntitySetMapping> _mappings = [];
 
-    public RelationUnitOfWorkMappings Map<TEntity>(
+    public ConsistencyUnitOfWorkMappings Map<TEntity>(
         ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector = null) where TEntity : class
     {
@@ -80,7 +80,7 @@ public sealed class RelationUnitOfWorkMappings
 /// A captured EF unit of work. Capture before SaveChanges and apply only after the database operation
 /// succeeds; a failed database operation therefore never advances Raffinert runtime state.
 /// </summary>
-public sealed class RelationUnitOfWork
+public sealed class ConsistencyUnitOfWork
 {
     private readonly MutationSet? _mutations;
     private PreparedMutation? _prepared;
@@ -89,7 +89,7 @@ public sealed class RelationUnitOfWork
     private bool _emptyCommitted;
     private bool _emptyDispatched;
 
-    internal RelationUnitOfWork(MutationSet? mutations) => _mutations = mutations;
+    internal ConsistencyUnitOfWork(MutationSet? mutations) => _mutations = mutations;
 
     public bool HasChanges => _mutations is not null;
 
@@ -237,9 +237,9 @@ public static class ChangeTrackerAdapter
         return changes.Length == 0 ? null : ChangeSet.Create(changes);
     }
 
-    public static RelationUnitOfWork CaptureUnitOfWork(
+    public static ConsistencyUnitOfWork CaptureUnitOfWork(
         ChangeTracker changeTracker,
-        RelationUnitOfWorkMappings mappings)
+        ConsistencyUnitOfWorkMappings mappings)
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
@@ -265,7 +265,7 @@ public static class ChangeTrackerAdapter
             .Concat(navigationChanges)
             .Concat(removals)
             .ToArray();
-        return new RelationUnitOfWork(mutations.Length == 0 ? null : MutationSet.Create(mutations));
+        return new ConsistencyUnitOfWork(mutations.Length == 0 ? null : MutationSet.Create(mutations));
     }
 
     public static ChangeImpact? ApplyTrackedChanges(this ConsistencyRuntime runtime, DbContext context)
@@ -279,7 +279,7 @@ public static class ChangeTrackerAdapter
     public static int SaveChangesAndApply(
         this DbContext context,
         ConsistencyRuntime runtime,
-        RelationUnitOfWorkMappings mappings)
+        ConsistencyUnitOfWorkMappings mappings)
     {
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
@@ -290,7 +290,7 @@ public static class ChangeTrackerAdapter
         }
         catch (Exception exception)
         {
-            throw new RelationRuntimeSynchronizationException(runtime.Version, exception);
+            throw new ConsistencyRuntimeSynchronizationException(runtime.Version, exception);
         }
         unitOfWork.Dispatch(runtime);
         return result;
@@ -299,7 +299,7 @@ public static class ChangeTrackerAdapter
     public static async Task<int> SaveChangesAndApplyAsync(
         this DbContext context,
         ConsistencyRuntime runtime,
-        RelationUnitOfWorkMappings mappings,
+        ConsistencyUnitOfWorkMappings mappings,
         CancellationToken cancellationToken = default)
     {
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -311,7 +311,7 @@ public static class ChangeTrackerAdapter
         }
         catch (Exception exception)
         {
-            throw new RelationRuntimeSynchronizationException(runtime.Version, exception);
+            throw new ConsistencyRuntimeSynchronizationException(runtime.Version, exception);
         }
         unitOfWork.Dispatch(runtime);
         return result;
@@ -319,7 +319,7 @@ public static class ChangeTrackerAdapter
 
     private static List<PropertyChange> ReadModifiedProperties(
         ChangeTracker changeTracker,
-        RelationUnitOfWorkMappings? mappings)
+        ConsistencyUnitOfWorkMappings? mappings)
     {
         var changes = new List<PropertyChange>();
         foreach (var entry in changeTracker.Entries().Where(entry => entry.State == EntityState.Modified))
@@ -339,7 +339,7 @@ public static class ChangeTrackerAdapter
     }
 
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChanges(
-        ChangeTracker changeTracker, RelationUnitOfWorkMappings? mappings)
+        ChangeTracker changeTracker, ConsistencyUnitOfWorkMappings? mappings)
     {
         var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
         changeTracker.AutoDetectChangesEnabled = false;
@@ -354,7 +354,7 @@ public static class ChangeTrackerAdapter
     }
 
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChangesCore(
-        ChangeTracker changeTracker, RelationUnitOfWorkMappings? mappings)
+        ChangeTracker changeTracker, ConsistencyUnitOfWorkMappings? mappings)
     {
         var changes = new List<RuntimeMutation>();
         var resets = new HashSet<(object Owner, MemberInfo Member)>(ReferenceMemberPairComparer.Instance);

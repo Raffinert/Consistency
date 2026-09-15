@@ -18,7 +18,7 @@ await context.SaveChangesAsync();
 var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
 value.Amount = 2;
 var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
-    context.ChangeTracker, new RelationUnitOfWorkMappings().Map(values));
+    context.ChangeTracker, new ConsistencyUnitOfWorkMappings().Map(values));
 unit.Prepare(runtime);
 
 await using var transaction = await context.Database.BeginTransactionAsync();

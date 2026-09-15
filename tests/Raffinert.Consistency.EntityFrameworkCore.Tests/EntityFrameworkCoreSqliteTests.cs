@@ -14,7 +14,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var first = new UniqueEntity { Id = Guid.NewGuid(), Code = "duplicate" };
         var second = new UniqueEntity { Id = Guid.NewGuid(), Code = "duplicate" };
         context.AddRange(first, second);
@@ -40,12 +40,12 @@ public sealed class EntityFrameworkCoreSqliteTests
         _ = model.Derived(objects).Using(relation).Compute((_, matches) => matches.Count)
             .AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "persisted" };
         context.Add(entity);
         gate.Throw = true;
 
-        var error = Assert.Throws<RelationRuntimeSynchronizationException>(() =>
+        var error = Assert.Throws<ConsistencyRuntimeSynchronizationException>(() =>
             context.SaveChangesAndApply(runtime, mappings));
 
         Assert.True(error.DatabaseOperationSucceeded);
@@ -64,7 +64,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "rollback" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -89,7 +89,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "commit" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -116,7 +116,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
         model.Derived(objects).Compute(entity => entity.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "outbox" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -146,7 +146,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "deferred-accept" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -180,7 +180,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<ConcurrencyEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         runtime.Add(objects, first);
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         second.Code = "B";
         second.Version = 1;
         secondContext.SaveChanges();
@@ -202,7 +202,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "generated" };
         context.Add(entity);
         Assert.Equal(0, entity.Id);
@@ -224,12 +224,12 @@ public sealed class EntityFrameworkCoreSqliteTests
         model.Invariant(objects).Using(code).Must((_, value) => value == "valid")
             .ScheduleRepairWith(_ => { }).Named("repair");
         var compiled = model.Build();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var first = new GeneratedEntity { Code = "valid" };
         var second = new GeneratedEntity { Code = "valid" };
         context.AddRange(first, second);
         ConsistencyRuntime runtime;
-        RelationUnitOfWork unit;
+        ConsistencyUnitOfWork unit;
 
         using (var transaction = context.Database.BeginTransaction())
         {
@@ -278,7 +278,7 @@ public sealed class EntityFrameworkCoreSqliteTests
                     : DependencySeverity.Dirty))
             .Compute(entity => entity.Parent);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(children, [child]));
-        var mappings = new RelationUnitOfWorkMappings().Map(children);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(children);
         child.Parent = newParent;
         child.ParentId = newParent.Id;
 
@@ -304,7 +304,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var child = new CascadeChild { Id = Guid.NewGuid(), Parent = parent, Code = "A" };
         parent.Children.Add(child); context.Add(child);
 
-        context.SaveChangesAndApply(runtime, new RelationUnitOfWorkMappings().Map(parents));
+        context.SaveChangesAndApply(runtime, new ConsistencyUnitOfWorkMappings().Map(parents));
 
         Assert.Equal([label], runtime.Related(relation, parent));
     }
@@ -324,7 +324,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal([label], runtime.Related(relation, parent));
         parent.Children.Remove(child); context.Remove(child);
 
-        context.SaveChangesAndApply(runtime, new RelationUnitOfWorkMappings().Map(parents));
+        context.SaveChangesAndApply(runtime, new ConsistencyUnitOfWorkMappings().Map(parents));
 
         Assert.Empty(runtime.Related(relation, parent));
     }
@@ -344,7 +344,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var runtime = model.Build().CreateRuntime();
         runtime.Add(parents, parent);
         runtime.Add(children, child);
-        var mappings = new RelationUnitOfWorkMappings().Map(parents).Map(children);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(parents).Map(children);
 
         context.Remove(parent);
         context.SaveChangesAndApply(runtime, mappings);
@@ -369,7 +369,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var label = new LabelEntity { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(owners, owner);
         runtime.Add(labels, label);
-        var mappings = new RelationUnitOfWorkMappings().Map(owners);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(owners);
         owner.Settings!.Code = "B";
 
         context.SaveChangesAndApply(runtime, mappings);
@@ -449,7 +449,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var label = new LabelEntity { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(groups, group);
         runtime.Add(labels, label);
-        var mappings = new RelationUnitOfWorkMappings().Map(groups);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(groups);
         group.Tags.Add(tag);
 
         context.SaveChangesAndApply(runtime, mappings);
@@ -465,7 +465,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "first" };
         context.Add(entity);
         context.SaveChangesAndApply(runtime, mappings);
@@ -490,7 +490,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         model.Invariant(objects).Using(code).Must((_, value) => value == "before")
             .ScheduleRepairWith(_ => { }).Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -525,7 +525,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var code = model.Derived(objects).Compute(entity => entity.Code).Named("code");
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "durable" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -585,7 +585,7 @@ public sealed class EntityFrameworkCoreSqliteTests
                     throw new DeliberateRuntimeFailure();
             }).Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -640,7 +640,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         model.Invariant(objects).Using(code).Must((_, value) => value == "before")
             .ScheduleRepairWith(_ => { });
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -674,7 +674,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<UniqueEntity>().Key(value => value.Id);
         model.Derived(objects).Compute(value => value.Code);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -707,7 +707,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         model.Derived(objects).Using(relation).Compute((_, matches) => matches.Count)
             .AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "rollback-plan" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -742,7 +742,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         Assert.True(runtime.Evaluate(invariant, entity));
         entity.Code = "invalid";
-        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
 
@@ -773,7 +773,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         Assert.True(runtime.Evaluate(invariant, entity)); entity.Code = "after";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
-            new RelationUnitOfWorkMappings().Map(objects));
+            new ConsistencyUnitOfWorkMappings().Map(objects));
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
             PlannedInvariantEvaluationMode.Affected)!;
@@ -800,7 +800,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var runtime = model.Build().CreateRuntime(); var entity = new GeneratedEntity { Code = code };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
-            new RelationUnitOfWorkMappings().Map(objects));
+            new ConsistencyUnitOfWorkMappings().Map(objects));
         using (var transaction = context.Database.BeginTransaction())
         {
             context.SaveChanges(); Assert.True(entity.Id > 0); unit.Prepare(runtime);
@@ -830,7 +830,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new GeneratedEntity { Code = "generated" };
         context.Add(entity);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
-            new RelationUnitOfWorkMappings().Map(objects));
+            new ConsistencyUnitOfWorkMappings().Map(objects));
 
         using (var transaction = context.Database.BeginTransaction())
         {
@@ -869,9 +869,9 @@ public sealed class EntityFrameworkCoreSqliteTests
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => value <= 10);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
+        var mappings = new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
         entity.Input = 20;
-        Assert.Throws<RelationInvariantViolationException>(() => context.SaveChangesConsistently(runtime, mappings));
+        Assert.Throws<ConsistencyInvariantViolationException>(() => context.SaveChangesConsistently(runtime, mappings));
         Assert.Equal(0, runtime.Version); Assert.Equal(4, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
         entity.Input = 5;
         context.SaveChangesConsistently(runtime, mappings);
@@ -885,11 +885,11 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationEfCoreMappings().Map(objects);
+        var mappings = new ConsistencyEfCoreMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "new" };
         context.Add(entity);
 
-        Assert.Throws<RelationStoreGeneratedKeyRequiresManualWorkflowException>(
+        Assert.Throws<ConsistencyStoreGeneratedKeyRequiresManualWorkflowException>(
             () => context.SaveChangesConsistently(runtime, mappings));
 
         Assert.Equal(0, entity.Id);
@@ -906,8 +906,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime, mappings, new());
+        var mappings = new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime, mappings, new());
         using var context = database.CreateContext(interceptor);
         context.Attach(entity);
         entity.Input = 5;
@@ -930,7 +930,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [first, second]));
-        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
+        var mappings = new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
         first.Input = 1;
         second.Input = 2;
         second.ThrowOnFour = true;
@@ -956,7 +956,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => gate.Check(value))
             .AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
+        var mappings = new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
         entity.Input = 2;
         gate.Throw = true;
 
@@ -981,8 +981,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror),
-            new RelationEfCoreConsistencyOptions { SaveBehavior = RelationEfCoreSaveBehavior.Validate });
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror),
+            new ConsistencySaveOptions { SaveBehavior = ConsistencySaveBehavior.Validate });
 
         var persisted = database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single();
         Assert.Equal(3, persisted.Input);
@@ -1003,7 +1003,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror));
 
         Assert.Equal(6, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
         Assert.Equal(1, runtime.Version);
@@ -1020,8 +1020,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         entity.Input = 3;
         using var transaction = context.Database.BeginTransaction();
 
-        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects)));
+        Assert.Throws<ConsistencyUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(objects)));
 
         Assert.Equal(1, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
         Assert.Equal(0, runtime.Version);
@@ -1038,8 +1038,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         entity.Input = 3;
         using var transaction = new System.Transactions.TransactionScope();
 
-        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects)));
+        Assert.Throws<ConsistencyUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(objects)));
 
         Assert.Equal(0, runtime.Version);
     }
@@ -1055,8 +1055,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         }
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<UniqueEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new RelationEfCoreMappings().Map(objects);
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime, mappings, new());
+        var mappings = new ConsistencyEfCoreMappings().Map(objects);
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime, mappings, new());
         using var context = database.CreateContext(interceptor);
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "DUP" };
         context.Add(entity);
@@ -1076,13 +1076,13 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         using var context = database.CreateContext(interceptor);
         var entity = new GeneratedEntity { Code = "new" };
         context.Add(entity);
 
-        Assert.Throws<RelationStoreGeneratedKeyRequiresManualWorkflowException>(() => context.SaveChanges());
+        Assert.Throws<ConsistencyStoreGeneratedKeyRequiresManualWorkflowException>(() => context.SaveChanges());
 
         Assert.Equal(0, entity.Id);
         Assert.Equal(0, runtime.Version);
@@ -1097,8 +1097,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var derived = model.Derived(objects).Compute(x => gate.Compute(x.Input)).AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(derived, x => x.Mirror), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(derived, x => x.Mirror), new());
         using var context = database.CreateContext(interceptor);
         gate.Context = context;
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
@@ -1123,8 +1123,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror), new());
         await using var context = database.CreateContext(interceptor);
         context.Attach(entity); entity.Input = 4;
 
@@ -1143,13 +1143,13 @@ public sealed class EntityFrameworkCoreSqliteTests
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         using var context = database.CreateContext(interceptor);
         context.Attach(entity); entity.Input = 3;
         using var transaction = context.Database.BeginTransaction();
 
-        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChanges());
+        Assert.Throws<ConsistencyUnsupportedTransactionException>(() => context.SaveChanges());
 
         Assert.Equal(0, runtime.Version);
         Assert.Equal(1, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
@@ -1163,13 +1163,13 @@ public sealed class EntityFrameworkCoreSqliteTests
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         using var context = database.CreateContext(interceptor);
         context.Attach(entity); entity.Input = 3;
         using var transaction = new System.Transactions.TransactionScope();
 
-        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChanges());
+        Assert.Throws<ConsistencyUnsupportedTransactionException>(() => context.SaveChanges());
 
         Assert.Equal(0, runtime.Version);
     }
@@ -1187,8 +1187,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         }
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [first, second]));
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         using (var firstContext = database.CreateContext(interceptor))
         {
             firstContext.Attach(first); first.Input = 2; firstContext.SaveChanges();
@@ -1211,8 +1211,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         using (var seed = database.CreateContext()) { seed.Add(saved); seed.SaveChanges(); seed.Entry(saved).State = EntityState.Detached; }
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [saved, independent]));
-        var consistency = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var consistency = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         var advance = new AdvanceRuntimeOnSavingInterceptor(() =>
         {
             independent.Input = 2;
@@ -1221,7 +1221,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var context = database.CreateContext(consistency, advance);
         context.Attach(saved); saved.Input = 4;
 
-        var error = Assert.Throws<RelationRuntimeSynchronizationException>(() => context.SaveChanges());
+        var error = Assert.Throws<ConsistencyRuntimeSynchronizationException>(() => context.SaveChanges());
 
         Assert.True(error.DatabaseOperationSucceeded);
         Assert.Equal(1, runtime.Version);
@@ -1241,7 +1241,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
 
-        context.SaveChangesConsistently(runtime, new RelationEfCoreMappings().Map(objects));
+        context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(objects));
 
         Assert.Equal([entity], repairs);
         Assert.Equal(3, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
@@ -1263,7 +1263,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         changed.Input = 2;
 
         context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Enforce(invariant));
+            new ConsistencyEfCoreMappings().Map(objects).Enforce(invariant));
 
         Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, untouched));
         Assert.Equal(2, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single(x => x.Id == changed.Id).Input);
@@ -1280,8 +1280,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         model.Invariant(objects).Using(value).Must((_, current) => current <= 1)
             .ScheduleRepairWith(_ => throw new DispatchFailure());
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
-            new RelationEfCoreMappings().Map(objects), new());
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime,
+            new ConsistencyEfCoreMappings().Map(objects), new());
         using var context = database.CreateContext(interceptor);
         context.Attach(entity); entity.Input = 2;
 
@@ -1306,8 +1306,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         context.Entry(source).State = EntityState.Detached;
         item.Value = 2;
 
-        Assert.Throws<RelationMaterializationSourceNotTrackedException>(() => context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(sources).Map(items).Materialize(count, x => x.Mirror)));
+        Assert.Throws<ConsistencyMaterializationSourceNotTrackedException>(() => context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(sources).Map(items).Materialize(count, x => x.Mirror)));
 
         Assert.Equal(0, runtime.Version);
         Assert.Equal(1, database.CreateContext().Set<MaterializationItem>().AsNoTracking().Single().Value);
@@ -1326,7 +1326,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime,
-            new RelationEfCoreMappings().Map(objects).Materialize(parity, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(objects).Materialize(parity, x => x.Mirror));
 
         Assert.Equal(writes, entity.MirrorWrites);
         Assert.Equal(1, entity.Mirror);
