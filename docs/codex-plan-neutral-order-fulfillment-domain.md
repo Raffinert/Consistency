@@ -1,6 +1,20 @@
 # Codex implementation plan: replace procurement terminology with a neutral order-fulfillment domain
 
-Status: **ACTIVE AFTER ROADMAP INDEX UPDATE**
+Status: **COMPLETED 2026-09-15**
+
+Implementation start: `6f3695e96813dbab36d859b9374c570e70d323ec`
+
+Completion evidence:
+
+- Implementation commits: `bd1e4a9`, `a784d31`, `100019a`, `63b1833`, `6b22517`, and `b7b9939`.
+- The implementation-start comparison contains no changes under `src/`; public API baselines are unchanged.
+- Core tests passed 282/282 on both .NET 8 and .NET 10; EF Core tests passed 76/76 on .NET 10.
+- Both executable samples, formatting, fresh package validation, and all three packed-package consumers passed.
+- Active terminology and definition-key residue gates returned no hits; historical production evidence remains archived.
+- Normal CI run [34996611377](https://github.com/Raffinert/Consistency/actions/runs/34996611377)
+  and release-candidate run [34997541847](https://github.com/Raffinert/Consistency/actions/runs/34997541847)
+  completed successfully for `b7b99395e46093b6497f8245d7685b598b3076fc`.
+- No package, tag, or GitHub Release was published or created.
 
 Baseline when this plan was authored:
 

@@ -1,6 +1,7 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 123–129 — neutral order-fulfillment terminology](../codex-plan-neutral-order-fulfillment-domain.md)
+- Completed neutral order-fulfillment sample/test/documentation terminology migration with local and remote
+  release proof: [Tasks 123–129](../codex-plan-neutral-order-fulfillment-domain.md)
 - Completed product/package/namespace rename with local and remote release proof: [Tasks 116–122 — `Raffinert.Consistency` rename v2](../codex-plan-rename-to-raffinert-consistency-v2.md)
 - Superseded rename draft that unnecessarily required NuGet publication preflight: [Tasks 116–122 — original rename plan](../codex-plan-rename-to-raffinert-consistency.md)
 - Implemented EF Core consistency continuation with full integration proof green at `a072685fc087fc52382a04ae804cf3000f6619f3`; superseded by the product rename before formal closeout: [Tasks 109–115](../codex-plan-ef-core-consistency-continuation-v2.md)
