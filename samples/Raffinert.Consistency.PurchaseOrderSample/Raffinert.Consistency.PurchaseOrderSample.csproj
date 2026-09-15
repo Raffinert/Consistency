@@ -3,8 +3,11 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Raffinert.Consistency" Version="0.1.0-alpha.1" />
+    <ProjectReference Include="..\..\src\Raffinert.Consistency\Raffinert.Consistency.csproj" />
   </ItemGroup>
 </Project>

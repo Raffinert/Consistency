@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Raffinert.Relations;
-using Raffinert.Relations.EntityFrameworkCore;
+using Raffinert.Consistency;
+using Raffinert.Consistency.EntityFrameworkCore;
 
 var model = new RelationModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);

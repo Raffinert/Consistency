@@ -1,4 +1,4 @@
-using Raffinert.Relations;
+using Raffinert.Consistency;
 
 var model = new RelationModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);
