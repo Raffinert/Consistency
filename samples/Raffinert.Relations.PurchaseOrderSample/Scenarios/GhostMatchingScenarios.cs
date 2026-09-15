@@ -43,12 +43,18 @@ internal static class GhostMatchingScenarios
             poil.GrnMode == GrnMode.Unknown ? RuleEvaluation.Unknown :
             poil.GrnMode == GrnMode.Disabled || poil.LinkedQuantity == linked ? RuleEvaluation.Valid : RuleEvaluation.Violation)
             .Named("poil-linked-quantity-balance");
+        _ = model.Invariant(poils).Using(poilBalance)
+            .Must((_, result) => result != RuleEvaluation.Violation)
+            .Named("poil-linked-quantity-balance-invariant");
 
         var polgrBalance = model.Derived(polgrs).Compute(polgr =>
             polgr.GrnMode == GrnMode.Unknown || polgr.PurchaseOrderLine.IsServiceItemLine == null ? RuleEvaluation.Unknown :
             polgr.GrnMode == GrnMode.Disabled || polgr.PurchaseOrderLine.IsServiceItemLine == true ? RuleEvaluation.Valid :
             polgr.QuantityAvailable + polgr.QuantityMatched + polgr.QuantitySentToErp == polgr.QuantityReceived
                 ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("polgr-bookkeeping-balance");
+        _ = model.Invariant(polgrs).Using(polgrBalance)
+            .Must((_, result) => result != RuleEvaluation.Violation)
+            .Named("polgr-bookkeeping-balance-invariant");
 
         var matchingPolgrCount = model.Derived(linkedReceipts).Using(matchingPolgr).Incrementally()
             .Compute((_, matches) => matches.Count()).Named("matching-polgr-count");
@@ -56,6 +62,9 @@ internal static class GhostMatchingScenarios
             lgr.PurchaseOrderInvoiceLine.GrnMode == GrnMode.Unknown ? RuleEvaluation.Unknown :
             lgr.PurchaseOrderInvoiceLine.GrnMode == GrnMode.Disabled || lgr.IsDeleted || count > 0
                 ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("lgr-bookkeeping-existence");
+        _ = model.Invariant(linkedReceipts).Using(lgrBookkeeping)
+            .Must((_, result) => result != RuleEvaluation.Violation)
+            .Named("lgr-bookkeeping-existence-invariant");
 
         // Kept in the graph intentionally: these relations prove that POIL and POLGR rows are
         // reachable from their purchase-order line without scenario-side dictionary matching.
