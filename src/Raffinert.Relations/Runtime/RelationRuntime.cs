@@ -392,7 +392,8 @@ public sealed partial class RelationRuntime
     /// <summary>
     /// Non-binding diagnostic prediction for an already-mutated, prepared domain state. A later normal
     /// commit executes semantics again. This method does not commit state or invoke policy callbacks and
-    /// is not a hypothetical pre-mutation simulation. Use <see cref="PlanDetailed"/> when durable external
+    /// is not a hypothetical pre-mutation simulation. Use
+    /// <see cref="PlanDetailed(PreparedMutation, RuntimeImpactDetailLevel)"/> when durable external
     /// work requires the later commit to install exactly the planned result.
     /// </summary>
     public RuntimeApplyResult PreviewDetailed(
@@ -425,12 +426,22 @@ public sealed partial class RelationRuntime
     /// Executes a prepared mutation reversibly and binds its exact result and runtime-state patch for
     /// a later commit that does not rerun classifiers, predicates, or dependency propagation.
     /// </summary>
+#pragma warning disable RS0027 // Preserve the shipped optional-parameter overload exactly.
     public PreparedImpactPlan PlanDetailed(
         PreparedMutation prepared,
         RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+        => PlanDetailed(prepared, detailLevel, PlannedInvariantEvaluationMode.None);
+#pragma warning restore RS0027
+
+    public PreparedImpactPlan PlanDetailed(
+        PreparedMutation prepared,
+        RuntimeImpactDetailLevel detailLevel,
+        PlannedInvariantEvaluationMode invariantEvaluationMode)
     {
         if (!Enum.IsDefined(detailLevel))
             throw new ArgumentOutOfRangeException(nameof(detailLevel));
+        if (!Enum.IsDefined(invariantEvaluationMode))
+            throw new ArgumentOutOfRangeException(nameof(invariantEvaluationMode));
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
         ValidateProjectedFinalState(prepared);
@@ -441,12 +452,14 @@ public sealed partial class RelationRuntime
             prepared,
             detailLevel == RuntimeImpactDetailLevel.Causal,
             requireSnapshot: true,
-            capturePostState: true);
+            capturePostState: true,
+            invariantEvaluationMode: invariantEvaluationMode);
         try
         {
             var result = CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
             return new PreparedImpactPlan(
                 this, prepared, prepared.BaseVersion, detailLevel, result,
+                Array.AsReadOnly(execution.InvariantEvaluations.ToArray()),
                 execution.ForwardPatch!, execution.Result.PolicyActions);
         }
         finally

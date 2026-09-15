@@ -385,6 +385,21 @@ public static class RuntimeImpactTraceRenderer
 /// <summary>A committed mutation's stable result data and separate in-process dispatch capability.</summary>
 public sealed record RuntimeApplication(RuntimeApplyResult Result, PolicyDispatchHandle Dispatch);
 
+public enum PlannedInvariantEvaluationMode
+{
+    None,
+    Affected
+}
+
+public sealed record PlannedInvariantEvaluation(
+    int InvariantId,
+    object Source,
+    InvariantEvaluationState State)
+{
+    public string? DefinitionKey { get; init; }
+    public SourceIdentity? SourceIdentity { get; init; }
+}
+
 /// <summary>
 /// An immutable, binding impact result and internal runtime-state patch produced by
 /// <see cref="RelationRuntime.PlanDetailed(PreparedMutation, RuntimeImpactDetailLevel)"/>.
@@ -397,6 +412,7 @@ public sealed class PreparedImpactPlan
         long baseVersion,
         RuntimeImpactDetailLevel detailLevel,
         RuntimeApplyResult result,
+        IReadOnlyList<PlannedInvariantEvaluation> invariantEvaluations,
         object forwardPatch,
         RuntimePolicyActions policyActions)
     {
@@ -405,6 +421,7 @@ public sealed class PreparedImpactPlan
         BaseVersion = baseVersion;
         DetailLevel = detailLevel;
         Result = result;
+        InvariantEvaluations = invariantEvaluations;
         ForwardPatch = forwardPatch;
         PolicyActions = policyActions;
     }
@@ -416,6 +433,9 @@ public sealed class PreparedImpactPlan
     public long BaseVersion { get; }
     public RuntimeImpactDetailLevel DetailLevel { get; }
     public RuntimeApplyResult Result { get; }
+    public IReadOnlyList<PlannedInvariantEvaluation> InvariantEvaluations { get; }
+    public bool HasInvariantViolations => InvariantEvaluations.Any(value =>
+        value.State == InvariantEvaluationState.Violated);
     public bool IsCommitted { get; private set; }
     internal void MarkCommitted() => IsCommitted = true;
 }

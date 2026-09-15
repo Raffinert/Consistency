@@ -28,7 +28,8 @@ public sealed partial class RelationRuntime
         PreparedMutation prepared,
         bool captureCausalEvidence,
         bool requireSnapshot = false,
-        bool capturePostState = false)
+        bool capturePostState = false,
+        PlannedInvariantEvaluationMode invariantEvaluationMode = PlannedInvariantEvaluationMode.None)
     {
         var plannedImpact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
@@ -46,6 +47,9 @@ public sealed partial class RelationRuntime
                 plannedImpact,
                 navigationRoots,
                 captureCausalEvidence);
+            var invariantEvaluations = invariantEvaluationMode == PlannedInvariantEvaluationMode.Affected
+                ? EvaluateAffectedInvariants(result.DependencyPropagation, prepared.LifecycleMutations)
+                : [];
             var forwardPatch = capturePostState
                 ? CaptureForwardPatch(
                     prepared.LifecycleMutations,
@@ -57,7 +61,8 @@ public sealed partial class RelationRuntime
             return new PreparedMutationExecution(
                 result,
                 rollbackJournal,
-                forwardPatch);
+                forwardPatch,
+                invariantEvaluations);
         }
         catch
         {
@@ -410,7 +415,60 @@ public sealed partial class RelationRuntime
     private sealed record PreparedMutationExecution(
         RuntimeCommitResult Result,
         RuntimeRollbackJournal? RollbackJournal,
-        RuntimeForwardPatch? ForwardPatch);
+        RuntimeForwardPatch? ForwardPatch,
+        IReadOnlyList<PlannedInvariantEvaluation> InvariantEvaluations);
+
+    private IReadOnlyList<PlannedInvariantEvaluation> EvaluateAffectedInvariants(
+        DependencyPropagationResult propagation,
+        IReadOnlyList<RuntimeMutation> lifecycleMutations)
+    {
+        var evaluations = new List<(PlannedInvariantEvaluation Value, int Encounter)>();
+        var seen = new Dictionary<IInvariantDefinition, HashSet<object>>();
+        var encounter = 0;
+        foreach (var impact in propagation.InvariantImpacts)
+        {
+            if (!seen.TryGetValue(impact.Definition, out var sources))
+                seen.Add(impact.Definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
+            foreach (var source in impact.Sources)
+            {
+                if (!sources.Add(source) || !_sets[impact.Definition.SourceSet].Contains(source))
+                    continue;
+                var state = _invariants[impact.Definition];
+                state.EvaluateValue(source);
+                evaluations.Add((new PlannedInvariantEvaluation(
+                    _invariantIds[impact.Definition], source, state.GetValueState(source))
+                {
+                    DefinitionKey = impact.Definition.DefinitionKey,
+                    SourceIdentity = CreateSourceIdentity(impact.Definition.SourceSet, source)
+                }, encounter++));
+            }
+        }
+        foreach (var added in lifecycleMutations.OfType<ObjectAdded>())
+        {
+            foreach (var definition in _invariants.Keys.Where(definition =>
+                ReferenceEquals(definition.SourceSet, added.Set)))
+            {
+                if (!seen.TryGetValue(definition, out var sources))
+                    seen.Add(definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                if (!sources.Add(added.Instance))
+                    continue;
+                var state = _invariants[definition];
+                state.EvaluateValue(added.Instance);
+                evaluations.Add((new PlannedInvariantEvaluation(
+                    _invariantIds[definition], added.Instance, state.GetValueState(added.Instance))
+                {
+                    DefinitionKey = definition.DefinitionKey,
+                    SourceIdentity = CreateSourceIdentity(definition.SourceSet, added.Instance)
+                }, encounter++));
+            }
+        }
+        return evaluations
+            .OrderBy(value => value.Value.InvariantId)
+            .ThenBy(value => value.Value.SourceIdentity?.DurableIdentity?.ToString(), StringComparer.Ordinal)
+            .ThenBy(value => value.Encounter)
+            .Select(value => value.Value)
+            .ToArray();
+    }
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {

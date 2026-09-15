@@ -1,1 +1,19 @@
 #nullable enable
+Raffinert.Relations.PlannedInvariantEvaluation
+Raffinert.Relations.PlannedInvariantEvaluation.DefinitionKey.get -> string?
+Raffinert.Relations.PlannedInvariantEvaluation.DefinitionKey.init -> void
+Raffinert.Relations.PlannedInvariantEvaluation.InvariantId.get -> int
+Raffinert.Relations.PlannedInvariantEvaluation.InvariantId.init -> void
+Raffinert.Relations.PlannedInvariantEvaluation.Source.get -> object!
+Raffinert.Relations.PlannedInvariantEvaluation.Source.init -> void
+Raffinert.Relations.PlannedInvariantEvaluation.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.PlannedInvariantEvaluation.SourceIdentity.init -> void
+Raffinert.Relations.PlannedInvariantEvaluation.State.get -> Raffinert.Relations.InvariantEvaluationState
+Raffinert.Relations.PlannedInvariantEvaluation.State.init -> void
+Raffinert.Relations.PlannedInvariantEvaluation.PlannedInvariantEvaluation(int InvariantId, object! Source, Raffinert.Relations.InvariantEvaluationState State) -> void
+Raffinert.Relations.PlannedInvariantEvaluationMode
+Raffinert.Relations.PlannedInvariantEvaluationMode.Affected = 1 -> Raffinert.Relations.PlannedInvariantEvaluationMode
+Raffinert.Relations.PlannedInvariantEvaluationMode.None = 0 -> Raffinert.Relations.PlannedInvariantEvaluationMode
+Raffinert.Relations.PreparedImpactPlan.HasInvariantViolations.get -> bool
+Raffinert.Relations.PreparedImpactPlan.InvariantEvaluations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.PlannedInvariantEvaluation!>!
+Raffinert.Relations.RelationRuntime.PlanDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan!
