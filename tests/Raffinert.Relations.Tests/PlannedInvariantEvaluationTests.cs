@@ -111,6 +111,99 @@ public sealed class PlannedInvariantEvaluationTests
         Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(scenario.Invariant, scenario.Item));
     }
 
+    [Fact]
+    public void Evaluated_plan_remains_subject_to_stale_version_validation()
+    {
+        var calls = 0;
+        var scenario = Create(() => calls++);
+        scenario.Item.Value = 2;
+        var plan = Plan(scenario, Change.Property(scenario.Items, scenario.Item, x => x.Value, 1, 2));
+        var callsAfterPlan = calls;
+        scenario.Runtime.Add(scenario.Items, new Item { Id = 9, Value = 1 });
+
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
+        Assert.Equal(callsAfterPlan, calls);
+        Assert.False(plan.IsCommitted);
+        Assert.Equal(1, scenario.Runtime.Version);
+    }
+
+    [Fact]
+    public void Evaluated_plan_remains_subject_to_domain_drift_validation()
+    {
+        var calls = 0;
+        var scenario = Create(() => calls++);
+        scenario.Item.Value = 2;
+        var plan = Plan(scenario, Change.Property(scenario.Items, scenario.Item, x => x.Value, 1, 2));
+        var callsAfterPlan = calls;
+        scenario.Item.Value = 3;
+
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
+        Assert.Equal(callsAfterPlan, calls);
+        Assert.False(plan.IsCommitted);
+        Assert.Equal(0, scenario.Runtime.Version);
+        Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(scenario.Invariant, scenario.Item));
+    }
+
+    [Fact]
+    public void Planning_affected_violation_does_not_dispatch_repair_callback()
+    {
+        var repairs = new List<Item>();
+        var model = new RelationModelBuilder();
+        var items = model.Objects<Item>().Key(x => x.Id);
+        var value = model.Derived(items).Compute(x => x.Value);
+        var invariant = model.Invariant(items).Using(value).Must((_, current) => current >= 0)
+            .ScheduleRepairWith(repairs.Add);
+        var item = new Item { Id = 1, Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
+        Assert.True(runtime.Evaluate(invariant, item));
+        item.Value = -1;
+
+        var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(
+            Change.Property(items, item, x => x.Value, 1, -1))), RuntimeImpactDetailLevel.Summary,
+            PlannedInvariantEvaluationMode.Affected);
+
+        Assert.True(plan.HasInvariantViolations);
+        Assert.Empty(repairs);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Plan_affected_includes_direct_invariant_source_member_dependency()
+    {
+        var model = new RelationModelBuilder();
+        var items = model.Objects<Item>().Key(x => x.Id);
+        var value = model.Derived(items).Compute(x => x.Value);
+        var invariant = model.Invariant(items).Using(value)
+            .Must((item, current) => !item.Enabled || current >= 0).Named("enabled-positive");
+        var item = new Item { Id = 1, Value = -1, Enabled = false };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
+        Assert.True(runtime.Evaluate(invariant, item));
+        item.Enabled = true;
+
+        var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(
+            Change.Property(items, item, x => x.Enabled, false, true))), RuntimeImpactDetailLevel.Summary,
+            PlannedInvariantEvaluationMode.Affected);
+
+        Assert.Equal(InvariantEvaluationState.Violated, Assert.Single(plan.InvariantEvaluations).State);
+    }
+
+    [Fact]
+    public void Summary_and_causal_plans_have_equivalent_invariant_truth()
+    {
+        var summary = Create();
+        summary.Item.Value = -1;
+        var summaryPlan = summary.Runtime.PlanDetailed(summary.Runtime.Prepare(MutationSet.Create(
+            Change.Property(summary.Items, summary.Item, x => x.Value, 1, -1))),
+            RuntimeImpactDetailLevel.Summary, PlannedInvariantEvaluationMode.Affected);
+        var causal = Create();
+        causal.Item.Value = -1;
+        var causalPlan = Plan(causal, Change.Property(causal.Items, causal.Item, x => x.Value, 1, -1));
+
+        Assert.Equal(summaryPlan.HasInvariantViolations, causalPlan.HasInvariantViolations);
+        Assert.Equal(summaryPlan.InvariantEvaluations.Select(x => (x.DefinitionKey, x.State)),
+            causalPlan.InvariantEvaluations.Select(x => (x.DefinitionKey, x.State)));
+    }
+
     private static PreparedImpactPlan Plan(Scenario scenario, params RuntimeMutation[] mutations) =>
         scenario.Runtime.PlanDetailed(
             scenario.Runtime.Prepare(MutationSet.Create(mutations)),
@@ -159,5 +252,6 @@ public sealed class PlannedInvariantEvaluationTests
         public int Id { get; init; }
         public int Value { get; set; }
         public string? Note { get; set; }
+        public bool Enabled { get; set; }
     }
 }
