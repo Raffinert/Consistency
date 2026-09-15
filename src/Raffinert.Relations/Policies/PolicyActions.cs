@@ -129,6 +129,22 @@ public sealed record DurablePolicyRequestIdentity(
     string DefinitionKey,
     DurableSourceIdentity Source);
 
+/// <summary>Data-only durable repair work for a named invariant and source.</summary>
+public sealed record DurableRepairRequestInfo(
+    string DefinitionKey,
+    DurableSourceIdentity Source,
+    DependencySeverity Reason);
+
+/// <summary>Data-only durable immediate-evaluation work for a named invariant and source.</summary>
+public sealed record DurableImmediateEvaluationRequestInfo(
+    string DefinitionKey,
+    DurableSourceIdentity Source);
+
+/// <summary>A strict, data-only batch of durable invariant policy work.</summary>
+public sealed record DurablePolicyWork(
+    IReadOnlyList<DurableRepairRequestInfo> RepairRequests,
+    IReadOnlyList<DurableImmediateEvaluationRequestInfo> ImmediateEvaluationRequests);
+
 public sealed record SourceIdentity(string? ObjectSetKey, Type SourceType, object SourceKey)
 {
     public DurableSourceIdentity? DurableIdentity { get; init; }
@@ -295,6 +311,22 @@ public sealed class RuntimeApplyResult
     public IReadOnlyList<ImmediateEvaluationRequestInfo> ImmediateEvaluationRequests { get; }
     public RuntimeImpactDetailLevel DetailLevel { get; }
     public IReadOnlyList<MutationOrigin> MutationOrigins { get; }
+
+    /// <summary>
+    /// Projects all policy requests to durable data, or fails when any invariant, object set, or source
+    /// key cannot provide a durable identity.
+    /// </summary>
+    public DurablePolicyWork GetDurablePolicyWork()
+    {
+        var repairIdentities = RepairRequests.Select(request => request.GetDurableIdentity()).ToArray();
+        var immediateIdentities = ImmediateEvaluationRequests
+            .Select(request => request.GetDurableIdentity()).ToArray();
+        var repairs = RepairRequests.Zip(repairIdentities, (request, identity) =>
+            new DurableRepairRequestInfo(identity.DefinitionKey, identity.Source, request.Reason)).ToArray();
+        var immediate = immediateIdentities.Select(identity =>
+            new DurableImmediateEvaluationRequestInfo(identity.DefinitionKey, identity.Source)).ToArray();
+        return new DurablePolicyWork(Array.AsReadOnly(repairs), Array.AsReadOnly(immediate));
+    }
 }
 
 public static class RuntimeImpactTraceRenderer

@@ -224,6 +224,26 @@ Raffinert.Relations.DurablePolicyRequestIdentity.DefinitionKey.init -> void
 Raffinert.Relations.DurablePolicyRequestIdentity.DurablePolicyRequestIdentity(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source) -> void
 Raffinert.Relations.DurablePolicyRequestIdentity.Source.get -> Raffinert.Relations.DurableSourceIdentity!
 Raffinert.Relations.DurablePolicyRequestIdentity.Source.init -> void
+Raffinert.Relations.DurablePolicyWork
+Raffinert.Relations.DurablePolicyWork.DurablePolicyWork(System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableRepairRequestInfo!>! RepairRequests, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableImmediateEvaluationRequestInfo!>! ImmediateEvaluationRequests) -> void
+Raffinert.Relations.DurablePolicyWork.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableImmediateEvaluationRequestInfo!>!
+Raffinert.Relations.DurablePolicyWork.ImmediateEvaluationRequests.init -> void
+Raffinert.Relations.DurablePolicyWork.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableRepairRequestInfo!>!
+Raffinert.Relations.DurablePolicyWork.RepairRequests.init -> void
+Raffinert.Relations.DurableRepairRequestInfo
+Raffinert.Relations.DurableRepairRequestInfo.DefinitionKey.get -> string!
+Raffinert.Relations.DurableRepairRequestInfo.DefinitionKey.init -> void
+Raffinert.Relations.DurableRepairRequestInfo.DurableRepairRequestInfo(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source, Raffinert.Relations.DependencySeverity Reason) -> void
+Raffinert.Relations.DurableRepairRequestInfo.Reason.get -> Raffinert.Relations.DependencySeverity
+Raffinert.Relations.DurableRepairRequestInfo.Reason.init -> void
+Raffinert.Relations.DurableRepairRequestInfo.Source.get -> Raffinert.Relations.DurableSourceIdentity!
+Raffinert.Relations.DurableRepairRequestInfo.Source.init -> void
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DefinitionKey.get -> string!
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DefinitionKey.init -> void
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DurableImmediateEvaluationRequestInfo(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source) -> void
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo.Source.get -> Raffinert.Relations.DurableSourceIdentity!
+Raffinert.Relations.DurableImmediateEvaluationRequestInfo.Source.init -> void
 Raffinert.Relations.DurableSourceIdentity
 Raffinert.Relations.DurableSourceIdentity.DurableSourceIdentity(string! ObjectSetKey, string! SourceType, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>! KeyParts) -> void
 Raffinert.Relations.DurableSourceIdentity.KeyParts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>!
@@ -524,6 +544,7 @@ Raffinert.Relations.RuntimeApplyResult.DetailLevel.get -> Raffinert.Relations.Ru
 Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!
 Raffinert.Relations.RuntimeApplyResult.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ImmediateEvaluationRequestInfo!>!
 Raffinert.Relations.RuntimeApplyResult.InvariantImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantMutationImpact!>!
+Raffinert.Relations.RuntimeApplyResult.GetDurablePolicyWork() -> Raffinert.Relations.DurablePolicyWork!
 Raffinert.Relations.RuntimeApplyResult.MutationOrigins.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.MutationOrigin!>!
 Raffinert.Relations.RuntimeApplyResult.RelationImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationMutationImpact!>!
 Raffinert.Relations.RuntimeApplyResult.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RepairRequestInfo!>!
