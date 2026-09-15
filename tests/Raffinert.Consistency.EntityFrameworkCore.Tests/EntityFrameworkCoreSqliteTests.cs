@@ -1313,7 +1313,8 @@ public sealed class EntityFrameworkCoreSqliteTests
         item.Value = 2;
 
         Assert.Throws<ConsistencyMaterializationSourceNotTrackedException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(sources).Map(items).Materialize(count, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(sources).Map(items).Materialize(count, x => x.Mirror),
+            new ConsistencySaveOptions { Scope = new ConsistencyScope().Complete(sources).Complete(items) }));
 
         Assert.Equal(0, runtime.Version);
         Assert.Equal(1, database.CreateContext().Set<MaterializationItem>().AsNoTracking().Single().Value);
