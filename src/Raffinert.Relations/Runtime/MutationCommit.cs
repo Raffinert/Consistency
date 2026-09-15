@@ -434,24 +434,14 @@ public sealed partial class RelationRuntime
                 if (!commit.RelationImpacts.TryGetValue(input.Relation, out var impact) ||
                     !impact.AffectedLefts.Contains(source, ReferenceEqualityComparer.Instance))
                     continue;
-                var added = impact.AddedPairs.Any(pair => ReferenceEquals(pair.Left, source));
-                var removed = impact.RemovedPairs.Any(pair => ReferenceEquals(pair.Left, source));
-                var kinds = new List<RelationImpactCauseKind>();
-                if (added) kinds.Add(RelationImpactCauseKind.MembershipAdded);
-                if (removed) kinds.Add(RelationImpactCauseKind.MembershipRemoved);
-                if (!added && !removed)
-                    kinds.Add(input.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
-                        ? RelationImpactCauseKind.ConservativeCandidate
-                        : RelationImpactCauseKind.RelatedItemChanged);
-                foreach (var kind in kinds)
+                foreach (var group in impact.RouteTriggers
+                             .Where(trigger => ReferenceEquals(trigger.Left, source))
+                             .GroupBy(trigger => (trigger.Kind, trigger.Precision)))
                     causes.Add(new RelationDependencyCause(
-                        _relationIds[input.Relation], kind,
-                        input.Relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
-                            ? ImpactCausePrecision.Conservative
-                            : ImpactCausePrecision.Exact)
+                        _relationIds[input.Relation], group.Key.Kind, group.Key.Precision)
                     {
                         DefinitionKey = input.Relation.DefinitionKey,
-                        OriginIds = MapRelationTriggerOrigins(input.Relation, impact, source, origins)
+                        OriginIds = MapTriggerOrigins(input.Relation, group.ToArray(), origins)
                     });
             }
             foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
@@ -495,15 +485,14 @@ public sealed partial class RelationRuntime
         return causes.Distinct().ToArray();
     }
 
-    private static IReadOnlyList<int> MapRelationTriggerOrigins(
+    private static IReadOnlyList<int> MapTriggerOrigins(
         IRelationDefinition relation,
-        RelationImpact impact,
-        object source,
+        IReadOnlyCollection<RelationRouteTrigger> routeTriggers,
         IReadOnlyList<MutationOrigin> origins)
     {
-        var triggers = impact.RouteTriggers.Where(trigger => ReferenceEquals(trigger.Left, source))
-            .Select(trigger => trigger.Trigger)
-            .Append(source)
+        var triggers = routeTriggers.Select(trigger => trigger.Trigger)
+            .Concat(routeTriggers.Where(trigger => ReferenceEquals(trigger.Trigger, trigger.Left))
+                .Select(trigger => trigger.Left))
             .ToHashSet(ReferenceEqualityComparer.Instance);
         var members = relation.Analysis.DependencyPaths
             .SelectMany(path => path.Segments)

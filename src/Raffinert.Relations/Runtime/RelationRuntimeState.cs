@@ -231,6 +231,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
                 RemovePair(left, right, delta);
             foreach (var left in newLefts.Except(oldLefts, ReferenceEqualityComparer<TLeft>.Instance))
                 AddPair(left, right, delta);
+            foreach (var left in newLefts.Intersect(oldLefts, ReferenceEqualityComparer<TLeft>.Instance))
+                delta.Affect(left, right, RelationImpactCauseKind.RelatedItemChanged, ImpactCausePrecision.Exact);
         }
         return delta;
     }

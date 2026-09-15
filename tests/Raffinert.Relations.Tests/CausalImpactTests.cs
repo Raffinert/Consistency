@@ -3,6 +3,40 @@ namespace Raffinert.Relations.Tests;
 public sealed class CausalImpactTests
 {
     [Fact]
+    public void Exact_added_and_removed_relation_causes_use_route_trigger_kind()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        var removedSource = new Source { Code = "A" };
+        var addedSource = new Source { Code = "B" };
+        var item = new Item { Code = "A" };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [removedSource, addedSource]);
+            seed.Add(items, [item]);
+        });
+        item.Code = "B";
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            items, item, value => value.Code, "A", "B")), RuntimeImpactDetailLevel.Causal).Result;
+
+        var impacts = result.DerivedImpacts.Single().Sources;
+        var removed = Assert.IsType<RelationDependencyCause>(Assert.Single(
+            impacts.Single(value => ReferenceEquals(value.Source, removedSource)).Causes));
+        var added = Assert.IsType<RelationDependencyCause>(Assert.Single(
+            impacts.Single(value => ReferenceEquals(value.Source, addedSource)).Causes));
+        Assert.Equal(RelationImpactCauseKind.MembershipRemoved, removed.Kind);
+        Assert.Equal(RelationImpactCauseKind.MembershipAdded, added.Kind);
+        Assert.Equal(ImpactCausePrecision.Exact, removed.Precision);
+        Assert.Equal(ImpactCausePrecision.Exact, added.Precision);
+        Assert.Equal([0], removed.OriginIds);
+        Assert.Equal([0], added.OriginIds);
+    }
+
+    [Fact]
     public void Causal_mode_explains_direct_and_upstream_impacts_without_changing_semantics()
     {
         var summary = CreateScenario();

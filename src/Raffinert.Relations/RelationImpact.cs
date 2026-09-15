@@ -38,10 +38,16 @@ internal sealed class RelationDelta
     public void Affect(object left) => _affectedLefts.Add(left);
 
     public void Affect(object left, object trigger)
+        => Affect(left, trigger, RelationImpactCauseKind.ConservativeCandidate, ImpactCausePrecision.Conservative);
+
+    public void Affect(
+        object left,
+        object trigger,
+        RelationImpactCauseKind kind,
+        ImpactCausePrecision precision)
     {
         _affectedLefts.Add(left);
-        _routeTriggers.Add(new RelationRouteTrigger(
-            left, trigger, RelationImpactCauseKind.ConservativeCandidate, ImpactCausePrecision.Conservative));
+        _routeTriggers.Add(new RelationRouteTrigger(left, trigger, kind, precision));
     }
 
     public void MergeFrom(RelationDelta other)
