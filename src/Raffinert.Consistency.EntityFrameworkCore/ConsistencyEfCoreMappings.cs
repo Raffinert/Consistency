@@ -69,7 +69,7 @@ public sealed class ConsistencyEfCoreMappings
             _ = runtime.GetDerivedId(mapping.Definition);
             var usage = runtime.GetMemberUsage(mapping.Definition.SourceSet, mapping.Property);
             if (usage != ConsistencyRuntime.ModelMemberUsageKind.None)
-                throw new InvalidOperationException($"Materialized mirrors are sink-only and cannot feed the Relations graph ({usage}).");
+                throw new InvalidOperationException($"Materialized mirrors are sink-only and cannot feed the consistency graph ({usage}).");
             var entity = context.Model.FindEntityType(mapping.Definition.SourceSet.ObjectType)
                 ?? throw new InvalidOperationException("The materialized source type is not mapped by EF Core.");
             var property = entity.FindProperty(mapping.Property)

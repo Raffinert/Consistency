@@ -32,7 +32,7 @@ public sealed class IncompleteConsistencyScopeException : Exception
 public sealed class ConsistencyInvariantViolationException : Exception
 {
     internal ConsistencyInvariantViolationException(IReadOnlyList<PlannedInvariantEvaluation> violations)
-        : base("One or more enforced relation invariants would be violated.") => Violations = violations;
+        : base("One or more enforced consistency invariants would be violated.") => Violations = violations;
     public IReadOnlyList<PlannedInvariantEvaluation> Violations { get; }
 }
 
@@ -49,7 +49,8 @@ public sealed class ConsistencyUnsupportedTransactionException : Exception
 public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException : Exception
 {
     internal ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(Type entityType, string propertyName)
-        : base($"Added entity '{entityType.Name}' uses store-generated Relations key '{propertyName}'; use the manual ConsistencyUnitOfWork workflow after the key is generated.") { }
+        : base($"Added entity '{entityType.Name}' uses store-generated consistency key '{propertyName}'; " +
+            "use CaptureConsistencyUnitOfWork and plan after the key is generated.") { }
 }
 
 public sealed class ConsistencyStoreGeneratedKeyNotReadyException : Exception

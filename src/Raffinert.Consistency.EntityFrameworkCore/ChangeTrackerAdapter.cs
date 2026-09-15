@@ -83,7 +83,10 @@ public sealed class ConsistencyUnitOfWorkMappings
 
 /// <summary>
 /// A captured EF unit of work. Capture before SaveChanges and apply only after the database operation
-/// succeeds; a failed database operation therefore never advances Raffinert runtime state.
+/// succeeds; a failed database operation therefore never advances Raffinert runtime state. This is a
+/// runtime binding primitive and does not apply <see cref="ConsistencyEfCoreMappings"/> enforcement,
+/// materialization, or <see cref="ConsistencyScope"/> policy. Use
+/// <see cref="ConsistencyDbContextExtensions.CaptureConsistencyUnitOfWork"/> for authoritative EF persistence.
 /// </summary>
 public sealed class ConsistencyUnitOfWork
 {
@@ -173,7 +176,8 @@ public sealed class ConsistencyUnitOfWork
 
     /// <summary>
     /// Creates a binding impact plan that can be persisted before database durability and later
-    /// committed without rerunning semantic model code. Empty units return <see langword="null"/>.
+    /// committed without rerunning semantic model code. This low-level operation does not apply EF
+    /// enforcement, materialization, or consistency-scope policy. Empty units return <see langword="null"/>.
     /// </summary>
 #pragma warning disable RS0027 // Preserve the shipped optional-parameter overload exactly.
     public PreparedImpactPlan? PlanDetailed(
@@ -228,7 +232,11 @@ public sealed class ConsistencyUnitOfWork
     }
 }
 
-/// <summary>Translates EF Core change tracking into a post-database-commit Raffinert unit of work.</summary>
+/// <summary>
+/// Translates EF Core change tracking into a policy-agnostic post-database-commit runtime unit of work.
+/// Use <see cref="ConsistencyDbContextExtensions.CaptureConsistencyUnitOfWork"/> when EF persistence policy
+/// must be enforced.
+/// </summary>
 public static class ChangeTrackerAdapter
 {
     public static ChangeSet? CreateChangeSet(ChangeTracker changeTracker)
