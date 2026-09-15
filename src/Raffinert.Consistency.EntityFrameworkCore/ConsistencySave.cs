@@ -9,6 +9,24 @@ public sealed class ConsistencySaveOptions
 {
     public ConsistencySaveBehavior SaveBehavior { get; init; } = ConsistencySaveBehavior.RecalculateAndValidate;
     public RuntimeImpactDetailLevel DetailLevel { get; init; } = RuntimeImpactDetailLevel.Summary;
+    public ConsistencyScope? Scope { get; init; }
+}
+
+public sealed class IncompleteConsistencyScopeException : Exception
+{
+    internal IncompleteConsistencyScopeException(IReadOnlyList<ConsistencyScopeGap> gaps)
+        : base(CreateMessage(gaps)) => Gaps = gaps;
+
+    public IReadOnlyList<ConsistencyScopeGap> Gaps { get; }
+
+    private static string CreateMessage(IReadOnlyList<ConsistencyScopeGap> gaps)
+    {
+        var missing = string.Join(", ", gaps.Select(gap =>
+            $"{gap.ObjectSetDefinitionKey ?? gap.ObjectType.Name} (set {gap.ObjectSetId}, {gap.RequirementKind})"));
+        return $"Persistence was not attempted because authoritative consistency scope coverage is missing: {missing}. " +
+            "Seed and maintain authoritative runtime coverage, then declare it through ConsistencyScope. " +
+            "Raffinert will not auto-load missing objects.";
+    }
 }
 
 public sealed class ConsistencyInvariantViolationException : Exception
@@ -79,6 +97,8 @@ internal static class ConsistencyCoordinator
         context.ChangeTracker.DetectChanges();
         RejectStoreGeneratedRelationKeys(context, mappings.UnitOfWorkMappings);
         var enforced = mappings.Validate(context, runtime);
+        var scopeGaps = mappings.GetScopeGaps(runtime, options.Scope, options.SaveBehavior);
+        if (scopeGaps.Count > 0) throw new IncompleteConsistencyScopeException(scopeGaps);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, options.DetailLevel,

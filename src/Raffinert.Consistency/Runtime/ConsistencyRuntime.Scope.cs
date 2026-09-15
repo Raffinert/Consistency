@@ -30,10 +30,7 @@ public sealed partial class ConsistencyRuntime
         IReadOnlyList<ScopeRequirement> requirements,
         ConsistencyScope? scope)
     {
-        if (scope is not null && scope.CompleteSets.Any(set => !_sets.ContainsKey(set)))
-            throw new ArgumentException(
-                "The consistency scope contains an object set from another compiled model.",
-                nameof(scope));
+        ValidateScopeOwnership(scope);
 
         return requirements
             .Where(requirement => scope is null || !scope.Contains(requirement.Set))
@@ -43,5 +40,13 @@ public sealed partial class ConsistencyRuntime
                 requirement.Set.ObjectType,
                 (ConsistencyScopeRequirementKind)requirement.Reason))
             .ToArray();
+    }
+
+    internal void ValidateScopeOwnership(ConsistencyScope? scope)
+    {
+        if (scope is not null && scope.CompleteSets.Any(set => !_sets.ContainsKey(set)))
+            throw new ArgumentException(
+                "The consistency scope contains an object set from another compiled model.",
+                nameof(scope));
     }
 }

@@ -45,6 +45,22 @@ public sealed class ConsistencyEfCoreMappings
     internal bool HasEnforced => _enforced.Count > 0;
     internal bool HasMaterializations => _materializations.Count > 0;
     internal IReadOnlyList<Materialization> Materializations => _materializations;
+    internal IReadOnlyList<ConsistencyScopeGap> GetScopeGaps(
+        ConsistencyRuntime runtime,
+        ConsistencyScope? scope,
+        ConsistencySaveBehavior saveBehavior)
+    {
+        runtime.ValidateScopeOwnership(scope);
+        var gaps = _enforced.SelectMany(definition => runtime.GetScopeGaps(definition, scope));
+        if (saveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
+            gaps = gaps.Concat(_materializations.SelectMany(mapping =>
+                runtime.GetScopeGaps(mapping.Definition, scope)));
+        return gaps.Distinct()
+            .OrderBy(gap => gap.ObjectSetId)
+            .ThenBy(gap => gap.RequirementKind)
+            .ToArray();
+    }
+
     internal HashSet<int> Validate(DbContext context, ConsistencyRuntime runtime)
     {
         var ids = _enforced.Select(runtime.GetInvariantId).ToHashSet();

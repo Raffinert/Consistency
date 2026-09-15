@@ -36,6 +36,10 @@ Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.DetailLevel.ini
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.ConsistencySaveOptions() -> void
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.SaveBehavior.get -> Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.SaveBehavior.init -> void
+Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.Scope.get -> Raffinert.Consistency.ConsistencyScope?
+Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.Scope.init -> void
+Raffinert.Consistency.EntityFrameworkCore.IncompleteConsistencyScopeException
+Raffinert.Consistency.EntityFrameworkCore.IncompleteConsistencyScopeException.Gaps.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.ConsistencyScopeGap!>!
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior.RecalculateAndValidate = 1 -> Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior.Validate = 0 -> Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveBehavior
