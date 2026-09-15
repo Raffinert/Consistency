@@ -1,6 +1,6 @@
 using Raffinert.Consistency.OrderFulfillmentSample.Scenarios;
 
-LegacyDependencyScenarios.Run();
-GhostMatchingScenarios.Run();
-PrecommitGuardScenarios.Run();
-Console.WriteLine("All procurement scenarios passed.");
+DependencyPropagationScenarios.Run();
+AllocationIntegrityScenarios.Run();
+PrecommitValidationScenarios.Run();
+Console.WriteLine("All order-fulfillment scenarios passed.");
