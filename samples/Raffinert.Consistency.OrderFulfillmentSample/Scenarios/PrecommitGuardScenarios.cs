@@ -1,7 +1,7 @@
-using Raffinert.Consistency.PurchaseOrderSample.Domain;
-using Raffinert.Consistency.PurchaseOrderSample.Support;
+using Raffinert.Consistency.OrderFulfillmentSample.Domain;
+using Raffinert.Consistency.OrderFulfillmentSample.Support;
 
-namespace Raffinert.Consistency.PurchaseOrderSample.Scenarios;
+namespace Raffinert.Consistency.OrderFulfillmentSample.Scenarios;
 
 internal static class PrecommitGuardScenarios
 {

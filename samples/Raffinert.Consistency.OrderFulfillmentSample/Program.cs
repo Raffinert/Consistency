@@ -1,4 +1,4 @@
-using Raffinert.Consistency.PurchaseOrderSample.Scenarios;
+using Raffinert.Consistency.OrderFulfillmentSample.Scenarios;
 
 LegacyDependencyScenarios.Run();
 GhostMatchingScenarios.Run();

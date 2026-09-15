@@ -1,5 +1,5 @@
-using Raffinert.Consistency.PurchaseOrderSample.Domain;
-namespace Raffinert.Consistency.PurchaseOrderSample.Support;
+using Raffinert.Consistency.OrderFulfillmentSample.Domain;
+namespace Raffinert.Consistency.OrderFulfillmentSample.Support;
 
 internal sealed class ScenarioRunner
 {

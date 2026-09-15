@@ -1,5 +1,5 @@
-using Raffinert.Consistency.PurchaseOrderSample.Domain;
-namespace Raffinert.Consistency.PurchaseOrderSample.Scenarios;
+using Raffinert.Consistency.OrderFulfillmentSample.Domain;
+namespace Raffinert.Consistency.OrderFulfillmentSample.Scenarios;
 
 internal static class LegacyDependencyScenarios
 {
