@@ -29,6 +29,8 @@ jobs:
         run: dotnet test tests/Raffinert.Relations.Tests/Raffinert.Relations.Tests.csproj -c Release -f net10.0 --no-build
       - name: Test EF Core adapter (.NET 10)
         run: dotnet test tests/Raffinert.Relations.EntityFrameworkCore.Tests/Raffinert.Relations.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
+      - name: Run procurement dogfood scenarios
+        run: dotnet run --project samples/Raffinert.Relations.PurchaseOrderSample/Raffinert.Relations.PurchaseOrderSample.csproj -c Release --no-build
       - name: Verify formatting
         run: dotnet format Raffinert.Relations.sln --no-restore --verify-no-changes
       - name: Pack

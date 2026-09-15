@@ -90,8 +90,20 @@ internal static class GhostMatchingScenarios
         var addition = runtime.ApplyDetailed(MutationSet.Create(Change.Add(poLines, pairLine), Change.Add(poils, pairPoil),
             Change.Add(linkedReceipts, pairLgr), Change.Add(polgrs, pairPolgr)), RuntimeImpactDetailLevel.Causal);
         runner.Check("D6 LGR and POLGR added in one MutationSet", RuleEvaluation.Valid, runtime.Get(lgrBookkeeping, pairLgr), addition.Result);
-        runtime.Apply(MutationSet.Create(Change.Remove(linkedReceipts, pairLgr), Change.Remove(polgrs, pairPolgr)));
-        runner.Check("D5 LGR and POLGR removed in one MutationSet", RuleEvaluation.Valid, RuleEvaluation.Valid);
+        var versionBeforeRemoval = runtime.Version;
+        var pairRemoval = runtime.ApplyDetailed(
+            MutationSet.Create(Change.Remove(linkedReceipts, pairLgr), Change.Remove(polgrs, pairPolgr)),
+            RuntimeImpactDetailLevel.Causal);
+        var removedBothRelationMemberships = pairRemoval.Result.RelationImpacts
+            .SelectMany(impact => impact.RemovedPairs)
+            .Any(pair => ReferenceEquals(pair.Left, pairLgr) && ReferenceEquals(pair.Right, pairPolgr));
+        var removalWasAtomicAndExplained = runtime.Version == versionBeforeRemoval + 1
+            && removedBothRelationMemberships
+            && pairRemoval.Result.InvariantImpacts.All(impact => impact.Sources.All(source =>
+                !ReferenceEquals(source.Source, pairLgr)));
+        runner.Check("D5 LGR and POLGR removed in one MutationSet", RuleEvaluation.Valid,
+            removalWasAtomicAndExplained ? RuleEvaluation.Valid : RuleEvaluation.Violation,
+            pairRemoval.Result);
         runner.Complete("Ghost matching guard dogfooding");
     }
 
