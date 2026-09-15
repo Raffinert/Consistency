@@ -77,9 +77,17 @@ only through explicit post-commit dispatch.
 ## EF Core boundary
 
 The EF adapter translates tracked entity lifecycle, scalar/reference changes, and collection resets into
-the same core mutation protocol. The convenience save methods prepare before `SaveChanges`, commit after
-success, and dispatch last. For an externally controlled database transaction, use the captured unit of
-work manually and commit runtime state only after the actual database transaction commits.
+the same core mutation protocol. Relationship evidence is captured before EF change detection can discard
+old owned/reference targets. The adapter's `Enforce` and `Materialize` mappings are persistence policy;
+the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a Relations key,
+relation, derived value, invariant, or projected selector.
+
+The convenience save methods and interceptor prepare before `SaveChanges`, commit after success, and
+dispatch last. They reject ambient/external transactions and store-generated Relations identities. Those
+cases require the explicit transaction and captured-unit workflow, with runtime commit only after database
+commit. The adapter never auto-loads missing graph state; correctness is bounded by the authoritative
+runtime scope supplied by the application. Full operational details are in
+[EF Core consistency](ef-core-consistency.md).
 
 `PreviewDetailed` predicts against the already-mutated, prepared domain state, restores runtime-owned state,
 and returns only a `RuntimeApplyResult`. It is diagnostic and non-binding: a later normal commit may execute

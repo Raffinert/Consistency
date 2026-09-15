@@ -61,6 +61,25 @@ consequences.
 
 The core package has no EF Core or dependency-injection dependency.
 
+## EF Core consistent saves
+
+The EF Core adapter can reject configured invariant violations before SQL and persist sink-only mirrors
+of affected derived values:
+
+```csharp
+var mappings = new RelationEfCoreMappings()
+    .Map(lines)
+    .Materialize(availableQuantity, x => x.AvailableQuantity)
+    .Enforce(availability);
+
+await db.SaveChangesConsistentlyAsync(runtime, mappings, cancellationToken: cancellationToken);
+```
+
+This stable-key workflow plans first, saves once, then installs the exact runtime plan. It does not load
+missing graph data. See [EF Core consistency](docs/ef-core-consistency.md) for scope, transactions,
+generated keys, and recovery rules, or run the
+[`Raffinert.Relations.EntityFrameworkCore.ConsistencySample`](samples/Raffinert.Relations.EntityFrameworkCore.ConsistencySample).
+
 ## What Raffinert.Relations is not
 
 It is not an ORM, event bus, or general-purpose workflow engine.
