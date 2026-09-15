@@ -51,6 +51,88 @@ public sealed class MixedModelPreparedExecutionTests
         }
     }
 
+    [Fact]
+    public void Classifier_failure_restores_prepared_execution_state()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<FailureSource>().Key(source => source.Id);
+        var derived = model.Derived(sources)
+            .Impact(policy => policy.SourceMemberChanged(
+                source => source.Value,
+                (_, _) => throw new InjectedFailureException()))
+            .Compute(source => source.Value);
+        var source = new FailureSource { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        _ = runtime.Get(derived, source);
+        source.Value = 2;
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
+            sources, source, value => value.Value, 1, 2)));
+        var diagnostics = runtime.Diagnostics;
+
+        Assert.Throws<InjectedFailureException>(() => runtime.PlanDetailed(prepared));
+
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(diagnostics, runtime.Diagnostics);
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, source));
+        Assert.False(prepared.IsCommitted);
+        Assert.False(prepared.IsDispatched);
+    }
+
+    [Fact]
+    public void Incremental_derived_failure_restores_set_relation_cache_and_version()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<FailureSource>().Key(source => source.Id);
+        var items = model.Objects<FailureItem>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var total = model.Derived(sources).Using(relation).Incrementally()
+            .Compute((_, matches) => matches.Sum(item => item.Quantity));
+        var source = new FailureSource { Code = "A" };
+        var existing = new FailureItem { Code = "A", StoredQuantity = 1 };
+        var failing = new FailureItem { Code = "A", StoredQuantity = 2, ThrowOnRead = true };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [source]);
+            seed.Add(items, [existing]);
+        });
+        Assert.Equal(1, runtime.Get(total, source));
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Add(items, failing)));
+
+        Assert.Throws<InjectedFailureException>(() => runtime.PreviewDetailed(prepared));
+
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(total, source));
+        Assert.True(runtime.HasMaterializedPair(relation, source, existing));
+        Assert.False(runtime.HasMaterializedPair(relation, source, failing));
+        Assert.False(prepared.IsCommitted);
+    }
+
+    [Fact]
+    public void Invariant_evaluation_dispatch_failure_keeps_commit_and_allows_retry()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<FailureSource>().Key(source => source.Id);
+        var value = model.Derived(sources).Compute(source => source.Value);
+        model.Invariant(sources).Using(value).Must((source, current) => EvaluateInvariant(source, current))
+            .ReactWith(InvariantReaction.EvaluateImmediately)
+            .AllowIncompleteDependencies();
+        var source = new FailureSource { Value = 1, FailEvaluation = true };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        _ = runtime.Get(value, source);
+        source.Value = 2;
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
+            sources, source, item => item.Value, 1, 2)));
+        runtime.Commit(prepared);
+        Assert.Throws<InjectedFailureException>(() => runtime.Dispatch(prepared));
+        Assert.Equal(1, runtime.Version);
+        Assert.True(prepared.IsCommitted);
+        Assert.False(prepared.IsDispatched);
+
+        source.FailEvaluation = false;
+        runtime.Dispatch(prepared);
+        Assert.True(prepared.IsDispatched);
+    }
+
     private static Outcome Execute(MutationCase mutationCase, ExecutionMode mode)
     {
         var scenario = CreateScenario();
@@ -317,4 +399,27 @@ public sealed class MixedModelPreparedExecutionTests
         public Guid Id { get; set; }
         public int Value { get; set; }
     }
+
+    private sealed class FailureSource
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public string Code { get; set; } = "";
+        public int Value { get; set; }
+        public bool FailEvaluation { get; set; }
+    }
+
+    private sealed class FailureItem
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public string Code { get; set; } = "";
+        public int StoredQuantity { get; set; }
+        public bool ThrowOnRead { get; set; }
+        public int Quantity => ThrowOnRead ? throw new InjectedFailureException() : StoredQuantity;
+    }
+
+    private sealed class InjectedFailureException : Exception;
+
+    private static bool EvaluateInvariant(FailureSource source, int value) => source.FailEvaluation
+        ? throw new InjectedFailureException()
+        : value >= 0;
 }
