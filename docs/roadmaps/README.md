@@ -1,7 +1,8 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 109–115 — EF Core consistency continuation v2](../codex-plan-ef-core-consistency-continuation-v2.md)
-- Partially implemented EF Core consistency plan superseded by the active continuation after Task 100 landed with proof gaps: [Tasks 100–108](../codex-plan-ef-core-consistency-guard-and-materialization.md)
+- Active implementation plan: [Tasks 116–122 — rename `Raffinert.Relations` to `Raffinert.Consistency`](../codex-plan-rename-to-raffinert-consistency.md)
+- Implemented EF Core consistency continuation with full integration proof green at `a072685fc087fc52382a04ae804cf3000f6619f3`; superseded by the product rename before formal closeout: [Tasks 109–115](../codex-plan-ef-core-consistency-continuation-v2.md)
+- Partially implemented EF Core consistency plan superseded by the continuation after Task 100 landed with proof gaps: [Tasks 100–108](../codex-plan-ef-core-consistency-guard-and-materialization.md)
 - Completed pre-commit guard proof wave: [Tasks 94–99](../codex-plan-precommit-guard-proof-completion.md)
 - Completed pre-commit guard dogfood wave: [Tasks 87–93](../codex-plan-dogfood-precommit-guard-validation.md)
 - Completed post-alpha production integration plan: [Tasks 80–86 — durable policy work and release baseline](../codex-plan-post-alpha-production-integration-v1.md)
