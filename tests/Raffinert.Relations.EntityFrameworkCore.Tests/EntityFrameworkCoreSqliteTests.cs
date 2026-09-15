@@ -260,7 +260,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
-    public void Reference_classifier_receives_truthful_tracked_old_and_new_principals()
+    public void Dependent_reference_retarget_uses_original_fk_without_manual_reference_flag()
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
@@ -281,7 +281,6 @@ public sealed class EntityFrameworkCoreSqliteTests
         var mappings = new RelationUnitOfWorkMappings().Map(children);
         child.Parent = newParent;
         child.ParentId = newParent.Id;
-        context.Entry(child).Reference(entity => entity.Parent).IsModified = true;
 
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -289,6 +288,45 @@ public sealed class EntityFrameworkCoreSqliteTests
 
         Assert.Equal(DependencySeverity.Invalid,
             plan!.Result.DerivedImpacts.Single().Sources.Single().Severity);
+    }
+
+    [Fact]
+    public void Collection_add_emits_reset_from_added_dependent_fk_evidence()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var parent = new CascadeParent { Id = Guid.NewGuid() };
+        context.Add(parent); context.SaveChanges();
+        var label = new LabelEntity { Id = Guid.NewGuid(), Code = "A" };
+        var model = new RelationModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
+        var labels = model.Objects<LabelEntity>().Key(x => x.Id);
+        var relation = model.Relation(parents, labels).Where((left, right) => left.Children.Any(x => x.Code == right.Code));
+        var runtime = model.Build().CreateRuntime(seed => { seed.Add(parents, [parent]); seed.Add(labels, [label]); });
+        var child = new CascadeChild { Id = Guid.NewGuid(), Parent = parent, Code = "A" };
+        parent.Children.Add(child); context.Add(child);
+
+        context.SaveChangesAndApply(runtime, new RelationUnitOfWorkMappings().Map(parents));
+
+        Assert.Equal([label], runtime.Related(relation, parent));
+    }
+
+    [Fact]
+    public void Collection_remove_emits_reset_from_deleted_dependent_fk_evidence()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var parent = new CascadeParent { Id = Guid.NewGuid() };
+        var child = new CascadeChild { Id = Guid.NewGuid(), Parent = parent, Code = "A" };
+        parent.Children.Add(child); context.Add(parent); context.SaveChanges();
+        var label = new LabelEntity { Id = Guid.NewGuid(), Code = "A" };
+        var model = new RelationModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
+        var labels = model.Objects<LabelEntity>().Key(x => x.Id);
+        var relation = model.Relation(parents, labels).Where((left, right) => left.Children.Any(x => x.Code == right.Code));
+        var runtime = model.Build().CreateRuntime(seed => { seed.Add(parents, [parent]); seed.Add(labels, [label]); });
+        Assert.Equal([label], runtime.Related(relation, parent));
+        parent.Children.Remove(child); context.Remove(child);
+
+        context.SaveChangesAndApply(runtime, new RelationUnitOfWorkMappings().Map(parents));
+
+        Assert.Empty(runtime.Related(relation, parent));
     }
 
     [Fact]
@@ -1255,6 +1293,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         public Guid Id { get; init; }
         public Guid ParentId { get; set; }
         public CascadeParent Parent { get; set; } = null!;
+        public string Code { get; set; } = "";
     }
 
     private sealed class OwnedOwner
