@@ -11,6 +11,28 @@ namespace Raffinert.Relations;
 /// </summary>
 public sealed partial class RelationRuntime
 {
+    [Flags]
+    internal enum ModelMemberUsageKind
+    {
+        None = 0, ObjectSetKey = 1, RelationDependency = 2, DerivedDependency = 4,
+        InvariantDependency = 8, ProjectedSelector = 16
+    }
+
+    internal bool OwnsObjectSet(IObjectSetDefinition definition) => _sets.ContainsKey(definition);
+    internal int GetDerivedId(IDerivedDefinition definition) => _derivedIds.TryGetValue(definition, out var id)
+        ? id : throw new ArgumentException("The derived definition belongs to another model.");
+    internal int GetInvariantId(IInvariantDefinition definition) => _invariantIds.TryGetValue(definition, out var id)
+        ? id : throw new ArgumentException("The invariant belongs to another model.");
+    internal ModelMemberUsageKind GetMemberUsage(IObjectSetDefinition set, MemberInfo member)
+    {
+        if (!_sets.ContainsKey(set)) throw new ArgumentException("The object set belongs to another model.");
+        var usage = set.KeyMembers.Contains(member) ? ModelMemberUsageKind.ObjectSetKey : ModelMemberUsageKind.None;
+        if (_relations.Keys.Any(x => x.Analysis.DependencyPaths.Any(p => p.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.RelationDependency;
+        if (_derivedStates.Keys.Any(x => x.Analysis.Dependencies.Any(d => d.Path.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.DerivedDependency;
+        if (_invariants.Keys.Any(x => x.Analysis.Dependencies.Any(d => d.Path.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.InvariantDependency;
+        if (_derivedStates.Keys.SelectMany(x => x.Inputs.OfType<ProjectedUpstreamDerivedInput>()).Any(x => x.SelectorPath.Segments.Any(s => s.Member == member))) usage |= ModelMemberUsageKind.ProjectedSelector;
+        return usage;
+    }
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> _relations;
     private readonly NavigationIndexRegistry _navigation;
