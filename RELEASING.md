@@ -8,13 +8,17 @@ Package publication is manual for the alpha series.
 - Before `1.0.0`, increment the minor version for deliberate public API breaks or substantial features.
 - Increment the patch version for backward-compatible fixes.
 - Use ordered prerelease labels such as `alpha.1`, `alpha.2`, `beta.1`, and `rc.1`.
-- Move approved entries from `PublicAPI.Unshipped.txt` to `PublicAPI.Shipped.txt` when publishing a version.
+- The first published version establishes each package's initial `PublicAPI.Shipped.txt` baseline.
+- After that baseline is established, approve new APIs in `PublicAPI.Unshipped.txt` until the next release.
+- Removing or changing a shipped API requires an explicit compatibility and versioning review; do not
+  silently rewrite the shipped baseline.
 - Record user-visible changes in `CHANGELOG.md` before tagging.
 
 ## Manual checklist
 
 1. Set the same package version in both package projects and update `CHANGELOG.md`.
-2. Review public API approval changes and move the release surface to the shipped baselines.
+2. Review public API approval changes and move the release surface to the shipped baselines. For the first
+   release, verify the complete approved surface establishes a non-empty initial shipped baseline.
 3. Run `dotnet restore Raffinert.Relations.sln`.
 4. Run the Release build, tests, formatting verification, and pack commands used by CI.
 5. Inspect both `.nupkg` files and `.snupkg` symbol packages, including target frameworks, README,

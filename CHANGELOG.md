@@ -6,6 +6,9 @@ patch versions remain backward-compatible bug fixes where practical.
 
 ## 0.1.0-alpha.1
 
+- Added strict, data-only `DurablePolicyWork` projection for durable repair and immediate-evaluation scheduling.
+- Corrected the binding transactional-outbox guidance, froze the initial shipped Public API baselines, and
+  strengthened release-contract preparation without publishing packages.
 - Added non-mutating prepared impact preview in core and EF Core, including an explicit transactional
   outbox workflow that can persist impact plans before runtime commit.
 - Added binding prepared impact plans whose later commit installs the exact planned runtime state without
