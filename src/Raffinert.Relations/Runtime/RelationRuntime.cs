@@ -470,6 +470,7 @@ public sealed partial class RelationRuntime
         try
         {
             ApplyForwardPatch((RuntimeForwardPatch)plan.ForwardPatch);
+            ThrowAfterForwardPatchApplyIfRequested();
             _version++;
             plan.Prepared.MarkCommitted(plan.PolicyActions);
             plan.MarkCommitted();

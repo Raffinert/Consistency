@@ -136,6 +136,61 @@ public sealed class PreparedDetailedCommitTests
         Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
     }
 
+    [Fact]
+    public void Commit_plan_install_failure_restores_preinstall_state_and_diagnostics()
+    {
+        var scenario = CreateScenario([]);
+        Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Value, scenario.Source));
+        scenario.Source.Value = 2;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Value, 1, 2)));
+        var plan = scenario.Runtime.PlanDetailed(prepared);
+        var diagnostics = scenario.Runtime.Diagnostics;
+        var version = scenario.Runtime.Version;
+        scenario.Runtime.FailAfterNextForwardPatchApplyForTesting();
+
+        Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(plan));
+
+        Assert.Equal(version, scenario.Runtime.Version);
+        Assert.Equal(diagnostics, scenario.Runtime.Diagnostics);
+        Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Value, scenario.Source));
+        Assert.False(plan.IsCommitted);
+        Assert.False(prepared.IsCommitted);
+    }
+
+    [Fact]
+    public void Binding_plan_retains_only_a_touched_forward_patch()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var unrelatedItems = model.Objects<OtherItem>().Key(item => item.Id);
+        var touchedRelation = model.Relation(sources, items)
+            .Where((source, item) => source.Value == item.Value);
+        model.Relation(sources, unrelatedItems).Where((source, item) => source.Value == item.Value);
+        model.Derived(sources).Using(touchedRelation).Compute((_, matches) => matches.Count);
+        var source = new Source { Value = 1 };
+        var item = new Item { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [source]);
+            seed.Add(items, [item]);
+        });
+        item.Value = 2;
+        var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
+            items, item, value => value.Value, 1, 2)));
+
+        var plan = runtime.PlanDetailed(prepared);
+        var scope = runtime.GetForwardPatchScopeCounts(plan);
+
+        Assert.Equal(0, scope.Sets);
+        Assert.Equal(1, scope.Relations);
+        Assert.Equal(1, scope.DependencyEntries);
+        Assert.DoesNotContain("Rollback", plan.ForwardPatch.GetType().Name, StringComparison.Ordinal);
+        Assert.DoesNotContain(plan.ForwardPatch.GetType().GetProperties(),
+            property => property.PropertyType.Name.Contains("Snapshot", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(RuntimeImpactDetailLevel.Summary)]
     [InlineData(RuntimeImpactDetailLevel.Causal)]
@@ -245,13 +300,17 @@ public sealed class PreparedDetailedCommitTests
         var source = new Source { Value = 1 };
         runtime.Add(set, source);
         Assert.Equal(1, runtime.Get(value, source));
-        return new Scenario(runtime, set, source);
+        return new Scenario(runtime, set, source, value);
     }
 
     private static void AssertEquivalent(RuntimeApplyResult expected, RuntimeApplyResult actual)
         => RuntimeApplyResultAssert.Equivalent(expected, actual);
 
-    private sealed record Scenario(RelationRuntime Runtime, ObjectSet<Source> Set, Source Source);
+    private sealed record Scenario(
+        RelationRuntime Runtime,
+        ObjectSet<Source> Set,
+        Source Source,
+        Derived<Source, int> Value);
 
     private sealed class Source
     {
@@ -259,5 +318,17 @@ public sealed class PreparedDetailedCommitTests
         public int Value { get; set; } = 1;
         public string? Note { get; set; }
         public List<object> Items { get; } = [];
+    }
+
+    private sealed class Item
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public int Value { get; set; }
+    }
+
+    private sealed class OtherItem
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public int Value { get; set; }
     }
 }

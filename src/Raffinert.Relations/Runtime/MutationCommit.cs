@@ -6,6 +6,7 @@ namespace Raffinert.Relations;
 
 public sealed partial class RelationRuntime
 {
+    private bool _failAfterNextForwardPatchApplyForTesting;
     /// <summary>
     /// Commits a prepared mutation to runtime-owned state without invoking application callbacks.
     /// </summary>
@@ -275,6 +276,24 @@ public sealed partial class RelationRuntime
         var patch = _dependencyGraph.CaptureState(
             impact, prepared.LifecycleMutations, prepared.Changes);
         return _dependencyGraph.GetCapturedStateEntryCount(patch);
+    }
+
+    internal void FailAfterNextForwardPatchApplyForTesting() =>
+        _failAfterNextForwardPatchApplyForTesting = true;
+
+    private void ThrowAfterForwardPatchApplyIfRequested()
+    {
+        if (!_failAfterNextForwardPatchApplyForTesting)
+            return;
+        _failAfterNextForwardPatchApplyForTesting = false;
+        throw new InvalidOperationException("Injected forward patch installation failure.");
+    }
+
+    internal (int Sets, int Relations, int DependencyEntries) GetForwardPatchScopeCounts(PreparedImpactPlan plan)
+    {
+        var patch = (RuntimeForwardPatch)plan.ForwardPatch;
+        return (patch.Sets.Count, patch.Relations.Count,
+            _dependencyGraph.GetCapturedStateEntryCount(patch.Dependencies));
     }
 
     /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
