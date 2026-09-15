@@ -48,9 +48,16 @@ public sealed class EntityFrameworkCoreSqliteTests
         var error = Assert.Throws<ConsistencyRuntimeSynchronizationException>(() =>
             context.SaveChangesAndApply(runtime, mappings));
 
-        Assert.True(error.DatabaseOperationSucceeded);
         Assert.Equal(0, error.RuntimeVersion);
         Assert.IsType<DeliberateRuntimeFailure>(error.InnerException);
+        Assert.Contains(
+            "database operation succeeded",
+            error.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "consistency runtime synchronization failed",
+            error.Message,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, context.Set<UniqueEntity>().Count());
         Assert.Equal(0, runtime.Version);
         Assert.False(runtime.Remove(objects, entity));
@@ -1223,7 +1230,6 @@ public sealed class EntityFrameworkCoreSqliteTests
 
         var error = Assert.Throws<ConsistencyRuntimeSynchronizationException>(() => context.SaveChanges());
 
-        Assert.True(error.DatabaseOperationSucceeded);
         Assert.Equal(1, runtime.Version);
         Assert.Equal(4, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
     }

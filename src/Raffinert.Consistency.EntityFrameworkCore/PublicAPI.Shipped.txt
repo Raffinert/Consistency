@@ -13,7 +13,6 @@ Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWorkMappings
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWorkMappings.Map<TEntity>(Raffinert.Consistency.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWorkMappings!
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWorkMappings.ConsistencyUnitOfWorkMappings() -> void
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyRuntimeSynchronizationException
-Raffinert.Consistency.EntityFrameworkCore.ConsistencyRuntimeSynchronizationException.DatabaseOperationSucceeded.get -> bool
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyRuntimeSynchronizationException.RuntimeVersion.get -> long
 static Raffinert.Consistency.EntityFrameworkCore.ChangeTrackerAdapter.ApplyTrackedChanges(this Raffinert.Consistency.ConsistencyRuntime! runtime, Microsoft.EntityFrameworkCore.DbContext! context) -> Raffinert.Consistency.ChangeImpact?
 static Raffinert.Consistency.EntityFrameworkCore.ChangeTrackerAdapter.CaptureUnitOfWork(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker! changeTracker, Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWorkMappings! mappings) -> Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnitOfWork!

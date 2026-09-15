@@ -7,16 +7,21 @@ namespace Raffinert.Consistency.EntityFrameworkCore;
 
 /// <summary>
 /// Indicates that the database operation succeeded but synchronizing the committed domain state into
-/// the relation runtime failed. The runtime retains its pre-commit state and must be reconciled or rebuilt.
+/// the consistency runtime failed. The runtime retains its pre-commit state and must be reconciled or rebuilt.
 /// </summary>
 public sealed class ConsistencyRuntimeSynchronizationException : Exception
 {
-    internal ConsistencyRuntimeSynchronizationException(long runtimeVersion, Exception innerException)
-        : base("The database operation succeeded, but relation runtime synchronization failed. " +
-               "Do not retry the database command; reconcile or rebuild the runtime from authoritative state.",
-            innerException) => RuntimeVersion = runtimeVersion;
+    internal ConsistencyRuntimeSynchronizationException(
+        long runtimeVersion,
+        Exception innerException)
+        : base(
+            "The database operation succeeded, but consistency runtime synchronization failed. " +
+            "Do not retry the database command; reconcile or rebuild the runtime from authoritative state.",
+            innerException)
+    {
+        RuntimeVersion = runtimeVersion;
+    }
 
-    public bool DatabaseOperationSucceeded => true;
     public long RuntimeVersion { get; }
 }
 
