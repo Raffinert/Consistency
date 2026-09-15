@@ -631,6 +631,7 @@ Raffinert.Consistency.ConsistencyScopeGap.RequirementKind.get -> Raffinert.Consi
 Raffinert.Consistency.ConsistencyScopeGap.RequirementKind.init -> void
 Raffinert.Consistency.ConsistencyScopeRequirementKind
 Raffinert.Consistency.ConsistencyScopeRequirementKind.ProjectedConsumerCoverage = 2 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
+Raffinert.Consistency.ConsistencyScopeRequirementKind.NavigationConsumerCoverage = 3 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
 Raffinert.Consistency.ConsistencyScopeRequirementKind.RelationSourceCoverage = 0 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
 Raffinert.Consistency.ConsistencyScopeRequirementKind.RelationTargetCoverage = 1 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
 Raffinert.Consistency.PlannedDerivedEvaluation

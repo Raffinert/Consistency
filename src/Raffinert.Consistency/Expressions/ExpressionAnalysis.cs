@@ -125,6 +125,27 @@ internal sealed record DependencyPathSegment(
     MemberInfo Member,
     Type ValueType);
 
+internal static class DependencyPathNavigation
+{
+    public static bool RequiresReverseOwnerCoverage(DependencyPath path) =>
+        path.Segments.Take(Math.Max(0, path.Segments.Count - 1)).Any(IsNavigation);
+
+    public static bool IsNavigation(DependencyPathSegment segment) =>
+        IsCollection(segment.Member) ||
+        (!segment.ValueType.IsValueType && segment.ValueType != typeof(string));
+
+    public static bool IsCollection(MemberInfo member)
+    {
+        var type = member switch
+        {
+            PropertyInfo property => property.PropertyType,
+            FieldInfo field => field.FieldType,
+            _ => typeof(object)
+        };
+        return type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
+    }
+}
+
 internal sealed class DependencyPath
 {
     public DependencyPath(int rootParameterIndex, Type rootType, IReadOnlyList<MemberInfo> members)

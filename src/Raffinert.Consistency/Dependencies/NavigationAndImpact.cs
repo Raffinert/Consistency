@@ -362,7 +362,7 @@ internal sealed class NavigationIndexRegistry
             for (var index = 0; index < path.Segments.Count - 1 && owners.Count > 0; index++)
             {
                 var segment = path.Segments[index];
-                if (!IsNavigation(segment))
+                if (!DependencyPathNavigation.IsNavigation(segment))
                 {
                     owners = owners
                         .Select(owner => ReadMember(segment.Member, owner))
@@ -518,7 +518,7 @@ internal sealed class NavigationIndexRegistry
             for (var index = changedIndex - 1; index >= 0; index--)
             {
                 var segment = path.Segments[index];
-                if (!IsNavigation(segment) || !_indexes.TryGetValue(segment.Member, out var navigation))
+                if (!DependencyPathNavigation.IsNavigation(segment) || !_indexes.TryGetValue(segment.Member, out var navigation))
                 {
                     candidates = [];
                     break;
@@ -543,26 +543,11 @@ internal sealed class NavigationIndexRegistry
         for (var index = 0; index < path.Segments.Count - 1; index++)
         {
             var segment = path.Segments[index];
-            if (IsNavigation(segment))
-                _indexes.TryAdd(segment.Member, IsCollection(segment.Member)
+            if (DependencyPathNavigation.IsNavigation(segment))
+                _indexes.TryAdd(segment.Member, DependencyPathNavigation.IsCollection(segment.Member)
                     ? new CollectionNavigationIndex(segment.Member)
                     : new NavigationIndex(segment.Member));
         }
-    }
-
-    private static bool IsNavigation(DependencyPathSegment segment) =>
-        IsCollection(segment.Member) ||
-        (!segment.ValueType.IsValueType && segment.ValueType != typeof(string));
-
-    private static bool IsCollection(MemberInfo member)
-    {
-        var type = member switch
-        {
-            PropertyInfo property => property.PropertyType,
-            FieldInfo field => field.FieldType,
-            _ => typeof(object)
-        };
-        return type != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
     }
 
     internal static object? ReadMember(MemberInfo member, object instance) =>

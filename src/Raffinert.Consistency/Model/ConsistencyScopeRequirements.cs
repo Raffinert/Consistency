@@ -1,10 +1,13 @@
+using Raffinert.Consistency.Expressions;
+
 namespace Raffinert.Consistency;
 
 internal enum ScopeRequirementReason
 {
     RelationSourceCoverage,
     RelationTargetCoverage,
-    ProjectedConsumerCoverage
+    ProjectedConsumerCoverage,
+    NavigationConsumerCoverage
 }
 
 internal sealed record ScopeRequirement(
@@ -26,6 +29,11 @@ internal static class ConsistencyScopeRequirementCompiler
         var visited = new HashSet<IDerivedDefinition>(ReferenceEqualityComparer.Instance);
         foreach (var upstream in definition.UpstreamDerived)
             AddDerived(upstream, requirements, visited);
+        AddNavigationRequirement(
+            definition.Analysis.Dependencies,
+            ExpressionParameterRole.InvariantSource,
+            definition.SourceSet,
+            requirements);
         return Order(requirements);
     }
 
@@ -56,6 +64,24 @@ internal static class ConsistencyScopeRequirementCompiler
                     break;
             }
         }
+        AddNavigationRequirement(
+            definition.Analysis.Dependencies,
+            ExpressionParameterRole.DerivedSource,
+            definition.SourceSet,
+            requirements);
+    }
+
+    private static void AddNavigationRequirement(
+        IEnumerable<TrackedExpressionDependency> dependencies,
+        ExpressionParameterRole role,
+        IObjectSetDefinition sourceSet,
+        HashSet<ScopeRequirement> requirements)
+    {
+        if (dependencies.Any(dependency => dependency.Role == role &&
+                DependencyPathNavigation.RequiresReverseOwnerCoverage(dependency.Path)))
+            requirements.Add(new ScopeRequirement(
+                sourceSet,
+                ScopeRequirementReason.NavigationConsumerCoverage));
     }
 
     private static IReadOnlyList<ScopeRequirement> Order(IEnumerable<ScopeRequirement> requirements) =>

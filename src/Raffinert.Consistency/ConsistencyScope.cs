@@ -29,7 +29,8 @@ public enum ConsistencyScopeRequirementKind
 {
     RelationSourceCoverage,
     RelationTargetCoverage,
-    ProjectedConsumerCoverage
+    ProjectedConsumerCoverage,
+    NavigationConsumerCoverage
 }
 
 /// <summary>
