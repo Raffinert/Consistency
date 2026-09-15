@@ -194,6 +194,16 @@ public sealed partial class RelationRuntime
             prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots));
     }
 
+    internal int CaptureDependencyPatchEntryCount(PreparedMutation prepared)
+    {
+        var impact = new ResolvedChangeImpact();
+        foreach (var change in prepared.Changes)
+            impact.MergeFrom(_impactResolver.Resolve(change));
+        var patch = _dependencyGraph.CaptureState(
+            impact, prepared.LifecycleMutations, prepared.Changes);
+        return _dependencyGraph.GetCapturedStateEntryCount(patch);
+    }
+
     /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
     public void Dispatch(PreparedMutation prepared)
     {

@@ -296,8 +296,8 @@ internal sealed class DependencyGraphRuntime
     public int GetCapturedStateEntryCount(object snapshot)
     {
         var state = (State)snapshot;
-        return state.Derived.Sum(pair => pair.Key.State.GetSourcesStateEntryCount(pair.Value.State)) +
-            state.Invariants.Sum(pair => pair.Key.State.GetSourcesStateEntryCount(pair.Value.State));
+        return state.Derived.Sum(pair => pair.Key.GetCapturedStateEntryCount(pair.Value.State)) +
+            state.Invariants.Sum(pair => pair.Key.GetCapturedStateEntryCount(pair.Value.State));
     }
 
     public DependencyPropagationResult ApplyChangeImpacts(
@@ -471,6 +471,9 @@ internal sealed class DependencyGraphRuntime
             DirtySources = state.DirtySources;
             ConservativeSources = state.ConservativeSources;
         }
+
+        public int GetCapturedStateEntryCount(object snapshot) =>
+            State.GetSourcesStateEntryCount(((NodeState)snapshot).RuntimeState);
 
         private sealed record NodeState(
             object RuntimeState,
@@ -659,6 +662,9 @@ internal sealed class DependencyGraphRuntime
             InvalidSources = state.InvalidSources;
             DirtySources = state.DirtySources;
         }
+
+        public int GetCapturedStateEntryCount(object snapshot) =>
+            State.GetSourcesStateEntryCount(((NodeState)snapshot).RuntimeState);
 
         private sealed record NodeState(
             object RuntimeState,
