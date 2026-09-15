@@ -103,6 +103,43 @@ public sealed class EndToEndDomainTests
         Assert.Equal([line], repairs);
     }
 
+    [Fact]
+    public void Ef_unit_of_work_exposes_precommit_invariant_violations()
+    {
+        var scenario = BuildScenario([]);
+        var line = new PurchaseLine
+        {
+            Id = Guid.NewGuid(), OrderNumber = "PO-guard", ItemNumber = "A", OrderedQuantity = 5m
+        };
+        var receipt = new GoodsReceipt
+        {
+            Id = Guid.NewGuid(), OrderNumber = "PO-guard", ItemNumber = "A", Quantity = 2m
+        };
+        using var context = new PurchasingContext();
+        context.AddRange(line, receipt);
+        context.SaveChanges();
+        var runtime = scenario.Model.CreateRuntime(seed =>
+        {
+            seed.Add(scenario.Lines, [line]);
+            seed.Add(scenario.Receipts, [receipt]);
+        });
+        Assert.True(runtime.Evaluate(scenario.QuantityInvariant, line));
+        var version = runtime.Version;
+
+        receipt.Quantity = 6m;
+        var mappings = new RelationUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+        var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+            PlannedInvariantEvaluationMode.Affected)!;
+
+        Assert.True(plan.HasInvariantViolations);
+        Assert.Equal(InvariantEvaluationState.Violated, Assert.Single(plan.InvariantEvaluations).State);
+        Assert.Equal(version, runtime.Version);
+        Assert.Equal(InvariantEvaluationState.Valid, runtime.GetState(scenario.QuantityInvariant, line));
+        Assert.Equal(2m, context.GoodsReceipts.AsNoTracking().Single().Quantity);
+    }
+
     private static Scenario BuildScenario(List<PurchaseLine> repairs)
     {
         var model = new RelationModelBuilder();
@@ -135,6 +172,7 @@ public sealed class EndToEndDomainTests
 
     private sealed class PurchasingContext : DbContext
     {
+        public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
         protected override void OnConfiguring(DbContextOptionsBuilder options) =>
             options.UseInMemoryDatabase($"purchasing-{Guid.NewGuid()}");
 
