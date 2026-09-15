@@ -115,7 +115,8 @@ internal static class ConsistencyCoordinator
     private static void ApplyMaterializations(DbContext context, RelationRuntime runtime,
         RelationEfCoreMappings mappings, PreparedImpactPlan plan)
     {
-        var applied = new Stack<(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry Entry, object? Value, bool Modified)>();
+        var applied = new Stack<(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry Entry,
+            System.Reflection.PropertyInfo Property, object Source, object? Value, bool Modified)>();
         try
         {
             foreach (var mapping in mappings.Materializations)
@@ -131,18 +132,21 @@ internal static class ConsistencyCoordinator
                     var comparer = property.Metadata.GetValueComparer();
                     if (comparer?.Equals(property.CurrentValue, evaluation.Value) ?? Equals(property.CurrentValue, evaluation.Value))
                         continue;
-                    applied.Push((property, property.CurrentValue, property.IsModified));
-                    property.CurrentValue = evaluation.Value;
+                    applied.Push((property, mapping.Property, evaluation.Source, property.CurrentValue, property.IsModified));
+                    mapping.Property.SetValue(evaluation.Source, evaluation.Value);
+                    property.IsModified = true;
                 }
             }
         }
-        catch
+        catch (Exception error)
         {
             while (applied.TryPop(out var write))
             {
-                write.Entry.CurrentValue = write.Value;
+                write.Property.SetValue(write.Source, write.Value);
                 write.Entry.IsModified = write.Modified;
             }
+            if (error is System.Reflection.TargetInvocationException { InnerException: { } inner })
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
         }
     }

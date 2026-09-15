@@ -830,6 +830,56 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(10, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
     }
 
+    [Fact]
+    public void Materialization_setter_failure_restores_prior_mirror_writes_before_sql()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var first = new ThrowingMirrorEntity { Id = Guid.NewGuid() };
+        var second = new ThrowingMirrorEntity { Id = Guid.NewGuid() };
+        context.AddRange(first, second); context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [first, second]));
+        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
+        first.Input = 1;
+        second.Input = 2;
+        second.ThrowOnFour = true;
+
+        Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime, mappings));
+
+        Assert.Equal(0, first.Mirror);
+        Assert.Equal(0, second.Mirror);
+        Assert.Equal(0, runtime.Version);
+        var persisted = database.CreateContext().Set<ThrowingMirrorEntity>().AsNoTracking().ToArray();
+        Assert.All(persisted, x => { Assert.Equal(0, x.Input); Assert.Equal(0, x.Mirror); });
+    }
+
+    [Fact]
+    public void Invariant_exception_prevents_sql_mirror_write_and_runtime_commit()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        context.Add(entity); context.SaveChanges();
+        var gate = new ThrowingInvariantGate();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => gate.Check(value))
+            .AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
+        entity.Input = 2;
+        gate.Throw = true;
+
+        Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime, mappings));
+
+        Assert.Equal(2, entity.Mirror);
+        Assert.Equal(0, runtime.Version);
+        var persisted = database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single();
+        Assert.Equal(1, persisted.Input);
+        Assert.Equal(2, persisted.Mirror);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -865,6 +915,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             model.Entity<ConcurrencyEntity>().Property(entity => entity.Version).IsConcurrencyToken();
             model.Entity<OutboxRecord>().HasIndex(entity => entity.Payload).IsUnique();
             model.Entity<MirrorEntity>();
+            model.Entity<ThrowingMirrorEntity>().Ignore(x => x.ThrowOnFour);
             model.Entity<CascadeChild>().HasOne(entity => entity.Parent).WithMany(entity => entity.Children)
                 .HasForeignKey(entity => entity.ParentId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<OwnedOwner>().OwnsOne(entity => entity.Settings);
@@ -919,6 +970,27 @@ public sealed class EntityFrameworkCoreSqliteTests
         public Guid Id { get; init; }
         public int Input { get; set; }
         public int Mirror { get; set; }
+    }
+
+    private sealed class ThrowingMirrorEntity
+    {
+        private int _mirror;
+        public Guid Id { get; init; }
+        public int Input { get; set; }
+        public bool ThrowOnFour { get; set; }
+        public int Mirror
+        {
+            get => _mirror;
+            set => _mirror = ThrowOnFour && value == 4
+                ? throw new InvalidOperationException("Mirror setter failure.")
+                : value;
+        }
+    }
+
+    private sealed class ThrowingInvariantGate
+    {
+        public bool Throw { get; set; }
+        public bool Check(int value) => Throw ? throw new InvalidOperationException("Invariant failure.") : value >= 0;
     }
 
     private sealed class CascadeParent
