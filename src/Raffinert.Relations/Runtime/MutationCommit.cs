@@ -444,32 +444,27 @@ public sealed partial class RelationRuntime
                         OriginIds = MapTriggerOrigins(input.Relation, group.ToArray(), origins)
                     });
             }
-            foreach (var input in derivedDefinition.Inputs.OfType<UpstreamDerivedInput>())
-                if (input.Project(source) is { } upstreamSource &&
-                    commit.DependencyPropagation.DerivedImpacts.Any(impact =>
-                        ReferenceEquals(impact.Definition, input.Upstream) &&
-                        impact.Sources.Contains(upstreamSource, ReferenceEqualityComparer.Instance)))
-                    causes.Add(new UpstreamDerivedCause(
-                        _derivedIds[input.Upstream], GetPrecision(input.Upstream, upstreamSource, commit)
-                            ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
-                    {
-                        DefinitionKey = input.Upstream.DefinitionKey,
-                        UpstreamImpactId = FindImpactId(impactIds, input.Upstream, upstreamSource)
-                    });
+            foreach (var evidence in commit.DependencyPropagation.UpstreamEvidence.Where(value =>
+                         ReferenceEquals(value.Downstream, derivedDefinition) &&
+                         ReferenceEquals(value.DownstreamSource, source)))
+                causes.Add(new UpstreamDerivedCause(
+                    _derivedIds[evidence.Upstream], evidence.Precision)
+                {
+                    DefinitionKey = evidence.Upstream.DefinitionKey,
+                    UpstreamImpactId = FindImpactId(impactIds, evidence.Upstream, evidence.UpstreamSource)
+                });
         }
         else if (definition is IInvariantDefinition invariantDefinition)
         {
-            foreach (var upstream in invariantDefinition.UpstreamDerived)
-                if (commit.DependencyPropagation.DerivedImpacts.Any(impact =>
-                        ReferenceEquals(impact.Definition, upstream) &&
-                        impact.Sources.Contains(source, ReferenceEqualityComparer.Instance)))
-                    causes.Add(new UpstreamDerivedCause(
-                        _derivedIds[upstream], GetPrecision(upstream, source, commit)
-                            ? ImpactCausePrecision.Conservative : ImpactCausePrecision.Exact)
-                    {
-                        DefinitionKey = upstream.DefinitionKey,
-                        UpstreamImpactId = FindImpactId(impactIds, upstream, source)
-                    });
+            foreach (var evidence in commit.DependencyPropagation.InvariantUpstreamEvidence.Where(value =>
+                         ReferenceEquals(value.Invariant, invariantDefinition) &&
+                         ReferenceEquals(value.InvariantSource, source)))
+                causes.Add(new UpstreamDerivedCause(
+                    _derivedIds[evidence.Upstream], evidence.Precision)
+                {
+                    DefinitionKey = evidence.Upstream.DefinitionKey,
+                    UpstreamImpactId = FindImpactId(impactIds, evidence.Upstream, evidence.UpstreamSource)
+                });
             var inheritedSeverity = commit.DependencyPropagation.DerivedImpacts
                 .Where(impact => invariantDefinition.UpstreamDerived.Contains(impact.Definition) &&
                     impact.Sources.Contains(source, ReferenceEqualityComparer.Instance))
@@ -556,13 +551,6 @@ public sealed partial class RelationRuntime
             System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Definition),
             System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value.Source));
     }
-
-    private static bool GetPrecision(
-        IDerivedDefinition definition,
-        object source,
-        RuntimeCommitResult commit) => commit.DependencyPropagation.DerivedImpacts.Any(impact =>
-            ReferenceEquals(impact.Definition, definition) &&
-            impact.ConservativeSources.Contains(source, ReferenceEqualityComparer.Instance));
 
     private void CommitAdd(
         ObjectAdded mutation,

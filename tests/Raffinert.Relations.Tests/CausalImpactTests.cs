@@ -301,6 +301,62 @@ public sealed class CausalImpactTests
     }
 
     [Fact]
+    public void Conservative_upstream_precision_remains_conservative_through_two_derived_levels()
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var items = model.Objects<Item>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
+            .Compute((_, matches) => matches.Count).Named("count");
+        var doubled = model.Derived(sources).Using(count)
+            .Compute((_, value) => value * 2).Named("doubled");
+        var final = model.Derived(sources).Using(doubled)
+            .Compute((_, value) => value + 1).Named("final");
+        var source = new Source { Code = "A" };
+        var item = new Item { Code = "A" };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, [source]);
+            seed.Add(items, [item]);
+        });
+        _ = runtime.Get(final, source);
+        item.Code = "B";
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            items, item, value => value.Code, "A", "B")), RuntimeImpactDetailLevel.Causal).Result;
+
+        var doubledCause = Assert.IsType<UpstreamDerivedCause>(Assert.Single(
+            result.DerivedImpacts.Single(value => value.DefinitionKey == "doubled").Sources.Single().Causes));
+        var finalCause = Assert.IsType<UpstreamDerivedCause>(Assert.Single(
+            result.DerivedImpacts.Single(value => value.DefinitionKey == "final").Sources.Single().Causes));
+        Assert.Equal(ImpactCausePrecision.Conservative, doubledCause.Precision);
+        Assert.Equal(ImpactCausePrecision.Conservative, finalCause.Precision);
+    }
+
+    [Fact]
+    public void Invariant_upstream_cause_links_to_the_actual_upstream_impact()
+    {
+        var model = new RelationModelBuilder();
+        var set = model.Objects<Source>().Key(source => source.Id);
+        var quantity = model.Derived(set).Compute(source => source.Quantity).Named("quantity");
+        var reserved = model.Derived(set).Compute(source => source.Reserved).Named("reserved");
+        model.Invariant(set).Using(quantity, reserved)
+            .Must((_, available, used) => available >= used).Named("capacity");
+        var source = new Source { Quantity = 2, Reserved = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
+        source.Quantity = 3;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            set, source, value => value.Quantity, 2, 3)), RuntimeImpactDetailLevel.Causal).Result;
+
+        var cause = Assert.IsType<UpstreamDerivedCause>(Assert.Single(
+            result.InvariantImpacts.Single().Sources.Single().Causes));
+        Assert.Equal("quantity", cause.DefinitionKey);
+        Assert.Equal(result.DerivedImpacts.Single().Sources.Single().ImpactId, cause.UpstreamImpactId);
+    }
+
+    [Fact]
     public void Direct_cause_keeps_local_dirty_severity_when_upstream_makes_final_invalid()
     {
         var model = new RelationModelBuilder();

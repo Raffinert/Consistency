@@ -21,9 +21,25 @@ internal sealed record InvariantImpactSnapshot(
     DependencyImpactKind Severity,
     IReadOnlyCollection<object> Sources);
 
+internal sealed record UpstreamPropagationEvidence(
+    IDerivedDefinition Downstream,
+    object DownstreamSource,
+    IDerivedDefinition Upstream,
+    object UpstreamSource,
+    ImpactCausePrecision Precision);
+
+internal sealed record InvariantUpstreamEvidence(
+    IInvariantDefinition Invariant,
+    object InvariantSource,
+    IDerivedDefinition Upstream,
+    object UpstreamSource,
+    ImpactCausePrecision Precision);
+
 internal sealed record DependencyPropagationResult(
     IReadOnlyList<DerivedImpactSnapshot> DerivedImpacts,
-    IReadOnlyList<InvariantImpactSnapshot> InvariantImpacts);
+    IReadOnlyList<InvariantImpactSnapshot> InvariantImpacts,
+    IReadOnlyList<UpstreamPropagationEvidence> UpstreamEvidence,
+    IReadOnlyList<InvariantUpstreamEvidence> InvariantUpstreamEvidence);
 
 /// <summary>
 /// Propagates source-scoped dependency impacts after relation state has been updated. This is a
@@ -207,6 +223,8 @@ internal sealed class DependencyGraphRuntime
         RuntimePolicyActions policyActions,
         bool captureCausalEvidence)
     {
+        List<UpstreamPropagationEvidence>? upstreamEvidence = captureCausalEvidence ? [] : null;
+        List<InvariantUpstreamEvidence>? invariantUpstreamEvidence = captureCausalEvidence ? [] : null;
         var currentDerived = new HashSet<DerivedNode>(Candidates(changes, _derivedByMember));
         foreach (var relation in relationImpacts.Keys)
             if (_derivedByRelation.TryGetValue(relation, out var nodes))
@@ -257,7 +275,7 @@ internal sealed class DependencyGraphRuntime
                 relationImpact,
                 changes);
             if (_upstreamsByDerived.TryGetValue(node, out var upstreams))
-                node.ApplyInherited(upstreams, _projections);
+                node.ApplyInherited(upstreams, _projections, upstreamEvidence);
         }
 
         var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
@@ -270,7 +288,7 @@ internal sealed class DependencyGraphRuntime
         {
             if (!currentInvariants.Contains(node))
                 continue;
-            node.ApplyInherited(policyActions);
+            node.ApplyInherited(policyActions, invariantUpstreamEvidence);
             var invariantRoots = ResolveRoots(
                 node.Definition.SourceSet,
                 node.SourceDependencies,
@@ -280,7 +298,11 @@ internal sealed class DependencyGraphRuntime
         }
         _previousDerived = currentDerived;
         _previousInvariants = currentInvariants;
-        return new DependencyPropagationResult(GetDerivedImpacts(), GetInvariantImpacts());
+        return new DependencyPropagationResult(
+            GetDerivedImpacts(),
+            GetInvariantImpacts(),
+            upstreamEvidence ?? [],
+            invariantUpstreamEvidence ?? []);
     }
 
     private static IEnumerable<TNode> Candidates<TNode>(
@@ -457,14 +479,32 @@ internal sealed class DependencyGraphRuntime
 
         public void ApplyInherited(
             IEnumerable<(UpstreamDerivedInput Input, DerivedNode Node)> upstreams,
-            ProjectionIndexRegistry projections)
+            ProjectionIndexRegistry projections,
+            List<UpstreamPropagationEvidence>? evidence)
         {
-            var inheritedInvalid = NewSet(upstreams.SelectMany(upstream =>
-                Map(upstream.Input, upstream.Node.InvalidSources, projections)));
-            var inheritedDirty = NewSet(upstreams.SelectMany(upstream =>
-                Map(upstream.Input, upstream.Node.DirtySources, projections)));
-            var inheritedConservative = NewSet(upstreams.SelectMany(upstream =>
-                Map(upstream.Input, upstream.Node.ConservativeSources, projections)));
+            var inheritedInvalid = NewSet();
+            var inheritedDirty = NewSet();
+            var inheritedConservative = NewSet();
+            foreach (var upstream in upstreams)
+            {
+                inheritedInvalid.UnionWith(Map(upstream.Input, upstream.Node.InvalidSources, projections));
+                inheritedDirty.UnionWith(Map(upstream.Input, upstream.Node.DirtySources, projections));
+                inheritedConservative.UnionWith(
+                    Map(upstream.Input, upstream.Node.ConservativeSources, projections));
+                if (evidence is null)
+                    continue;
+                foreach (var upstreamSource in upstream.Node.InvalidSources.Concat(upstream.Node.DirtySources)
+                             .Distinct(ReferenceEqualityComparer.Instance))
+                    foreach (var downstreamSource in Map(upstream.Input, NewSet([upstreamSource]), projections))
+                        evidence.Add(new UpstreamPropagationEvidence(
+                            Definition,
+                            downstreamSource,
+                            upstream.Node.Definition,
+                            upstreamSource,
+                            upstream.Node.ConservativeSources.Contains(upstreamSource)
+                                ? ImpactCausePrecision.Conservative
+                                : ImpactCausePrecision.Exact));
+            }
             inheritedDirty.ExceptWith(inheritedInvalid);
             var newInvalid = inheritedInvalid.Except(InvalidSources, ReferenceEqualityComparer.Instance).ToArray();
             var newDirty = inheritedDirty.Except(DirtySources, ReferenceEqualityComparer.Instance)
@@ -542,8 +582,22 @@ internal sealed class DependencyGraphRuntime
             HashSet<object> InvalidSources,
             HashSet<object> DirtySources);
 
-        public void ApplyInherited(RuntimePolicyActions policyActions)
+        public void ApplyInherited(
+            RuntimePolicyActions policyActions,
+            List<InvariantUpstreamEvidence>? evidence)
         {
+            if (evidence is not null)
+                foreach (var upstream in _derived)
+                    foreach (var source in upstream.InvalidSources.Concat(upstream.DirtySources)
+                                 .Distinct(ReferenceEqualityComparer.Instance))
+                        evidence.Add(new InvariantUpstreamEvidence(
+                            Definition,
+                            source,
+                            upstream.Definition,
+                            source,
+                            upstream.ConservativeSources.Contains(source)
+                                ? ImpactCausePrecision.Conservative
+                                : ImpactCausePrecision.Exact));
             InvalidSources = NewSet(_derived.SelectMany(node => node.InvalidSources));
             DirtySources = NewSet(_derived.SelectMany(node => node.DirtySources));
             DirtySources.ExceptWith(InvalidSources);
