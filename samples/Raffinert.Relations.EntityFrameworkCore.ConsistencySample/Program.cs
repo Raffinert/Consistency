@@ -11,7 +11,10 @@ context.Database.EnsureCreated();
 
 var line = new PurchaseOrderLine
 {
-    Id = Guid.NewGuid(), OrderedQuantity = 10, ReceivedQuantity = 2, AvailableQuantity = 8
+    Id = Guid.NewGuid(),
+    OrderedQuantity = 10,
+    ReceivedQuantity = 2,
+    AvailableQuantity = 8
 };
 context.Add(line);
 context.SaveChanges();

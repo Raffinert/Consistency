@@ -35,7 +35,11 @@ public sealed class RelationConsistencySaveChangesInterceptor(
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData) => Remove(eventData.Context);
     public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData,
-        CancellationToken cancellationToken = default) { Remove(eventData.Context); return Task.CompletedTask; }
+        CancellationToken cancellationToken = default)
+    {
+        Remove(eventData.Context);
+        return Task.CompletedTask;
+    }
 
     private void Prepare(DbContext? context)
     {
