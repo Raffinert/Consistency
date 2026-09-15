@@ -220,29 +220,32 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var context = database.CreateContext();
         var model = new RelationModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
-        model.Derived(objects).Compute(entity => entity.Code).Named("code");
-        var runtime = model.Build().CreateRuntime();
+        var code = model.Derived(objects).Compute(entity => entity.Code).Named("code");
+        model.Invariant(objects).Using(code).Must((_, value) => value == "valid")
+            .ScheduleRepairWith(_ => { }).Named("repair");
+        var compiled = model.Build();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
-        var first = new GeneratedEntity { Code = "first" };
-        var second = new GeneratedEntity { Code = "second" };
+        var first = new GeneratedEntity { Code = "valid" };
+        var second = new GeneratedEntity { Code = "valid" };
         context.AddRange(first, second);
-        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        RelationRuntime runtime;
+        RelationUnitOfWork unit;
 
         using (var transaction = context.Database.BeginTransaction())
         {
             context.SaveChanges();
             Assert.NotEqual(first.Id, second.Id);
+            runtime = compiled.CreateRuntime(seed => seed.Add(objects, [first, second]));
+            first.Code = "invalid";
+            second.Code = "invalid";
+            unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
             unit.Prepare(runtime);
             var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-            Assert.Equal(2, plan!.Result.MutationOrigins.Count);
-            Assert.All(plan.Result.MutationOrigins, origin =>
+            var durableWork = plan!.Result.GetDurablePolicyWork();
+            Assert.Equal(2, durableWork.RepairRequests.Count);
+            context.Outbox.AddRange(durableWork.RepairRequests.Select(request => new OutboxRecord
             {
-                Assert.True(origin.SourceIdentity!.IsDurable);
-                Assert.NotEqual("0", origin.SourceIdentity.DurableIdentity!.KeyParts.Single().Value);
-            });
-            context.Outbox.AddRange(plan.Result.MutationOrigins.Select(origin => new OutboxRecord
-            {
-                Payload = $"added:{origin.SourceIdentity!.DurableIdentity!.KeyParts.Single().Value}"
+                Payload = CreateOutboxPayload(request)
             }));
             context.SaveChanges();
             transaction.Commit();
@@ -252,7 +255,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.True(runtime.Remove(objects, first));
         Assert.True(runtime.Remove(objects, second));
         Assert.Equal(
-            [$"added:{first.Id}", $"added:{second.Id}"],
+            [$"repair:{first.Id}", $"repair:{second.Id}"],
             context.Outbox.OrderBy(row => row.Id).Select(row => row.Payload).ToArray());
     }
 
@@ -391,7 +394,9 @@ public sealed class EntityFrameworkCoreSqliteTests
         context.SaveChanges();
         var model = new RelationModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
-        model.Derived(objects).Compute(value => value.Code).Named("code");
+        var code = model.Derived(objects).Compute(value => value.Code).Named("code");
+        model.Invariant(objects).Using(code).Must((_, value) => value == "before")
+            .ScheduleRepairWith(_ => { }).Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
@@ -403,9 +408,10 @@ public sealed class EntityFrameworkCoreSqliteTests
         {
             context.SaveChanges();
             plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
+            var durableWork = plan.Result.GetDurablePolicyWork();
             context.Outbox.Add(new OutboxRecord
             {
-                Payload = CreateOutboxPayload(plan.Result)
+                Payload = CreateOutboxPayload(durableWork.RepairRequests.Single())
             });
             context.SaveChanges();
             transaction.Commit();
@@ -414,7 +420,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         unit.Dispatch(runtime);
 
         Assert.Equal(1, runtime.Version);
-        Assert.Equal($"code:{entity.Id:D}", context.Outbox.Single().Payload);
+        Assert.Equal($"repair:{entity.Id:D}", context.Outbox.Single().Payload);
     }
 
     [Fact]
@@ -485,7 +491,7 @@ public sealed class EntityFrameworkCoreSqliteTests
                 dispatchCount++;
                 if (failDispatch)
                     throw new DeliberateRuntimeFailure();
-            });
+            }).Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
@@ -496,7 +502,11 @@ public sealed class EntityFrameworkCoreSqliteTests
         {
             context.SaveChanges();
             var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
-            context.Outbox.Add(new OutboxRecord { Payload = CreateOutboxPayload(plan.Result) });
+            var durableWork = plan.Result.GetDurablePolicyWork();
+            context.Outbox.Add(new OutboxRecord
+            {
+                Payload = CreateOutboxPayload(durableWork.RepairRequests.Single())
+            });
             context.SaveChanges();
             transaction.Commit();
         }
@@ -508,7 +518,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using (var verification = database.CreateContext())
         {
             Assert.Equal("after", verification.Set<UniqueEntity>().Single().Code);
-            Assert.Equal($"code:{entity.Id:D}", verification.Outbox.Single().Payload);
+            Assert.Equal($"repair:{entity.Id:D}", verification.Outbox.Single().Payload);
         }
 
         failDispatch = false;
@@ -519,12 +529,44 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Single(context.Outbox);
     }
 
-    private static string CreateOutboxPayload(RuntimeApplyResult result)
+    private static string CreateOutboxPayload(DurableRepairRequestInfo request)
     {
-        var impact = result.DerivedImpacts.Single();
-        var identity = impact.Sources.Single().SourceIdentity?.DurableIdentity
-            ?? throw new InvalidOperationException("Outbox impact source must have a durable identity.");
-        return $"{impact.DefinitionKey}:{identity.KeyParts.Single().Value}";
+        return $"{request.DefinitionKey}:{request.Source.KeyParts.Single().Value}";
+    }
+
+    [Fact]
+    public void Nondurable_policy_work_rolls_back_business_transaction_before_outbox_durability()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
+        context.Add(entity);
+        context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
+        var code = model.Derived(objects).Compute(value => value.Code).Named("code");
+        model.Invariant(objects).Using(code).Must((_, value) => value == "before")
+            .ScheduleRepairWith(_ => { });
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        entity.Code = "after";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
+
+            Assert.Throws<InvalidOperationException>(() => plan.Result.GetDurablePolicyWork());
+            Assert.Empty(context.ChangeTracker.Entries<OutboxRecord>());
+            transaction.Rollback();
+        }
+
+        Assert.Equal(0, runtime.Version);
+        using var verification = database.CreateContext();
+        Assert.Equal("before", verification.Set<UniqueEntity>().Single().Code);
+        Assert.Empty(verification.Outbox);
     }
 
     [Fact]
