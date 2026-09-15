@@ -37,7 +37,7 @@ public static class RelationConsistencyDbContextExtensions
         int result;
         try { result = context.SaveChanges(); }
         catch { throw; }
-        Complete(runtime, pending);
+        ConsistencyCoordinator.Complete(runtime, pending);
         return result;
     }
 
@@ -47,22 +47,22 @@ public static class RelationConsistencyDbContextExtensions
     {
         var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
         var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        Complete(runtime, pending);
+        ConsistencyCoordinator.Complete(runtime, pending);
         return result;
     }
 
-    private static void Complete(RelationRuntime runtime, PendingConsistencySave pending)
-    {
-        try { pending.Unit.Commit(runtime); }
-        catch (Exception error) { throw new RelationRuntimeSynchronizationException(runtime.Version, error); }
-        pending.Unit.Dispatch(runtime);
-    }
 }
 
 internal sealed record PendingConsistencySave(RelationUnitOfWork Unit, PreparedImpactPlan? Plan);
 
 internal static class ConsistencyCoordinator
 {
+    public static void Complete(RelationRuntime runtime, PendingConsistencySave pending)
+    {
+        try { pending.Unit.Commit(runtime); }
+        catch (Exception error) { throw new RelationRuntimeSynchronizationException(runtime.Version, error); }
+        pending.Unit.Dispatch(runtime);
+    }
     public static PendingConsistencySave Prepare(DbContext context, RelationRuntime runtime,
         RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions options)
     {
