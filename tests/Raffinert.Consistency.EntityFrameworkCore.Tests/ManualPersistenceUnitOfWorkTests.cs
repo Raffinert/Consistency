@@ -152,6 +152,36 @@ public sealed class ManualPersistenceUnitOfWorkTests
         Assert.Equal(1, setup.Runtime.Version);
     }
 
+    [Fact]
+    public void Manual_dispatch_failure_remains_resumable_after_database_and_runtime_commit()
+    {
+        using var database = new ManualDatabase(); using var context = database.CreateContext();
+        var parent = SeedParent(context);
+        var attempts = 0;
+        var model = new ConsistencyModelBuilder(); var parents = model.Objects<Parent>().Key(x => x.Id);
+        var value = model.Derived(parents).Compute(x => x.Touch);
+        var valid = model.Invariant(parents).Using(value).Must((_, current) => current >= 0);
+        model.Invariant(parents).Using(value).Must((_, current) => current == 0)
+            .ScheduleRepairWith(_ =>
+            {
+                attempts++;
+                if (attempts == 1) throw new DispatchFailure();
+            });
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(parents, [parent]));
+        parent.Touch = 1;
+        var work = context.CaptureConsistencyUnitOfWork(runtime,
+            new ConsistencyEfCoreMappings().Map(parents).Enforce(valid));
+        _ = work.PrepareAndPlan();
+        context.SaveChanges();
+        _ = work.CommitAfterDatabaseCommit();
+
+        Assert.Throws<DispatchFailure>(() => work.Dispatch());
+        Assert.Equal(1, runtime.Version);
+        work.Dispatch();
+        Assert.Equal(2, attempts);
+        Assert.Throws<InvalidOperationException>(() => work.Dispatch());
+    }
+
     private static Parent SeedParent(ManualContext context)
     {
         var parent = new Parent(); context.Add(parent); context.SaveChanges(); return parent;
@@ -203,4 +233,5 @@ public sealed class ManualPersistenceUnitOfWorkTests
 
     private sealed class Parent { public int Id { get; set; } public int Mirror { get; set; } public int Touch { get; set; } }
     private sealed class GeneratedItem { public int Id { get; set; } public int ParentId { get; set; } public int Quantity { get; set; } }
+    private sealed class DispatchFailure : Exception;
 }
