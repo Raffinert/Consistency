@@ -4,6 +4,20 @@ Baseline: `ccea9fde5a5e003decd1b82af9e8c9db93294020`
 
 Tasks: **116–122**
 
+Status: **Completed 2026-09-15**
+
+Completion evidence:
+
+- Rename commits: `e183b25`, `9add42f`, `cc3c7e3`, `72e48d7`, `30af70b`, and `e54fb6e`.
+- Local Release build completed with zero warnings and errors; core tests passed 282/282 on both .NET 8
+  and .NET 10, and EF Core tests passed 76/76 on .NET 10.
+- Both renamed samples, formatting verification, package validation, and all three packed-package consumers passed.
+- GitHub repository renamed to `Raffinert/Consistency`; origin and package metadata use the new URL.
+- Post-rename normal CI run [34991923054](https://github.com/Raffinert/Consistency/actions/runs/34991923054)
+  and release-candidate run [34992459403](https://github.com/Raffinert/Consistency/actions/runs/34992459403)
+  completed successfully for `e54fb6e098cf03fe3900c02a9ee5629399b42d75`.
+- No NuGet package, tag, or GitHub Release was published or created.
+
 This plan supersedes `docs/codex-plan-rename-to-raffinert-consistency.md`.
 
 It is written for a weaker coding agent. Follow it mechanically. This is a product/package/namespace rename plus a small set of explicitly listed product-level type renames. It is **not** permission to rename every symbol containing the word `Relation`.

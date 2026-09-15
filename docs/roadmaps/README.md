@@ -1,6 +1,6 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 116–122 — rename `Raffinert.Relations` to `Raffinert.Consistency` v2](../codex-plan-rename-to-raffinert-consistency-v2.md)
+- Completed product/package/namespace rename with local and remote release proof: [Tasks 116–122 — `Raffinert.Consistency` rename v2](../codex-plan-rename-to-raffinert-consistency-v2.md)
 - Superseded rename draft that unnecessarily required NuGet publication preflight: [Tasks 116–122 — original rename plan](../codex-plan-rename-to-raffinert-consistency.md)
 - Implemented EF Core consistency continuation with full integration proof green at `a072685fc087fc52382a04ae804cf3000f6619f3`; superseded by the product rename before formal closeout: [Tasks 109–115](../codex-plan-ef-core-consistency-continuation-v2.md)
 - Partially implemented EF Core consistency plan superseded by the continuation after Task 100 landed with proof gaps: [Tasks 100–108](../codex-plan-ef-core-consistency-guard-and-materialization.md)
