@@ -230,6 +230,15 @@ public sealed partial class RelationRuntime
         return state.GetTouchedStateEntryCount(patch);
     }
 
+    internal int CaptureNavigationPatchEntryCount<T>(ObjectSet<T> set, T root) where T : class
+    {
+        var patch = _navigation.CaptureTouchedState([(set.Definition, root)], []);
+        return _navigation.GetTouchedStateEntryCount(patch);
+    }
+
+    internal IReadOnlyCollection<object> GetNavigationOwners(MemberInfo member, object target) =>
+        _navigation.GetOwners(member, target);
+
     public TValue Get<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
         where TSource : class
     {

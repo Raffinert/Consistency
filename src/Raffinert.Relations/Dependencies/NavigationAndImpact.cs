@@ -391,6 +391,9 @@ internal sealed class NavigationIndexRegistry
 
     public bool IsIndexedNavigation(MemberInfo member) => _indexes.ContainsKey(member);
 
+    internal IReadOnlyCollection<object> GetOwners(MemberInfo member, object target) =>
+        _indexes.TryGetValue(member, out var index) ? index.GetOwners(target) : [];
+
     public void RemoveRoot(IObjectSetDefinition set, object root)
     {
         if (!_registrations[set].Remove(root, out var memberships))
