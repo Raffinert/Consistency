@@ -16,6 +16,66 @@ public sealed class ConsistencyScopeRequirementTests
     }
 
     [Fact]
+    public void Nested_navigation_requires_consumer_coverage_but_terminal_reference_does_not()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(x => x.Id);
+        var scalar = model.Derived(sources).Compute(x => x.Value);
+        var terminal = model.Derived(sources).Compute(x => x.Parent);
+        var nested = model.Derived(sources).Compute(x => x.Parent!.Value);
+        var twoHop = model.Derived(sources).Compute(x => x.Parent!.Parent!.Value);
+        var runtime = model.Build().CreateRuntime();
+
+        Assert.Empty(runtime.GetScopeRequirements(scalar.Definition));
+        Assert.Empty(runtime.GetScopeRequirements(terminal.Definition));
+        Assert.Equal([(sources.Definition.Id, ScopeRequirementReason.NavigationConsumerCoverage)],
+            Shape(runtime.GetScopeRequirements(nested.Definition)));
+        Assert.Equal([(sources.Definition.Id, ScopeRequirementReason.NavigationConsumerCoverage)],
+            Shape(runtime.GetScopeRequirements(twoHop.Definition)));
+    }
+
+    [Fact]
+    public void Value_object_path_requires_no_navigation_coverage()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(x => x.Id);
+        var nested = model.Derived(sources).Compute(x => x.Address.PostCode);
+        var runtime = model.Build().CreateRuntime();
+
+        Assert.Empty(runtime.GetScopeRequirements(nested.Definition));
+    }
+
+    [Fact]
+    public void Navigation_requirement_composes_and_invariant_source_navigation_is_included()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(x => x.Id);
+        var nested = model.Derived(sources).Compute(x => x.Parent!.Value);
+        var composed = model.Derived(sources).Using(nested).Compute((_, value) => value + 1);
+        var invariant = model.Invariant(sources).Using(composed)
+            .Must((source, value) => value <= source.Parent!.Value);
+        var runtime = model.Build().CreateRuntime();
+
+        var expected = new[] { (sources.Definition.Id, ScopeRequirementReason.NavigationConsumerCoverage) };
+        Assert.Equal(expected, Shape(runtime.GetScopeRequirements(composed.Definition)));
+        Assert.Equal(expected, Shape(runtime.GetScopeRequirements(invariant.Definition)));
+    }
+
+    [Fact]
+    public void Projected_selector_is_not_misclassified_as_navigation_coverage()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(x => x.Id);
+        var consumers = model.Objects<Consumer>().Key(x => x.Id);
+        var local = model.Derived(sources).Compute(x => x.Value);
+        var projected = model.Derived(consumers).Using(x => x.Source, local).Compute((_, value) => value);
+        var runtime = model.Build().CreateRuntime();
+
+        Assert.Equal([(consumers.Definition.Id, ScopeRequirementReason.ProjectedConsumerCoverage)],
+            Shape(runtime.GetScopeRequirements(projected.Definition)));
+    }
+
+    [Fact]
     public void Relation_backed_and_composed_definitions_retain_both_relation_sets()
     {
         var model = new ConsistencyModelBuilder();
@@ -203,7 +263,10 @@ public sealed class ConsistencyScopeRequirementTests
         public Guid Id { get; init; } = Guid.NewGuid();
         public int Value { get; init; }
         public Source? Parent { get; init; }
+        public Address Address { get; init; }
     }
+
+    private readonly record struct Address(string PostCode);
 
     private sealed class Item
     {
