@@ -108,6 +108,61 @@ public sealed class ConsistencyScopeRequirementTests
         Assert.Throws<ArgumentException>(() => first.Runtime.GetScopeRequirements(second.Invariant.Definition));
     }
 
+    [Fact]
+    public void Scope_is_fluent_idempotent_and_distinguishes_sets_with_the_same_type()
+    {
+        var model = new ConsistencyModelBuilder();
+        var first = model.Objects<Source>().Named("first").Key(x => x.Id);
+        var second = model.Objects<Source>().Named("second").Key(x => x.Id);
+        var scope = new ConsistencyScope();
+
+        Assert.Same(scope, scope.Complete(first));
+        Assert.Same(scope, scope.Complete(first));
+        Assert.Single(scope.CompleteSets);
+        Assert.Contains(first.Definition, scope.CompleteSets);
+        Assert.DoesNotContain(second.Definition, scope.CompleteSets);
+        Assert.Throws<ArgumentNullException>(() => scope.Complete<Source>(null!));
+    }
+
+    [Fact]
+    public void Missing_scope_produces_machine_readable_ordered_gaps()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Named("sources").Key(x => x.Id);
+        var items = model.Objects<Item>().Named("items").Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
+        var derived = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
+        var runtime = model.Build().CreateRuntime();
+
+        Assert.Equal(new[]
+        {
+            new ConsistencyScopeGap(sources.Definition.Id, "sources", typeof(Source),
+                ConsistencyScopeRequirementKind.RelationSourceCoverage),
+            new ConsistencyScopeGap(items.Definition.Id, "items", typeof(Item),
+                ConsistencyScopeRequirementKind.RelationTargetCoverage)
+        }, runtime.GetScopeGaps(derived.Definition, null));
+
+        var scope = new ConsistencyScope().Complete(sources).Complete(sources);
+        Assert.Equal(ConsistencyScopeRequirementKind.RelationTargetCoverage,
+            Assert.Single(runtime.GetScopeGaps(derived.Definition, scope)).RequirementKind);
+    }
+
+    [Fact]
+    public void Scope_validation_rejects_every_foreign_set_even_when_no_requirements_exist()
+    {
+        var first = new ConsistencyModelBuilder();
+        var source = first.Objects<Source>().Key(x => x.Id);
+        var local = first.Derived(source).Compute(x => x.Value);
+        var runtime = first.Build().CreateRuntime();
+        var second = new ConsistencyModelBuilder();
+        var foreign = second.Objects<Source>().Key(x => x.Id);
+        _ = second.Build();
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            runtime.GetScopeGaps(local.Definition, new ConsistencyScope().Complete(foreign)));
+        Assert.Contains("another compiled model", error.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

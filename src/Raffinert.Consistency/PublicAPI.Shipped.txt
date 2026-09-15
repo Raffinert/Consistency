@@ -616,6 +616,23 @@ static Raffinert.Consistency.Change.Property<T>(Raffinert.Consistency.ObjectSet<
 static Raffinert.Consistency.Change.Remove<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> Raffinert.Consistency.ObjectRemoved!
 static Raffinert.Consistency.ChangeSet.Create(params Raffinert.Consistency.PropertyChange![]! changes) -> Raffinert.Consistency.ChangeSet!
 static Raffinert.Consistency.MutationSet.Create(params Raffinert.Consistency.RuntimeMutation![]! mutations) -> Raffinert.Consistency.MutationSet!
+Raffinert.Consistency.ConsistencyScope
+Raffinert.Consistency.ConsistencyScope.ConsistencyScope() -> void
+Raffinert.Consistency.ConsistencyScope.Complete<T>(Raffinert.Consistency.ObjectSet<T!>! set) -> Raffinert.Consistency.ConsistencyScope!
+Raffinert.Consistency.ConsistencyScopeGap
+Raffinert.Consistency.ConsistencyScopeGap.ConsistencyScopeGap(int ObjectSetId, string? ObjectSetDefinitionKey, System.Type! ObjectType, Raffinert.Consistency.ConsistencyScopeRequirementKind RequirementKind) -> void
+Raffinert.Consistency.ConsistencyScopeGap.ObjectSetDefinitionKey.get -> string?
+Raffinert.Consistency.ConsistencyScopeGap.ObjectSetDefinitionKey.init -> void
+Raffinert.Consistency.ConsistencyScopeGap.ObjectSetId.get -> int
+Raffinert.Consistency.ConsistencyScopeGap.ObjectSetId.init -> void
+Raffinert.Consistency.ConsistencyScopeGap.ObjectType.get -> System.Type!
+Raffinert.Consistency.ConsistencyScopeGap.ObjectType.init -> void
+Raffinert.Consistency.ConsistencyScopeGap.RequirementKind.get -> Raffinert.Consistency.ConsistencyScopeRequirementKind
+Raffinert.Consistency.ConsistencyScopeGap.RequirementKind.init -> void
+Raffinert.Consistency.ConsistencyScopeRequirementKind
+Raffinert.Consistency.ConsistencyScopeRequirementKind.ProjectedConsumerCoverage = 2 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
+Raffinert.Consistency.ConsistencyScopeRequirementKind.RelationSourceCoverage = 0 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
+Raffinert.Consistency.ConsistencyScopeRequirementKind.RelationTargetCoverage = 1 -> Raffinert.Consistency.ConsistencyScopeRequirementKind
 Raffinert.Consistency.PlannedDerivedEvaluation
 Raffinert.Consistency.PlannedDerivedEvaluation.DefinitionKey.get -> string?
 Raffinert.Consistency.PlannedDerivedEvaluation.DefinitionKey.init -> void
