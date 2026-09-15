@@ -50,14 +50,16 @@ public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException 
 {
     internal ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(Type entityType, string propertyName)
         : base($"Added entity '{entityType.Name}' uses store-generated consistency key '{propertyName}'; " +
-            "use CaptureConsistencyUnitOfWork and plan after the key is generated.") { }
+            "use CaptureConsistencyUnitOfWork and plan after the key is generated.")
+    { }
 }
 
 public sealed class ConsistencyStoreGeneratedKeyNotReadyException : Exception
 {
     internal ConsistencyStoreGeneratedKeyNotReadyException(Type entityType, string propertyName)
         : base($"Added entity '{entityType.Name}' uses store-generated consistency key '{propertyName}' that is not final yet. " +
-            "Save inside the current database transaction to obtain final generated values before calling PrepareAndPlan().") { }
+            "Save inside the current database transaction to obtain final generated values before calling PrepareAndPlan().")
+    { }
 }
 
 public static class ConsistencyDbContextExtensions
