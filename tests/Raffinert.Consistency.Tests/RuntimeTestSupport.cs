@@ -3,31 +3,31 @@ namespace Raffinert.Consistency.Tests;
 public sealed partial class RuntimeTests
 {
     private static ConsistencyModelBuilder CreateLineModel(
-        out ObjectSet<InvoiceLine> invoices,
-        out ObjectSet<PurchaseOrderLine> poLines,
-        out Relation<InvoiceLine, PurchaseOrderLine> relation)
+        out ObjectSet<RequestLine> invoices,
+        out ObjectSet<OrderLine> poLines,
+        out Relation<RequestLine, OrderLine> relation)
     {
         var model = new ConsistencyModelBuilder();
-        invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        poLines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        poLines = model.Objects<OrderLine>().Key(x => x.Id);
         relation = model.Relation(invoices, poLines).Where((invoice, line) =>
-            invoice.PurchaseOrderNumber == line.PurchaseOrderNumber &&
+            invoice.OrderNumber == line.OrderNumber &&
             invoice.ItemNumber == line.ItemNumber &&
             line.Enabled);
         return model;
     }
 
-    private static InvoiceLine Invoice(string order, string item) => new()
+    private static RequestLine Invoice(string order, string item) => new()
     {
         Id = Guid.NewGuid(),
-        PurchaseOrderNumber = order,
+        OrderNumber = order,
         ItemNumber = item
     };
 
-    private static PurchaseOrderLine Line(string order, string item, bool enabled = true) => new()
+    private static OrderLine Line(string order, string item, bool enabled = true) => new()
     {
         Id = Guid.NewGuid(),
-        PurchaseOrderNumber = order,
+        OrderNumber = order,
         ItemNumber = item,
         Enabled = enabled
     };

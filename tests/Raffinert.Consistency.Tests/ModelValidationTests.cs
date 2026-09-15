@@ -6,11 +6,11 @@ public sealed class ModelValidationTests
     public void Key_rejects_nested_navigation_and_opaque_expressions()
     {
         var nestedModel = new ConsistencyModelBuilder();
-        var nested = nestedModel.Objects<PurchaseOrderLine>();
+        var nested = nestedModel.Objects<OrderLine>();
         var methodModel = new ConsistencyModelBuilder();
-        var method = methodModel.Objects<PurchaseOrderLine>();
+        var method = methodModel.Objects<OrderLine>();
 
-        var nestedError = Assert.Throws<ArgumentException>(() => nested.Key(value => value.PurchaseOrder!.Id));
+        var nestedError = Assert.Throws<ArgumentException>(() => nested.Key(value => value.Order!.Id));
         var methodError = Assert.Throws<ArgumentException>(() => method.Key(value => value.Id.ToString()));
 
         Assert.Contains("direct scalar", nestedError.Message, StringComparison.OrdinalIgnoreCase);
@@ -21,10 +21,10 @@ public sealed class ModelValidationTests
     public void Key_accepts_direct_and_composite_value_members()
     {
         var directModel = new ConsistencyModelBuilder();
-        _ = directModel.Objects<PurchaseOrderLine>().Key(value => value.Id);
+        _ = directModel.Objects<OrderLine>().Key(value => value.Id);
         var compositeModel = new ConsistencyModelBuilder();
-        _ = compositeModel.Objects<PurchaseOrderLine>()
-            .Key(value => new { value.PurchaseOrderNumber, value.ItemNumber });
+        _ = compositeModel.Objects<OrderLine>()
+            .Key(value => new { value.OrderNumber, value.ItemNumber });
 
         _ = directModel.Build();
         _ = compositeModel.Build();
@@ -34,7 +34,7 @@ public sealed class ModelValidationTests
     public void Build_rejects_an_object_set_without_a_key()
     {
         var model = new ConsistencyModelBuilder();
-        model.Objects<InvoiceLine>();
+        model.Objects<RequestLine>();
 
         var error = Assert.Throws<InvalidOperationException>(() => model.Build());
 
@@ -46,8 +46,8 @@ public sealed class ModelValidationTests
     {
         var first = new ConsistencyModelBuilder();
         var second = new ConsistencyModelBuilder();
-        var left = first.Objects<InvoiceLine>().Key(x => x.Id);
-        var right = second.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var left = first.Objects<RequestLine>().Key(x => x.Id);
+        var right = second.Objects<OrderLine>().Key(x => x.Id);
 
         Assert.Throws<ArgumentException>(() => first.Relation(left, right));
     }
@@ -56,23 +56,23 @@ public sealed class ModelValidationTests
     public void Compiled_model_metadata_is_immutable()
     {
         var model = new ConsistencyModelBuilder();
-        var builder = model.Objects<InvoiceLine>();
+        var builder = model.Objects<RequestLine>();
         builder.Key(x => x.Id);
         model.Build();
 
-        Assert.Throws<InvalidOperationException>(() => builder.Key(x => x.PurchaseOrderNumber));
+        Assert.Throws<InvalidOperationException>(() => builder.Key(x => x.OrderNumber));
     }
 
     [Fact]
     public void Duplicate_runtime_keys_are_rejected()
     {
         var model = new ConsistencyModelBuilder();
-        var set = model.Objects<InvoiceLine>().Key(x => x.Id);
+        var set = model.Objects<RequestLine>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var id = Guid.NewGuid();
-        runtime.Add(set, new InvoiceLine { Id = id });
+        runtime.Add(set, new RequestLine { Id = id });
 
-        Assert.Throws<InvalidOperationException>(() => runtime.Add(set, new InvoiceLine { Id = id }));
+        Assert.Throws<InvalidOperationException>(() => runtime.Add(set, new RequestLine { Id = id }));
     }
 
     [Fact]

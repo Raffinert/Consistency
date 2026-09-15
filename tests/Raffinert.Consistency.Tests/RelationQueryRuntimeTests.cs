@@ -7,10 +7,10 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var poLines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-100", "A");
-        var matching = Line("PO-100", "A", enabled: true);
-        var sameKeyButDisabled = Line("PO-100", "A", enabled: false);
-        var other = Line("PO-200", "A", enabled: true);
+        var invoice = Invoice("ORDER-100", "A");
+        var matching = Line("ORDER-100", "A", enabled: true);
+        var sameKeyButDisabled = Line("ORDER-100", "A", enabled: false);
+        var other = Line("ORDER-200", "A", enabled: true);
 
         runtime.Add(invoices, invoice);
         runtime.Add(poLines, matching);
@@ -25,8 +25,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var poLines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-100", "A");
-        var line = Line("PO-100", "A");
+        var invoice = Invoice("ORDER-100", "A");
+        var line = Line("ORDER-100", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(poLines, line);
 
@@ -44,8 +44,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var poLines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-100", "A");
-        var line = Line("PO-100", "A");
+        var invoice = Invoice("ORDER-100", "A");
+        var line = Line("ORDER-100", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(poLines, line);
 

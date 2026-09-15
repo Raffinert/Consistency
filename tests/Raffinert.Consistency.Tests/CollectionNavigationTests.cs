@@ -7,7 +7,7 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var derived = model.Derived(orders).Using(relation)
@@ -16,7 +16,7 @@ public sealed class CollectionNavigationTests
             .Must((_, count) => count == 0);
         var runtime = model.Build().CreateRuntime();
         var order = new CollectionOrder { Id = Guid.NewGuid() };
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "A" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "A" };
         var line = new CollectionOrderLine { ItemNumber = "A" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
@@ -43,14 +43,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var line = new CollectionOrderLine { ItemNumber = "A" };
         var order = new CollectionOrder { Id = Guid.NewGuid() };
         order.Lines.Add(line);
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
         Assert.Empty(runtime.Related(relation, order));
@@ -67,12 +67,12 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var order = new CollectionOrder { Id = Guid.NewGuid() };
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
 
@@ -101,14 +101,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => ReferenceEquals(line, invoice.Tag)));
         var runtime = model.Build().CreateRuntime();
         var first = new ValueEqualCollectionLine { ItemNumber = "A" };
         var equalButDistinct = new ValueEqualCollectionLine { ItemNumber = "A" };
         var order = new ReplaceableCollectionOrder { Id = Guid.NewGuid(), Lines = [first] };
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), Tag = equalButDistinct };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), Tag = equalButDistinct };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
         Assert.Empty(runtime.Related(relation, order));
@@ -124,14 +124,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var line = new CollectionOrderLine { ItemNumber = "A" };
         var order = new CollectionOrder { Id = Guid.NewGuid() };
         order.Lines.Add(line);
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "A" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "A" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
 
@@ -154,15 +154,15 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.First().ItemNumber == invoice.ItemNumber);
         var runtime = model.Build().CreateRuntime();
         var first = new ValueEqualCollectionLine { ItemNumber = "A" };
         var second = new ValueEqualCollectionLine { ItemNumber = "B" };
         var order = new ReplaceableCollectionOrder { Id = Guid.NewGuid(), Lines = [first, second] };
-        var invoiceA = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "A" };
-        var invoiceB = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoiceA = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "A" };
+        var invoiceB = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoiceA);
         runtime.Add(invoices, invoiceB);
@@ -179,14 +179,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var oldLines = new List<ValueEqualCollectionLine> { new() { ItemNumber = "A" } };
         var newLines = new List<ValueEqualCollectionLine> { new() { ItemNumber = "B" } };
         var order = new ReplaceableCollectionOrder { Id = Guid.NewGuid(), Lines = oldLines };
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
         order.Lines = newLines;
@@ -201,14 +201,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Container.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var line = new ValueEqualCollectionLine { ItemNumber = "A" };
         var order = new ReplaceableCollectionOrder { Id = Guid.NewGuid() };
         order.Container.Lines.Add(line);
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
         line.ItemNumber = "B";
@@ -223,14 +223,14 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var line = new CollectionOrderLine { ItemNumber = "A" };
         var order = new CollectionOrder { Id = Guid.NewGuid() };
         order.Lines.Add(line);
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
         order.Lines.Remove(line);
@@ -248,7 +248,7 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
@@ -257,7 +257,7 @@ public sealed class CollectionNavigationTests
         var second = new CollectionOrder { Id = Guid.NewGuid() };
         first.Lines.Add(shared);
         second.Lines.Add(shared);
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "B" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "B" };
         runtime.Add(orders, first);
         runtime.Add(orders, second);
         runtime.Add(invoices, invoice);
@@ -275,13 +275,13 @@ public sealed class CollectionNavigationTests
     {
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
-        var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
+        var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
         var runtime = model.Build().CreateRuntime();
         var order = new CollectionOrder { Id = Guid.NewGuid() };
         var line = new CollectionOrderLine { ItemNumber = "A" };
-        var invoice = new InvoiceLine { Id = Guid.NewGuid(), ItemNumber = "A" };
+        var invoice = new RequestLine { Id = Guid.NewGuid(), ItemNumber = "A" };
         runtime.Add(orders, order);
         order.Lines.Add(line);
 

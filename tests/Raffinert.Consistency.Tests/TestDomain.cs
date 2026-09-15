@@ -1,23 +1,23 @@
 namespace Raffinert.Consistency.Tests;
 
-internal sealed class InvoiceLine
+internal sealed class RequestLine
 {
     public Guid Id { get; init; }
-    public string PurchaseOrderNumber { get; set; } = "";
+    public string OrderNumber { get; set; } = "";
     public string ItemNumber { get; set; } = "";
     public object? Tag { get; set; }
 }
 
-internal sealed class PurchaseOrderLine
+internal sealed class OrderLine
 {
     public Guid Id { get; init; }
-    public string PurchaseOrderNumber { get; set; } = "";
+    public string OrderNumber { get; set; } = "";
     public string ItemNumber { get; set; } = "";
     public bool Enabled { get; set; } = true;
-    public PurchaseOrder? PurchaseOrder { get; set; }
+    public Order? Order { get; set; }
 }
 
-internal sealed class PurchaseOrder
+internal sealed class Order
 {
     public Guid Id { get; init; }
     public string Number { get; set; } = "";

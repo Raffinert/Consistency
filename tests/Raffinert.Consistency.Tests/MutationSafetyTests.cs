@@ -7,15 +7,15 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-2", "B");
-        var line = Line("PO-1", "A");
-        line.PurchaseOrderNumber = "PO-2";
+        var invoice = Invoice("ORDER-2", "B");
+        var line = Line("ORDER-1", "A");
+        line.OrderNumber = "ORDER-2";
         line.ItemNumber = "B";
 
         runtime.Apply(MutationSet.Create(
             Change.Add(invoices, invoice),
             Change.Add(lines, line),
-            Change.Property(lines, line, x => x.PurchaseOrderNumber, "PO-1", "PO-2"),
+            Change.Property(lines, line, x => x.OrderNumber, "ORDER-1", "ORDER-2"),
             Change.Property(lines, line, x => x.ItemNumber, "A", "B")),
             ChangeValidationMode.StrictNewValue);
 
@@ -27,8 +27,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out _);
         var runtime = model.Build().CreateRuntime();
-        var added = Line("PO", "A");
-        var absent = Invoice("PO", "A");
+        var added = Line("ORDER", "A");
+        var absent = Invoice("ORDER", "A");
 
         Assert.Throws<InvalidOperationException>(() => runtime.Apply(MutationSet.Create(
             Change.Add(lines, added),
@@ -42,7 +42,7 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out _, out var lines, out _);
         var runtime = model.Build().CreateRuntime();
-        var line = Line("PO", "A");
+        var line = Line("ORDER", "A");
 
         var prepared = runtime.Prepare(MutationSet.Create(Change.Add(lines, line)));
 
@@ -62,8 +62,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out _, out var lines, out _);
         var runtime = model.Build().CreateRuntime();
-        var preparedLine = Line("PO", "A");
-        var interveningLine = Line("PO", "B");
+        var preparedLine = Line("ORDER", "A");
+        var interveningLine = Line("ORDER", "B");
         var prepared = runtime.Prepare(MutationSet.Create(Change.Add(lines, preparedLine)));
         runtime.Add(lines, interveningLine);
 
@@ -112,8 +112,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "A");
-        var line = Line("PO", "A");
+        var invoice = Invoice("ORDER", "A");
+        var line = Line("ORDER", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
         line.ItemNumber = "B";

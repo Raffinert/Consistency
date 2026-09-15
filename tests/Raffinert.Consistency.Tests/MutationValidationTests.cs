@@ -7,8 +7,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "A");
-        var line = Line("PO", "A", enabled: true);
+        var invoice = Invoice("ORDER", "A");
+        var line = Line("ORDER", "A", enabled: true);
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
@@ -25,15 +25,15 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-2", "B");
-        var line = Line("PO-1", "A");
+        var invoice = Invoice("ORDER-2", "B");
+        var line = Line("ORDER-1", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
-        line.PurchaseOrderNumber = "PO-2";
+        line.OrderNumber = "ORDER-2";
         line.ItemNumber = "B";
         var impact = runtime.Apply(ChangeSet.Create(
-            Change.Property(lines, line, x => x.PurchaseOrderNumber, "PO-1", "PO-2"),
+            Change.Property(lines, line, x => x.OrderNumber, "ORDER-1", "ORDER-2"),
             Change.Property(lines, line, x => x.ItemNumber, "A", "B")));
 
         Assert.Equal([line], runtime.Related(relation, invoice));
@@ -46,8 +46,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "C");
-        var line = Line("PO", "A");
+        var invoice = Invoice("ORDER", "C");
+        var line = Line("ORDER", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
@@ -66,8 +66,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "C");
-        var line = Line("PO", "A");
+        var invoice = Invoice("ORDER", "C");
+        var line = Line("ORDER", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
@@ -86,8 +86,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out var invoices, out var lines, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "B");
-        var line = Line("PO", "A");
+        var invoice = Invoice("ORDER", "B");
+        var line = Line("ORDER", "A");
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
@@ -105,26 +105,26 @@ public sealed partial class RuntimeTests
     public void Invalid_change_rejects_the_entire_change_set_before_index_updates()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
-            line.PurchaseOrder != null && invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+            line.Order != null && invoice.OrderNumber == line.Order.Number);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-2", "A");
-        var first = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-1" };
-        var second = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-2" };
+        var invoice = Invoice("ORDER-2", "A");
+        var first = new Order { Id = Guid.NewGuid(), Number = "ORDER-1" };
+        var second = new Order { Id = Guid.NewGuid(), Number = "ORDER-2" };
         var line = Line("", "A");
-        line.PurchaseOrder = first;
+        line.Order = first;
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
 
         var oldId = line.Id;
-        line.PurchaseOrder = second;
+        line.Order = second;
         Assert.Throws<InvalidOperationException>(() => runtime.Apply(ChangeSet.Create(
-            Change.Property(lines, line, x => x.PurchaseOrder, first, second),
+            Change.Property(lines, line, x => x.Order, first, second),
             Change.Property(lines, line, x => x.Id, oldId, line.Id))));
 
-        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, first, second));
+        runtime.Apply(Change.Property(lines, line, x => x.Order, first, second));
         Assert.Equal([line], runtime.Related(relation, invoice));
     }
 

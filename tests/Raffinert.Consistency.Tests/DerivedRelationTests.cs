@@ -274,26 +274,26 @@ public sealed partial class DerivedStateTests
     public void Reverse_hash_plan_supports_composite_keys()
     {
         var model = new ConsistencyModelBuilder();
-        var sources = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var items = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var sources = model.Objects<RequestLine>().Key(x => x.Id);
+        var items = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
-            source.PurchaseOrderNumber == item.PurchaseOrderNumber &&
+            source.OrderNumber == item.OrderNumber &&
             source.ItemNumber == item.ItemNumber);
         var count = model.Derived(sources).Using(relation)
             .Compute((source, matches) => matches.Count);
         var compiled = model.Build();
         Assert.Contains("Reverse access plan: HashJoin", compiled.DebugView);
         var runtime = compiled.CreateRuntime();
-        var matching = new InvoiceLine
+        var matching = new RequestLine
         {
             Id = Guid.NewGuid(),
-            PurchaseOrderNumber = "PO",
+            OrderNumber = "ORDER",
             ItemNumber = "A"
         };
-        var partial = new InvoiceLine
+        var partial = new RequestLine
         {
             Id = Guid.NewGuid(),
-            PurchaseOrderNumber = "PO",
+            OrderNumber = "ORDER",
             ItemNumber = "B"
         };
         runtime.Add(sources, matching);
@@ -301,10 +301,10 @@ public sealed partial class DerivedStateTests
         runtime.Get(count, matching);
         runtime.Get(count, partial);
 
-        runtime.Add(items, new PurchaseOrderLine
+        runtime.Add(items, new OrderLine
         {
             Id = Guid.NewGuid(),
-            PurchaseOrderNumber = "PO",
+            OrderNumber = "ORDER",
             ItemNumber = "A"
         });
 

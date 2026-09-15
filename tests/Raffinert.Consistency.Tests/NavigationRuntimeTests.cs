@@ -60,13 +60,13 @@ public sealed partial class RuntimeTests
     {
         var model = new ConsistencyModelBuilder();
         var left = model.Objects<CodeHolder>().Key(x => x.Id);
-        var right = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var right = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(left, right).Where((a, b) => MatchesPrefix(a.Code, b.ItemNumber));
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "ITEM-123" };
-        var match = Line("PO", "ITEM");
-        var miss = Line("PO", "OTHER");
+        var match = Line("ORDER", "ITEM");
+        var miss = Line("ORDER", "OTHER");
         runtime.Add(left, source);
         runtime.Add(right, match);
         runtime.Add(right, miss);
@@ -80,53 +80,53 @@ public sealed partial class RuntimeTests
     public void Nested_property_change_reindexes_referencing_roots()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var orders = model.Objects<Order>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
-            invoice.PurchaseOrderNumber == line.PurchaseOrder!.Number &&
+            invoice.OrderNumber == line.Order!.Number &&
             invoice.ItemNumber == line.ItemNumber);
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
-        var invoice = Invoice("PO-100", "A");
-        var order = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-100" };
+        var invoice = Invoice("ORDER-100", "A");
+        var order = new Order { Id = Guid.NewGuid(), Number = "ORDER-100" };
         var line = Line("ignored", "A");
-        line.PurchaseOrder = order;
+        line.Order = order;
         runtime.Add(invoices, invoice);
         runtime.Add(orders, order);
         runtime.Add(lines, line);
 
         Assert.Equal([line], runtime.Related(relation, invoice));
 
-        order.Number = "PO-200";
-        runtime.Apply(Change.Property(orders, order, x => x.Number, "PO-100", "PO-200"));
+        order.Number = "ORDER-200";
+        runtime.Apply(Change.Property(orders, order, x => x.Number, "ORDER-100", "ORDER-200"));
 
         Assert.Empty(runtime.Related(relation, invoice));
-        Assert.Contains("PurchaseOrderLine.PurchaseOrder.Number", compiled.DebugView);
+        Assert.Contains("OrderLine.Order.Number", compiled.DebugView);
     }
 
     [Fact]
     public void Reference_navigation_change_updates_reverse_navigation_and_index()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var orders = model.Objects<Order>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines)
-            .Where((invoice, line) => invoice.PurchaseOrderNumber == line.PurchaseOrder!.Number);
+            .Where((invoice, line) => invoice.OrderNumber == line.Order!.Number);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-2", "A");
-        var first = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-1" };
-        var second = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-2" };
+        var invoice = Invoice("ORDER-2", "A");
+        var first = new Order { Id = Guid.NewGuid(), Number = "ORDER-1" };
+        var second = new Order { Id = Guid.NewGuid(), Number = "ORDER-2" };
         var line = Line("", "A");
-        line.PurchaseOrder = first;
+        line.Order = first;
         runtime.Add(invoices, invoice);
         runtime.Add(orders, first);
         runtime.Add(orders, second);
         runtime.Add(lines, line);
 
-        line.PurchaseOrder = second;
-        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, first, second));
+        line.Order = second;
+        runtime.Apply(Change.Property(lines, line, x => x.Order, first, second));
 
         Assert.Equal([line], runtime.Related(relation, invoice));
     }
@@ -136,8 +136,8 @@ public sealed partial class RuntimeTests
     {
         var model = CreateLineModel(out _, out _, out var relation);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "A");
-        var line = Line("PO", "A");
+        var invoice = Invoice("ORDER", "A");
+        var line = Line("ORDER", "A");
 
         runtime.Add(invoice);
         runtime.Add(line);
@@ -150,13 +150,13 @@ public sealed partial class RuntimeTests
     public void Null_guarded_nested_relation_is_safe_and_reindexes_when_navigation_is_assigned()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
-            line.PurchaseOrder != null &&
-            invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+            line.Order != null &&
+            invoice.OrderNumber == line.Order.Number);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO-100", "A");
+        var invoice = Invoice("ORDER-100", "A");
         var line = Line("ignored", "A");
 
         runtime.Add(invoices, invoice);
@@ -164,9 +164,9 @@ public sealed partial class RuntimeTests
 
         Assert.Empty(runtime.Related(relation, invoice));
 
-        var order = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO-100" };
-        line.PurchaseOrder = order;
-        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, null, order));
+        var order = new Order { Id = Guid.NewGuid(), Number = "ORDER-100" };
+        line.Order = order;
+        runtime.Apply(Change.Property(lines, line, x => x.Order, null, order));
 
         Assert.Equal([line], runtime.Related(relation, invoice));
     }
@@ -217,30 +217,30 @@ public sealed partial class RuntimeTests
     public void Arbitrary_depth_change_from_an_unregistered_nested_object_reindexes_all_roots()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
-            line.PurchaseOrder != null &&
-            line.PurchaseOrder.Supplier != null &&
-            line.PurchaseOrder.Supplier.Country != null &&
-            invoice.PurchaseOrderNumber == line.PurchaseOrder.Supplier.Country.Code);
+            line.Order != null &&
+            line.Order.Supplier != null &&
+            line.Order.Supplier.Country != null &&
+            invoice.OrderNumber == line.Order.Supplier.Country.Code);
         var runtime = model.Build().CreateRuntime();
         var invoice = Invoice("NO", "A");
         var country = new Country { Id = Guid.NewGuid(), Code = "MATCH" };
         var supplier = new Supplier { Id = Guid.NewGuid(), Country = country };
-        var order = new PurchaseOrder { Id = Guid.NewGuid(), Supplier = supplier };
+        var order = new Order { Id = Guid.NewGuid(), Supplier = supplier };
         var first = Line("", "A");
         var second = Line("", "B");
-        first.PurchaseOrder = order;
-        second.PurchaseOrder = order;
+        first.Order = order;
+        second.Order = order;
         runtime.Add(invoices, invoice);
         runtime.Add(lines, first);
         runtime.Add(lines, second);
 
         Assert.Empty(runtime.Related(relation, invoice));
 
-        invoice.PurchaseOrderNumber = "MATCH";
-        runtime.Apply(Change.Property(invoices, invoice, x => x.PurchaseOrderNumber, "NO", "MATCH"));
+        invoice.OrderNumber = "MATCH";
+        runtime.Apply(Change.Property(invoices, invoice, x => x.OrderNumber, "NO", "MATCH"));
         Assert.Equal(2, runtime.Related(relation, invoice).Count);
 
         country.Code = "OTHER";
@@ -257,21 +257,21 @@ public sealed partial class RuntimeTests
     public void Reference_navigation_can_change_from_object_to_null()
     {
         var model = new ConsistencyModelBuilder();
-        var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-        var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+        var invoices = model.Objects<RequestLine>().Key(x => x.Id);
+        var lines = model.Objects<OrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
-            line.PurchaseOrder != null && invoice.PurchaseOrderNumber == line.PurchaseOrder.Number);
+            line.Order != null && invoice.OrderNumber == line.Order.Number);
         var runtime = model.Build().CreateRuntime();
-        var invoice = Invoice("PO", "A");
-        var order = new PurchaseOrder { Id = Guid.NewGuid(), Number = "PO" };
+        var invoice = Invoice("ORDER", "A");
+        var order = new Order { Id = Guid.NewGuid(), Number = "ORDER" };
         var line = Line("", "A");
-        line.PurchaseOrder = order;
+        line.Order = order;
         runtime.Add(invoices, invoice);
         runtime.Add(lines, line);
         Assert.Equal([line], runtime.Related(relation, invoice));
 
-        line.PurchaseOrder = null;
-        runtime.Apply(Change.Property(lines, line, x => x.PurchaseOrder, order, null));
+        line.Order = null;
+        runtime.Apply(Change.Property(lines, line, x => x.Order, order, null));
 
         Assert.Empty(runtime.Related(relation, invoice));
     }
