@@ -880,6 +880,81 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(2, persisted.Mirror);
     }
 
+    [Fact]
+    public void Validate_mode_persists_domain_change_without_materializing_mirror()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 3;
+
+        context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror),
+            new RelationEfCoreConsistencyOptions { SaveBehavior = RelationEfCoreSaveBehavior.Validate });
+
+        var persisted = database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single();
+        Assert.Equal(3, persisted.Input);
+        Assert.Equal(2, persisted.Mirror);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public void Unenforced_invariant_violation_does_not_block_consistent_save()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        model.Invariant(objects).Using(doubled).Must((_, value) => value <= 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 3;
+
+        context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror));
+
+        Assert.Equal(6, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public void Explicit_transaction_is_rejected_before_consistent_save_sql()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 3;
+        using var transaction = context.Database.BeginTransaction();
+
+        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects)));
+
+        Assert.Equal(1, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Ambient_transaction_is_rejected_before_consistent_save_sql()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 3;
+        using var transaction = new System.Transactions.TransactionScope();
+
+        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects)));
+
+        Assert.Equal(0, runtime.Version);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
