@@ -326,17 +326,54 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new RelationModelBuilder();
         var owners = model.Objects<OwnedOwner>().Key(entity => entity.Id);
         var labels = model.Objects<LabelEntity>().Key(entity => entity.Id);
-        var relation = model.Relation(owners, labels).Where((left, right) => left.Settings.Code == right.Code);
+        var relation = model.Relation(owners, labels).Where((left, right) => left.Settings!.Code == right.Code);
         var runtime = model.Build().CreateRuntime();
         var label = new LabelEntity { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(owners, owner);
         runtime.Add(labels, label);
         var mappings = new RelationUnitOfWorkMappings().Map(owners);
-        owner.Settings.Code = "B";
+        owner.Settings!.Code = "B";
 
         context.SaveChangesAndApply(runtime, mappings);
 
         Assert.Equal([label], runtime.Related(relation, owner));
+    }
+
+    [Fact]
+    public void Owned_optional_reference_nonnull_to_null_is_captured_from_tracked_dependent()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var settings = new OwnedSettings { Code = "A" };
+        var owner = new OwnedOwner { Id = Guid.NewGuid(), Settings = settings };
+        context.Add(owner); context.SaveChanges();
+
+        owner.Settings = null;
+        context.ChangeTracker.DetectChanges();
+        Assert.False(context.Entry(owner).Reference(x => x.Settings).IsModified);
+        var changes = Assert.IsType<ChangeSet>(ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
+
+        var change = Assert.Single(changes.Changes, x =>
+            ReferenceEquals(x.Instance, owner) && x.Member.Name == nameof(OwnedOwner.Settings));
+        Assert.Same(settings, change.OldValue);
+        Assert.Null(change.NewValue);
+    }
+
+    [Fact]
+    public void Owned_optional_reference_replacement_captures_real_old_and_new_targets()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var oldSettings = new OwnedSettings { Code = "A" };
+        var newSettings = new OwnedSettings { Code = "B" };
+        var owner = new OwnedOwner { Id = Guid.NewGuid(), Settings = oldSettings };
+        context.Add(owner); context.SaveChanges();
+
+        owner.Settings = newSettings;
+        var changes = Assert.IsType<ChangeSet>(ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
+
+        var change = Assert.Single(changes.Changes, x =>
+            ReferenceEquals(x.Instance, owner) && x.Member.Name == nameof(OwnedOwner.Settings));
+        Assert.Same(oldSettings, change.OldValue);
+        Assert.Same(newSettings, change.NewValue);
     }
 
     [Fact]
@@ -831,6 +868,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             model.Entity<CascadeChild>().HasOne(entity => entity.Parent).WithMany(entity => entity.Children)
                 .HasForeignKey(entity => entity.ParentId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<OwnedOwner>().OwnsOne(entity => entity.Settings);
+            model.Entity<OwnedOwner>().Navigation(entity => entity.Settings).IsRequired(false);
             model.Entity<TagGroup>().HasMany(entity => entity.Tags).WithMany(entity => entity.Groups);
         }
     }
@@ -899,7 +937,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     private sealed class OwnedOwner
     {
         public Guid Id { get; init; }
-        public OwnedSettings Settings { get; set; } = new();
+        public OwnedSettings? Settings { get; set; }
     }
 
     private sealed class OwnedSettings
