@@ -12,7 +12,7 @@
     <Authors>Raffinert</Authors>
     <PackageTags>consistency;dependency-graph;incremental;invariants;relations;object-model</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/Raffinert/Relations</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Raffinert/Consistency</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes>See CHANGELOG.md for alpha release notes.</PackageReleaseNotes>

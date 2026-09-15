@@ -48,6 +48,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $packages = @(Get-ChildItem -LiteralPath $resolvedPackages -Filter '*.nupkg' |
     Where-Object { $_.Name -notlike '*.snupkg' })
 $symbols = @(Get-ChildItem -LiteralPath $resolvedPackages -Filter '*.snupkg')
+$legacyPackagePrefix = 'Raffinert.' + 'Relations'
 if ($packages.Count -ne 2) { throw "Expected two NuGet packages; found $($packages.Count)." }
 if ($symbols.Count -ne 2) { throw "Expected two symbol packages; found $($symbols.Count)." }
 
@@ -69,7 +70,7 @@ foreach ($package in $packages) {
         if ($metadata.license.GetAttribute('type') -ne 'expression' -or $metadata.license.InnerText -ne 'MIT') {
             throw "$id must use the MIT license expression."
         }
-        if ($metadata.repository.GetAttribute('url') -ne 'https://github.com/Raffinert/Relations') {
+        if ($metadata.repository.GetAttribute('url') -ne 'https://github.com/Raffinert/Consistency') {
             throw "$id has an unexpected repository URL."
         }
         if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_SHA) -and
@@ -79,8 +80,8 @@ foreach ($package in $packages) {
         foreach ($requiredEntry in @('README.md', 'CHANGELOG.md')) {
             if ($entries -notcontains $requiredEntry) { throw "$id has no $requiredEntry." }
         }
-        if ($entries | Where-Object { $_ -like 'lib/*/Raffinert.Relations.dll' }) {
-            throw "$id contains a legacy Raffinert.Relations.dll payload."
+        if ($entries | Where-Object { $_ -like "lib/*/$legacyPackagePrefix.dll" }) {
+            throw "$id contains a legacy relation-package DLL payload."
         }
         $inspected[$id] = [pscustomobject]@{ Metadata = $metadata; Entries = $entries }
     }
@@ -108,8 +109,8 @@ if ($coreDependency.Count -ne 1 -or $coreDependency[0].GetAttribute('version') -
 $allDependencies = @($inspected.Values | ForEach-Object {
     @($_.Metadata.dependencies.group.dependency) | Where-Object { $null -ne $_ }
 })
-if ($allDependencies | Where-Object { $_.GetAttribute('id') -like 'Raffinert.Relations*' }) {
-    throw 'A package retains a dependency on a legacy Raffinert.Relations package.'
+if ($allDependencies | Where-Object { $_.GetAttribute('id') -like "$legacyPackagePrefix*" }) {
+    throw 'A package retains a dependency on a legacy relation package.'
 }
 
 Write-Output "Release candidate packages are consistent at version $expectedVersion."

@@ -17,7 +17,7 @@ Local release-style verification completed successfully:
 
 The manual GitHub Actions release-candidate workflow completed successfully:
 
-- Run: [34937013974](https://github.com/Raffinert/Relations/actions/runs/34937013974)
+- Run: [34937013974](https://github.com/Raffinert/Consistency/actions/runs/34937013974)
 - Result: success (2026-09-15 06:27:30–06:32:12 UTC).
 - Verified head: `de1f6ba6bfcb40fe3626354601d127f176414dd0`.
 - Artifact: `release-candidate-packages` (artifact ID `10383273956`).
@@ -36,7 +36,7 @@ Verification date: 2026-09-15
 
 Verified implementation head before documentation: `fa2153b0ccbea391fdc299d0b65b34debd65463a`
 
-- Run: [34942535932](https://github.com/Raffinert/Relations/actions/runs/34942535932)
+- Run: [34942535932](https://github.com/Raffinert/Consistency/actions/runs/34942535932)
 - Result: success (2026-09-15 07:36:08–07:40:59 UTC).
 - Artifact: `release-candidate-packages` (artifact ID `10385383621`).
 - Validated package version: `0.1.0-alpha.1` for both core and EF packages.
