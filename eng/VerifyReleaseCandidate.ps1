@@ -79,6 +79,9 @@ foreach ($package in $packages) {
         foreach ($requiredEntry in @('README.md', 'CHANGELOG.md')) {
             if ($entries -notcontains $requiredEntry) { throw "$id has no $requiredEntry." }
         }
+        if ($entries | Where-Object { $_ -like 'lib/*/Raffinert.Relations.dll' }) {
+            throw "$id contains a legacy Raffinert.Relations.dll payload."
+        }
         $inspected[$id] = [pscustomobject]@{ Metadata = $metadata; Entries = $entries }
     }
     finally {
@@ -101,6 +104,12 @@ $coreDependency = @($inspected[$efId].Metadata.dependencies.group.dependency |
     Where-Object { $_.GetAttribute('id') -eq $coreId })
 if ($coreDependency.Count -ne 1 -or $coreDependency[0].GetAttribute('version') -ne $expectedVersion) {
     throw "$efId must depend on $coreId version $expectedVersion."
+}
+$allDependencies = @($inspected.Values | ForEach-Object {
+    @($_.Metadata.dependencies.group.dependency) | Where-Object { $null -ne $_ }
+})
+if ($allDependencies | Where-Object { $_.GetAttribute('id') -like 'Raffinert.Relations*' }) {
+    throw 'A package retains a dependency on a legacy Raffinert.Relations package.'
 }
 
 Write-Output "Release candidate packages are consistent at version $expectedVersion."

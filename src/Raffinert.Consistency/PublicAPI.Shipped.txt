@@ -616,3 +616,40 @@ static Raffinert.Consistency.Change.Property<T>(Raffinert.Consistency.ObjectSet<
 static Raffinert.Consistency.Change.Remove<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> Raffinert.Consistency.ObjectRemoved!
 static Raffinert.Consistency.ChangeSet.Create(params Raffinert.Consistency.PropertyChange![]! changes) -> Raffinert.Consistency.ChangeSet!
 static Raffinert.Consistency.MutationSet.Create(params Raffinert.Consistency.RuntimeMutation![]! mutations) -> Raffinert.Consistency.MutationSet!
+Raffinert.Consistency.PlannedDerivedEvaluation
+Raffinert.Consistency.PlannedDerivedEvaluation.DefinitionKey.get -> string?
+Raffinert.Consistency.PlannedDerivedEvaluation.DefinitionKey.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.DerivedId.get -> int
+Raffinert.Consistency.PlannedDerivedEvaluation.DerivedId.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.PlannedDerivedEvaluation(int DerivedId, object! Source, object? Value, Raffinert.Consistency.DerivedValueState State) -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.Source.get -> object!
+Raffinert.Consistency.PlannedDerivedEvaluation.Source.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.PlannedDerivedEvaluation.SourceIdentity.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.State.get -> Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.PlannedDerivedEvaluation.State.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluation.Value.get -> object?
+Raffinert.Consistency.PlannedDerivedEvaluation.Value.init -> void
+Raffinert.Consistency.PlannedDerivedEvaluationMode
+Raffinert.Consistency.PlannedDerivedEvaluationMode.Affected = 1 -> Raffinert.Consistency.PlannedDerivedEvaluationMode
+Raffinert.Consistency.PlannedDerivedEvaluationMode.None = 0 -> Raffinert.Consistency.PlannedDerivedEvaluationMode
+Raffinert.Consistency.PreparedImpactPlan.DerivedEvaluations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.PlannedDerivedEvaluation!>!
+Raffinert.Consistency.ConsistencyRuntime.PlanDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel, Raffinert.Consistency.PlannedInvariantEvaluationMode invariantEvaluationMode, Raffinert.Consistency.PlannedDerivedEvaluationMode derivedEvaluationMode) -> Raffinert.Consistency.PreparedImpactPlan!
+Raffinert.Consistency.PlannedInvariantEvaluation
+Raffinert.Consistency.PlannedInvariantEvaluation.DefinitionKey.get -> string?
+Raffinert.Consistency.PlannedInvariantEvaluation.DefinitionKey.init -> void
+Raffinert.Consistency.PlannedInvariantEvaluation.InvariantId.get -> int
+Raffinert.Consistency.PlannedInvariantEvaluation.InvariantId.init -> void
+Raffinert.Consistency.PlannedInvariantEvaluation.Source.get -> object!
+Raffinert.Consistency.PlannedInvariantEvaluation.Source.init -> void
+Raffinert.Consistency.PlannedInvariantEvaluation.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.PlannedInvariantEvaluation.SourceIdentity.init -> void
+Raffinert.Consistency.PlannedInvariantEvaluation.State.get -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.PlannedInvariantEvaluation.State.init -> void
+Raffinert.Consistency.PlannedInvariantEvaluation.PlannedInvariantEvaluation(int InvariantId, object! Source, Raffinert.Consistency.InvariantEvaluationState State) -> void
+Raffinert.Consistency.PlannedInvariantEvaluationMode
+Raffinert.Consistency.PlannedInvariantEvaluationMode.Affected = 1 -> Raffinert.Consistency.PlannedInvariantEvaluationMode
+Raffinert.Consistency.PlannedInvariantEvaluationMode.None = 0 -> Raffinert.Consistency.PlannedInvariantEvaluationMode
+Raffinert.Consistency.PreparedImpactPlan.HasInvariantViolations.get -> bool
+Raffinert.Consistency.PreparedImpactPlan.InvariantEvaluations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.PlannedInvariantEvaluation!>!
+Raffinert.Consistency.ConsistencyRuntime.PlanDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel, Raffinert.Consistency.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Consistency.PreparedImpactPlan!

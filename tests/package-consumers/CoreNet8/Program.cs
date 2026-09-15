@@ -3,6 +3,8 @@ using Raffinert.Consistency;
 var model = new ConsistencyModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);
 var links = model.Objects<Link>().Key(value => value.Id);
+Relation<Value, Link> relation = model.Relation(values, links)
+    .Where((left, right) => left.Id == right.Value.Id);
 var doubled = model.Derived(values).Compute(value => value.Amount * 2).Named("doubled");
 model.Invariant(values).Using(doubled).Must((_, amount) => amount <= 6)
     .ScheduleRepairWith(_ => { }).Named("repair");
@@ -10,7 +12,8 @@ var projected = model.Derived(links).Using(link => link.Value, doubled)
     .Compute((_, amount) => amount);
 var value = new Value { Amount = 3 };
 var link = new Link { Value = value };
-var runtime = model.Build().CreateRuntime(seed =>
+CompiledConsistencyModel compiled = model.Build();
+ConsistencyRuntime runtime = compiled.CreateRuntime(seed =>
 {
     seed.Add(values, [value]);
     seed.Add(links, [link]);
