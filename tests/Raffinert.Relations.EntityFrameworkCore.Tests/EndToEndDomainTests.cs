@@ -109,11 +109,17 @@ public sealed class EndToEndDomainTests
         var scenario = BuildScenario([]);
         var line = new PurchaseLine
         {
-            Id = Guid.NewGuid(), OrderNumber = "PO-guard", ItemNumber = "A", OrderedQuantity = 5m
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-guard",
+            ItemNumber = "A",
+            OrderedQuantity = 5m
         };
         var receipt = new GoodsReceipt
         {
-            Id = Guid.NewGuid(), OrderNumber = "PO-guard", ItemNumber = "A", Quantity = 2m
+            Id = Guid.NewGuid(),
+            OrderNumber = "PO-guard",
+            ItemNumber = "A",
+            Quantity = 2m
         };
         using var context = new PurchasingContext();
         context.AddRange(line, receipt);
