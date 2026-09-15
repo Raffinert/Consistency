@@ -437,11 +437,20 @@ public sealed partial class RelationRuntime
         PreparedMutation prepared,
         RuntimeImpactDetailLevel detailLevel,
         PlannedInvariantEvaluationMode invariantEvaluationMode)
+        => PlanDetailed(prepared, detailLevel, invariantEvaluationMode, PlannedDerivedEvaluationMode.None);
+
+    public PreparedImpactPlan PlanDetailed(
+        PreparedMutation prepared,
+        RuntimeImpactDetailLevel detailLevel,
+        PlannedInvariantEvaluationMode invariantEvaluationMode,
+        PlannedDerivedEvaluationMode derivedEvaluationMode)
     {
         if (!Enum.IsDefined(detailLevel))
             throw new ArgumentOutOfRangeException(nameof(detailLevel));
         if (!Enum.IsDefined(invariantEvaluationMode))
             throw new ArgumentOutOfRangeException(nameof(invariantEvaluationMode));
+        if (!Enum.IsDefined(derivedEvaluationMode))
+            throw new ArgumentOutOfRangeException(nameof(derivedEvaluationMode));
         ValidatePreparedMutation(prepared);
         prepared.ValidateDomainState(_sets);
         ValidateProjectedFinalState(prepared);
@@ -453,13 +462,15 @@ public sealed partial class RelationRuntime
             detailLevel == RuntimeImpactDetailLevel.Causal,
             requireSnapshot: true,
             capturePostState: true,
-            invariantEvaluationMode: invariantEvaluationMode);
+            invariantEvaluationMode: invariantEvaluationMode,
+            derivedEvaluationMode: derivedEvaluationMode);
         try
         {
             var result = CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
             return new PreparedImpactPlan(
                 this, prepared, prepared.BaseVersion, detailLevel, result,
                 Array.AsReadOnly(execution.InvariantEvaluations.ToArray()),
+                Array.AsReadOnly(execution.DerivedEvaluations.ToArray()),
                 execution.ForwardPatch!, execution.Result.PolicyActions);
         }
         finally

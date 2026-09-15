@@ -1,4 +1,23 @@
 #nullable enable
+Raffinert.Relations.PlannedDerivedEvaluation
+Raffinert.Relations.PlannedDerivedEvaluation.DefinitionKey.get -> string?
+Raffinert.Relations.PlannedDerivedEvaluation.DefinitionKey.init -> void
+Raffinert.Relations.PlannedDerivedEvaluation.DerivedId.get -> int
+Raffinert.Relations.PlannedDerivedEvaluation.DerivedId.init -> void
+Raffinert.Relations.PlannedDerivedEvaluation.PlannedDerivedEvaluation(int DerivedId, object! Source, object? Value, Raffinert.Relations.DerivedValueState State) -> void
+Raffinert.Relations.PlannedDerivedEvaluation.Source.get -> object!
+Raffinert.Relations.PlannedDerivedEvaluation.Source.init -> void
+Raffinert.Relations.PlannedDerivedEvaluation.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
+Raffinert.Relations.PlannedDerivedEvaluation.SourceIdentity.init -> void
+Raffinert.Relations.PlannedDerivedEvaluation.State.get -> Raffinert.Relations.DerivedValueState
+Raffinert.Relations.PlannedDerivedEvaluation.State.init -> void
+Raffinert.Relations.PlannedDerivedEvaluation.Value.get -> object?
+Raffinert.Relations.PlannedDerivedEvaluation.Value.init -> void
+Raffinert.Relations.PlannedDerivedEvaluationMode
+Raffinert.Relations.PlannedDerivedEvaluationMode.Affected = 1 -> Raffinert.Relations.PlannedDerivedEvaluationMode
+Raffinert.Relations.PlannedDerivedEvaluationMode.None = 0 -> Raffinert.Relations.PlannedDerivedEvaluationMode
+Raffinert.Relations.PreparedImpactPlan.DerivedEvaluations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.PlannedDerivedEvaluation!>!
+Raffinert.Relations.RelationRuntime.PlanDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode, Raffinert.Relations.PlannedDerivedEvaluationMode derivedEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan!
 Raffinert.Relations.PlannedInvariantEvaluation
 Raffinert.Relations.PlannedInvariantEvaluation.DefinitionKey.get -> string?
 Raffinert.Relations.PlannedInvariantEvaluation.DefinitionKey.init -> void

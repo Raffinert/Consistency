@@ -29,7 +29,8 @@ public sealed partial class RelationRuntime
         bool captureCausalEvidence,
         bool requireSnapshot = false,
         bool capturePostState = false,
-        PlannedInvariantEvaluationMode invariantEvaluationMode = PlannedInvariantEvaluationMode.None)
+        PlannedInvariantEvaluationMode invariantEvaluationMode = PlannedInvariantEvaluationMode.None,
+        PlannedDerivedEvaluationMode derivedEvaluationMode = PlannedDerivedEvaluationMode.None)
     {
         var plannedImpact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
@@ -47,6 +48,9 @@ public sealed partial class RelationRuntime
                 plannedImpact,
                 navigationRoots,
                 captureCausalEvidence);
+            var derivedEvaluations = derivedEvaluationMode == PlannedDerivedEvaluationMode.Affected
+                ? EvaluateAffectedDerived(result.DependencyPropagation, prepared.LifecycleMutations)
+                : [];
             var invariantEvaluations = invariantEvaluationMode == PlannedInvariantEvaluationMode.Affected
                 ? EvaluateAffectedInvariants(result.DependencyPropagation, prepared.LifecycleMutations)
                 : [];
@@ -62,7 +66,8 @@ public sealed partial class RelationRuntime
                 result,
                 rollbackJournal,
                 forwardPatch,
-                invariantEvaluations);
+                invariantEvaluations,
+                derivedEvaluations);
         }
         catch
         {
@@ -416,7 +421,48 @@ public sealed partial class RelationRuntime
         RuntimeCommitResult Result,
         RuntimeRollbackJournal? RollbackJournal,
         RuntimeForwardPatch? ForwardPatch,
-        IReadOnlyList<PlannedInvariantEvaluation> InvariantEvaluations);
+        IReadOnlyList<PlannedInvariantEvaluation> InvariantEvaluations,
+        IReadOnlyList<PlannedDerivedEvaluation> DerivedEvaluations);
+
+    private IReadOnlyList<PlannedDerivedEvaluation> EvaluateAffectedDerived(
+        DependencyPropagationResult propagation,
+        IReadOnlyList<RuntimeMutation> lifecycleMutations)
+    {
+        var selected = new List<(IDerivedDefinition Definition, object Source, int Encounter)>();
+        var seen = new Dictionary<IDerivedDefinition, HashSet<object>>();
+        var encounter = 0;
+        foreach (var impact in propagation.DerivedImpacts)
+            foreach (var source in impact.Sources)
+                Add(impact.Definition, source);
+        foreach (var added in lifecycleMutations.OfType<ObjectAdded>())
+            foreach (var definition in _derivedStates.Keys.Where(definition =>
+                ReferenceEquals(definition.SourceSet, added.Set)))
+                Add(definition, added.Instance);
+
+        var values = new List<(PlannedDerivedEvaluation Value, int Encounter)>();
+        foreach (var item in selected.OrderBy(value => _derivedIds[value.Definition]))
+        {
+            var state = _derivedStates[item.Definition];
+            var value = state.GetValue(item.Source);
+            values.Add((new PlannedDerivedEvaluation(
+                _derivedIds[item.Definition], item.Source, value, state.GetValueState(item.Source))
+            {
+                DefinitionKey = item.Definition.DefinitionKey,
+                SourceIdentity = CreateSourceIdentity(item.Definition.SourceSet, item.Source)
+            }, item.Encounter));
+        }
+        return values.OrderBy(value => value.Value.DerivedId)
+            .ThenBy(value => value.Value.SourceIdentity?.DurableIdentity?.ToString(), StringComparer.Ordinal)
+            .ThenBy(value => value.Encounter).Select(value => value.Value).ToArray();
+
+        void Add(IDerivedDefinition definition, object source)
+        {
+            if (!_sets[definition.SourceSet].Contains(source)) return;
+            if (!seen.TryGetValue(definition, out var sources))
+                seen.Add(definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
+            if (sources.Add(source)) selected.Add((definition, source, encounter++));
+        }
+    }
 
     private IReadOnlyList<PlannedInvariantEvaluation> EvaluateAffectedInvariants(
         DependencyPropagationResult propagation,

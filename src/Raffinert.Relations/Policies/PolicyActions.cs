@@ -391,6 +391,22 @@ public enum PlannedInvariantEvaluationMode
     Affected
 }
 
+public enum PlannedDerivedEvaluationMode
+{
+    None,
+    Affected
+}
+
+public sealed record PlannedDerivedEvaluation(
+    int DerivedId,
+    object Source,
+    object? Value,
+    DerivedValueState State)
+{
+    public string? DefinitionKey { get; init; }
+    public SourceIdentity? SourceIdentity { get; init; }
+}
+
 public sealed record PlannedInvariantEvaluation(
     int InvariantId,
     object Source,
@@ -413,6 +429,7 @@ public sealed class PreparedImpactPlan
         RuntimeImpactDetailLevel detailLevel,
         RuntimeApplyResult result,
         IReadOnlyList<PlannedInvariantEvaluation> invariantEvaluations,
+        IReadOnlyList<PlannedDerivedEvaluation> derivedEvaluations,
         object forwardPatch,
         RuntimePolicyActions policyActions)
     {
@@ -422,6 +439,7 @@ public sealed class PreparedImpactPlan
         DetailLevel = detailLevel;
         Result = result;
         InvariantEvaluations = invariantEvaluations;
+        DerivedEvaluations = derivedEvaluations;
         ForwardPatch = forwardPatch;
         PolicyActions = policyActions;
     }
@@ -434,6 +452,7 @@ public sealed class PreparedImpactPlan
     public RuntimeImpactDetailLevel DetailLevel { get; }
     public RuntimeApplyResult Result { get; }
     public IReadOnlyList<PlannedInvariantEvaluation> InvariantEvaluations { get; }
+    public IReadOnlyList<PlannedDerivedEvaluation> DerivedEvaluations { get; }
     public bool HasInvariantViolations => InvariantEvaluations.Any(value =>
         value.State == InvariantEvaluationState.Violated);
     public bool IsCommitted { get; private set; }
