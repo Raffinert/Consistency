@@ -79,6 +79,9 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
     int SourceStateEntryCount { get; }
     object CaptureState();
     void RestoreState(object snapshot);
+    object CaptureSourcesState(IEnumerable<object> sources);
+    void RestoreSourcesState(object state);
+    int GetSourcesStateEntryCount(object state);
     void ApplyImpact(
         IEnumerable<object> sources,
         DependencyImpactKind impact,
@@ -119,6 +122,27 @@ internal sealed class InvariantRuntimeState<TSource>(
         foreach (var pair in (Dictionary<TSource, InvariantEvaluationState>)snapshot)
             _states.Add(pair.Key, pair.Value);
     }
+
+    public object CaptureSourcesState(IEnumerable<object> sources) => sources.Cast<TSource>()
+        .Distinct(ReferenceEqualityComparer<TSource>.Instance)
+        .ToDictionary(
+            source => source,
+            source => _states.TryGetValue(source, out var state)
+                ? new SourceState(true, state)
+                : new SourceState(false, default),
+            ReferenceEqualityComparer<TSource>.Instance);
+
+    public void RestoreSourcesState(object snapshot)
+    {
+        foreach (var pair in (IReadOnlyDictionary<TSource, SourceState>)snapshot)
+            if (pair.Value.Exists)
+                _states[pair.Key] = pair.Value.State;
+            else
+                _states.Remove(pair.Key);
+    }
+
+    public int GetSourcesStateEntryCount(object state) =>
+        ((IReadOnlyDictionary<TSource, SourceState>)state).Count;
 
     public void ApplyImpact(
         IEnumerable<object> sources,
@@ -167,4 +191,6 @@ internal sealed class InvariantRuntimeState<TSource>(
             _states[source] = DependencyStateTransitions.Apply(current, impact);
         }
     }
+
+    private sealed record SourceState(bool Exists, InvariantEvaluationState State);
 }

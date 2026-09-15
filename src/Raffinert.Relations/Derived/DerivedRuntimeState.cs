@@ -56,6 +56,29 @@ internal sealed class SourceDerivedRuntimeState<TSource, TValue>(
         FullRecomputationCount = state.FullRecomputationCount;
     }
 
+    public object CaptureSourcesState(IEnumerable<object> sources) => new SourcesState(
+        sources.Cast<TSource>().Distinct(ReferenceEqualityComparer<TSource>.Instance)
+            .ToDictionary(
+                source => source,
+                source => _cache.TryGetValue(source, out var entry)
+                    ? new SourceEntry(true, entry.Value, entry.State)
+                    : new SourceEntry(false, default, default),
+                ReferenceEqualityComparer<TSource>.Instance),
+        FullRecomputationCount);
+
+    public void RestoreSourcesState(object snapshot)
+    {
+        var state = (SourcesState)snapshot;
+        foreach (var pair in state.Entries)
+            if (pair.Value.Exists)
+                _cache[pair.Key] = new CacheEntry(pair.Value.Value!, pair.Value.State);
+            else
+                _cache.Remove(pair.Key);
+        FullRecomputationCount = state.FullRecomputationCount;
+    }
+
+    public int GetSourcesStateEntryCount(object state) => ((SourcesState)state).Entries.Count;
+
     public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
     public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
 
@@ -66,6 +89,10 @@ internal sealed class SourceDerivedRuntimeState<TSource, TValue>(
     }
 
     private sealed record State(Dictionary<TSource, CacheEntry> Cache, long FullRecomputationCount);
+    private sealed record SourceEntry(bool Exists, TValue? Value, DerivedValueState State);
+    private sealed record SourcesState(
+        IReadOnlyDictionary<TSource, SourceEntry> Entries,
+        long FullRecomputationCount);
 }
 
 internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
@@ -77,6 +104,9 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
     void ResetDiagnostics();
     object CaptureState();
     void RestoreState(object snapshot);
+    object CaptureSourcesState(IEnumerable<object> sources);
+    void RestoreSourcesState(object state);
+    int GetSourcesStateEntryCount(object state);
     object? GetValue(object source);
     DerivedValueState GetValueState(object source);
     void ApplyImpact(IEnumerable<object> sources, DependencyImpactKind impact);
@@ -171,6 +201,31 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
         IncrementalUpdateCount = state.IncrementalUpdateCount;
     }
 
+    public object CaptureSourcesState(IEnumerable<object> sources) => new SourcesState(
+        sources.Cast<TSource>().Distinct(ReferenceEqualityComparer<TSource>.Instance)
+            .ToDictionary(
+                source => source,
+                source => _cache.TryGetValue(source, out var entry)
+                    ? new SourceEntry(true, entry.Value, entry.State)
+                    : new SourceEntry(false, default, default),
+                ReferenceEqualityComparer<TSource>.Instance),
+        FullRecomputationCount,
+        IncrementalUpdateCount);
+
+    public void RestoreSourcesState(object snapshot)
+    {
+        var state = (SourcesState)snapshot;
+        foreach (var pair in state.Entries)
+            if (pair.Value.Exists)
+                _cache[pair.Key] = new CacheEntry(pair.Value.Value!, pair.Value.State);
+            else
+                _cache.Remove(pair.Key);
+        FullRecomputationCount = state.FullRecomputationCount;
+        IncrementalUpdateCount = state.IncrementalUpdateCount;
+    }
+
+    public int GetSourcesStateEntryCount(object state) => ((SourcesState)state).Entries.Count;
+
     public void OnSourceAdded(object source) => _cache.Remove((TSource)source);
 
     public void OnSourceRemoved(object source) => _cache.Remove((TSource)source);
@@ -183,6 +238,12 @@ internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
 
     private sealed record State(
         Dictionary<TSource, CacheEntry> Cache,
+        long FullRecomputationCount,
+        long IncrementalUpdateCount);
+
+    private sealed record SourceEntry(bool Exists, TValue? Value, DerivedValueState State);
+    private sealed record SourcesState(
+        IReadOnlyDictionary<TSource, SourceEntry> Entries,
         long FullRecomputationCount,
         long IncrementalUpdateCount);
 }

@@ -166,25 +166,99 @@ internal sealed class DependencyGraphRuntime
         .ToArray();
 
     public object CaptureState(
-        IReadOnlySet<IRelationDefinition> affectedRelations,
-        IReadOnlyList<PropertyChange> changes)
+        ResolvedChangeImpact impact,
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes,
+        object? previousState = null)
     {
-        var derived = new HashSet<DerivedNode>(_previousDerived);
-        derived.UnionWith(Candidates(changes, _derivedByMember));
-        foreach (var relation in affectedRelations)
-            if (_derivedByRelation.TryGetValue(relation, out var nodes))
-                derived.UnionWith(nodes);
-        ExpandDownstream(derived);
-        var invariants = new HashSet<InvariantNode>(_previousInvariants);
-        invariants.UnionWith(Candidates(changes, _invariantsByMember));
-        foreach (var node in derived)
-            if (_invariantsByDerived.TryGetValue(node, out var nodes))
-                invariants.UnionWith(nodes);
+        var previous = previousState as State;
+        var derivedSources = _derivedNodes.ToDictionary(
+            node => node,
+            _ => new HashSet<object>(ReferenceEqualityComparer.Instance));
+        foreach (var node in _derivedNodes)
+        {
+            AddLifecycleSources(node.Definition.SourceSet, derivedSources[node]);
+            derivedSources[node].UnionWith(node.InvalidSources);
+            derivedSources[node].UnionWith(node.DirtySources);
+            derivedSources[node].UnionWith(node.ConservativeSources);
+            if (Candidates(changes, _derivedByMember).Contains(node))
+                derivedSources[node].UnionWith(ResolveRoots(
+                    node.Definition.SourceSet, node.SourceDependencies, changes));
+            if (node.Relation is null)
+                continue;
+            derivedSources[node].UnionWith(impact.GetAffectedRoots(node.Relation, node.Relation.LeftSet));
+            var rights = impact.GetAffectedRoots(node.Relation, node.Relation.RightSet)
+                .Concat(ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes))
+                .Concat(lifecycleMutations.Select(mutation => mutation switch
+                {
+                    ObjectAdded added when ReferenceEquals(added.Set, node.Relation.RightSet) => added.Instance,
+                    ObjectRemoved removed when ReferenceEquals(removed.Set, node.Relation.RightSet) =>
+                        removed.Instance,
+                    _ => null
+                }).OfType<object>())
+                .Distinct(ReferenceEqualityComparer.Instance)
+                .ToArray();
+            derivedSources[node].UnionWith(_relations[node.Relation].GetPotentialLeftsForRights(rights));
+        }
+        if (previous is not null)
+            foreach (var pair in previous.Derived)
+                derivedSources[pair.Key].UnionWith(pair.Value.Sources);
+
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var node in _derivedNodes)
+            {
+                if (!_upstreamsByDerived.TryGetValue(node, out var upstreams))
+                    continue;
+                foreach (var upstream in upstreams)
+                    foreach (var source in DerivedNode.Map(
+                                 upstream.Input, derivedSources[upstream.Node], _projections))
+                        changed |= derivedSources[node].Add(source);
+            }
+        }
+
+        var invariantSources = _invariantNodes.ToDictionary(
+            node => node,
+            _ => new HashSet<object>(ReferenceEqualityComparer.Instance));
+        foreach (var node in _invariantNodes)
+        {
+            AddLifecycleSources(node.Definition.SourceSet, invariantSources[node]);
+            invariantSources[node].UnionWith(node.InvalidSources);
+            invariantSources[node].UnionWith(node.DirtySources);
+            invariantSources[node].UnionWith(ResolveRoots(
+                node.Definition.SourceSet, node.SourceDependencies, changes));
+            foreach (var upstream in node.Derived)
+                invariantSources[node].UnionWith(derivedSources[upstream]);
+        }
+        if (previous is not null)
+            foreach (var pair in previous.Invariants)
+                invariantSources[pair.Key].UnionWith(pair.Value.Sources);
+
         return new State(
-        derived.ToDictionary(node => node, node => node.CaptureState()),
-        invariants.ToDictionary(node => node, node => node.CaptureState()),
-        _previousDerived.ToArray(),
-        _previousInvariants.ToArray());
+            derivedSources.ToDictionary(
+                pair => pair.Key,
+                pair => new NodePatch(pair.Value.ToArray(), pair.Key.CaptureState(pair.Value))),
+            invariantSources.ToDictionary(
+                pair => pair.Key,
+                pair => new NodePatch(pair.Value.ToArray(), pair.Key.CaptureState(pair.Value))),
+            _previousDerived.ToArray(),
+            _previousInvariants.ToArray());
+
+        void AddLifecycleSources(IObjectSetDefinition set, HashSet<object> sources)
+        {
+            foreach (var mutation in lifecycleMutations)
+                switch (mutation)
+                {
+                    case ObjectAdded added when ReferenceEquals(added.Set, set):
+                        sources.Add(added.Instance);
+                        break;
+                    case ObjectRemoved removed when ReferenceEquals(removed.Set, set):
+                        sources.Add(removed.Instance);
+                        break;
+                }
+        }
     }
 
     private void ExpandDownstream(HashSet<DerivedNode> nodes)
@@ -204,18 +278,27 @@ internal sealed class DependencyGraphRuntime
     {
         var state = (State)snapshot;
         foreach (var pair in state.Derived)
-            pair.Key.RestoreState(pair.Value);
+            pair.Key.RestoreState(pair.Value.State);
         foreach (var pair in state.Invariants)
-            pair.Key.RestoreState(pair.Value);
+            pair.Key.RestoreState(pair.Value.State);
         _previousDerived = state.PreviousDerived.ToHashSet();
         _previousInvariants = state.PreviousInvariants.ToHashSet();
     }
 
     private sealed record State(
-        IReadOnlyDictionary<DerivedNode, object> Derived,
-        IReadOnlyDictionary<InvariantNode, object> Invariants,
+        IReadOnlyDictionary<DerivedNode, NodePatch> Derived,
+        IReadOnlyDictionary<InvariantNode, NodePatch> Invariants,
         IReadOnlyList<DerivedNode> PreviousDerived,
         IReadOnlyList<InvariantNode> PreviousInvariants);
+
+    private sealed record NodePatch(IReadOnlyList<object> Sources, object State);
+
+    public int GetCapturedStateEntryCount(object snapshot)
+    {
+        var state = (State)snapshot;
+        return state.Derived.Sum(pair => pair.Key.State.GetSourcesStateEntryCount(pair.Value.State)) +
+            state.Invariants.Sum(pair => pair.Key.State.GetSourcesStateEntryCount(pair.Value.State));
+    }
 
     public DependencyPropagationResult ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
@@ -374,8 +457,8 @@ internal sealed class DependencyGraphRuntime
         public IReadOnlyList<DirectClassificationEvidence> DirectEvidence { get; private set; } = [];
         public HashSet<object> ConservativeSources { get; private set; } = NewSet();
 
-        public object CaptureState() => new NodeState(
-            State.CaptureState(),
+        public object CaptureState(IEnumerable<object> sources) => new NodeState(
+            State.CaptureSourcesState(sources),
             NewSet(InvalidSources),
             NewSet(DirtySources),
             NewSet(ConservativeSources));
@@ -383,7 +466,7 @@ internal sealed class DependencyGraphRuntime
         public void RestoreState(object snapshot)
         {
             var state = (NodeState)snapshot;
-            State.RestoreState(state.RuntimeState);
+            State.RestoreSourcesState(state.RuntimeState);
             InvalidSources = state.InvalidSources;
             DirtySources = state.DirtySources;
             ConservativeSources = state.ConservativeSources;
@@ -519,7 +602,7 @@ internal sealed class DependencyGraphRuntime
                 State.ApplyImpact(newDirty, DependencyImpactKind.Dirty);
         }
 
-        private static IEnumerable<object> Map(
+        internal static IEnumerable<object> Map(
             UpstreamDerivedInput input,
             IReadOnlySet<object> impacted,
             ProjectionIndexRegistry projections) => input is ProjectedUpstreamDerivedInput projected
@@ -564,15 +647,15 @@ internal sealed class DependencyGraphRuntime
         public HashSet<object> InvalidSources { get; private set; } = NewSet();
         public HashSet<object> DirtySources { get; private set; } = NewSet();
 
-        public object CaptureState() => new NodeState(
-            State.CaptureState(),
+        public object CaptureState(IEnumerable<object> sources) => new NodeState(
+            State.CaptureSourcesState(sources),
             NewSet(InvalidSources),
             NewSet(DirtySources));
 
         public void RestoreState(object snapshot)
         {
             var state = (NodeState)snapshot;
-            State.RestoreState(state.RuntimeState);
+            State.RestoreSourcesState(state.RuntimeState);
             InvalidSources = state.InvalidSources;
             DirtySources = state.DirtySources;
         }

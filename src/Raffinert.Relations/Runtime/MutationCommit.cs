@@ -143,7 +143,7 @@ public sealed partial class RelationRuntime
         navigationChanged ? _navigation.CaptureTouchedState(
             touchedNavigationRoots, touchedNavigationOwners, scopeSource?.Navigation) : null,
         projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
-        _dependencyGraph.CaptureState(affectedRelations, changes),
+        _dependencyGraph.CaptureState(impact, lifecycleMutations, changes, scopeSource?.Dependencies),
         LastRelationImpacts,
         _reindexedRoots,
         _affectedSources,

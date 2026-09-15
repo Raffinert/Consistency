@@ -33,6 +33,7 @@ internal interface IRelationRuntimeState
     void ReindexLeft(object instance);
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
+    IReadOnlyCollection<object> GetPotentialLeftsForRights(IEnumerable<object> rights);
 }
 
 internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState
@@ -425,6 +426,24 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         foreach (var right in rights.Cast<TRight>())
             if (_leftsByRight.TryGetValue(right, out var related))
                 lefts.UnionWith(related);
+        return lefts;
+    }
+
+    public IReadOnlyCollection<object> GetPotentialLeftsForRights(IEnumerable<object> rights)
+    {
+        var lefts = GetLeftsForRights(rights).ToHashSet(ReferenceEqualityComparer.Instance);
+        foreach (var right in rights.Cast<TRight>())
+            if (_definition.ReverseAccessPlan is HashJoinAccessPlan plan)
+            {
+                var keys = new HashSet<CompositeKey> { ReadRightKey(plan, right) };
+                if (_keys.TryGetValue(right, out var oldKey))
+                    keys.Add(oldKey);
+                foreach (var key in keys)
+                    if (_leftIndex.TryGetValue(key, out var bucket))
+                        lefts.UnionWith(bucket);
+            }
+            else
+                lefts.UnionWith(_leftObjects.Instances.Cast<TLeft>());
         return lefts;
     }
 
