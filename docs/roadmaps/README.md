@@ -1,6 +1,8 @@
 # Roadmaps
 
-- **Active implementation plan:** close remaining authoritative-scope holes for reverse-navigation consumers and make the manual/generated-key EF persistence path policy-aware by construction: [Tasks 137–144](../codex-plan-scope-safety-completion-and-manual-persistence.md)
+- Completed authoritative scope coverage for reverse-navigation consumers and policy-aware manual/generated-key
+  EF persistence with local and remote release proof at `fdf8c010917c07c0ea57737a7dc2b0bbdbd96dee`:
+  [Tasks 137–144](../codex-plan-scope-safety-completion-and-manual-persistence.md)
 - Completed authoritative data-scope safety for enforced invariants and materialized derived values with
   local and remote release proof at `009da18f01ab2e0eb4495d705628ea4708ab60fd`:
   [Tasks 130–136](../codex-plan-authoritative-scope-safety.md)

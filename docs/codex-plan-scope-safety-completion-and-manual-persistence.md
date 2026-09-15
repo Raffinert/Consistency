@@ -1,6 +1,10 @@
 # Codex implementation plan — scope safety completion and policy-aware manual persistence
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED**
+
+Completed on 2026-09-15. Implementation head `fdf8c010917c07c0ea57737a7dc2b0bbdbd96dee`
+passed CI run [35021962335](https://github.com/Raffinert/Consistency/actions/runs/35021962335)
+and release-candidate run [35024349773](https://github.com/Raffinert/Consistency/actions/runs/35024349773).
 
 Baseline commit: `c9b6a340b7eb3a21946725a41ec87b109417abb8`
 

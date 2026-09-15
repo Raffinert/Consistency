@@ -72,3 +72,23 @@ This run verifies that cross-object EF enforcement and materialization fail befo
 authoritative `ConsistencyScope`, while source-local policies remain scope-free. SQLite proofs cover both
 false-valid aggregate prevention and partial-mirror prevention. No package was published, and no tag or
 GitHub release was created.
+
+## Scope completion and policy-aware manual persistence gate
+
+Verification date: 2026-09-15
+
+Verified implementation head before closeout documentation: `fdf8c010917c07c0ea57737a7dc2b0bbdbd96dee`
+
+- CI run: [35021962335](https://github.com/Raffinert/Consistency/actions/runs/35021962335) — success.
+- Release-candidate run: [35024349773](https://github.com/Raffinert/Consistency/actions/runs/35024349773) — success
+  (2026-09-15 21:13:24–21:18:34 UTC).
+- Artifact: `release-candidate-packages` (artifact ID `10418629562`).
+- Core tests: 298 passed on .NET 8 and 298 passed on .NET 10.
+- EF Core and SQLite tests: 97 passed on .NET 10.
+- Both samples, formatting verification, package/API validation, fresh package consumers, and artifact upload
+  passed.
+
+This run verifies navigation-consumer scope requirements and the public policy-aware manual persistence
+unit of work. SQLite proofs cover nested-navigation false authority, generated-key rollback and success,
+materialization, immutable captured policy, post-durability synchronization failure, and resumable dispatch.
+No package was published, and no tag or GitHub release was created.
