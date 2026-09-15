@@ -97,6 +97,13 @@ are captured in the same forward patch. `HasInvariantViolations` can gate extern
 `Commit(plan)` installs the precomputed state without rerunning predicates. Discarding a plan restores only
 runtime-owned state; callers must rollback or reconcile mutated application objects and EF tracking state.
 
+`HasInvariantViolations` reports violations only among sources evaluated for that plan; it is not a global
+scan of every registered invariant source. `InvariantEvaluations` contains propagation-selected affected
+sources plus applicable newly added sources. Its `Source` is an in-process reference, so durable workflows
+should use `SourceIdentity` data. The caller decides whether a violation blocks persistence and remains
+responsible for transaction management. Domain-level `Unknown` behavior is modeled by the Boolean invariant
+(for example, mapping Unknown to non-blocking); the planning API itself does not define tri-state semantics.
+
 For application-assigned keys, use the binding sequence:
 
 ```csharp

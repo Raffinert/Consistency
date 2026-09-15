@@ -19,3 +19,12 @@ Those rules are therefore not presented as final-state invariants. The no-GRN pr
 - Three-valued domain decisions can be declarative derived values, but `Invariant.Must` is Boolean. Treating `Unknown` as success would conflate "not evaluated" with "valid", so the runner reports it explicitly.
 - Runtime impact traces are useful for add/remove scenario evidence, while invariant truth is read from the post-mutation model.
 - Evaluated binding plans close the pre-persistence validation gap for final-state invariants without dispatching callbacks during planning.
+
+## Completed proof matrix
+
+- Core tests cover affected-only selection, add/remove lifecycle, direct invariant dependencies, stale plans, domain drift, exception rollback, callback isolation, detail-level parity, and predicate-free plan installation.
+- The executable sample covers orphan repair, LGR aggregate add/remove, service and GRN Unknown transitions, and composite receipt-key retargeting.
+- SQLite tests cover stable-key rejection with explicit EF reload, successful database-first installation, and generated-key transaction commit/rollback paths.
+- Packed .NET 8, .NET 10, and EF consumers compile and inspect affected invariant evaluations.
+
+`HasInvariantViolations` is affected-plan data, not a global health scan. `Source` remains an in-process object reference; consumers needing durable identification use `SourceIdentity`. Applications—not Raffinert—own persistence rejection and transaction rollback.
