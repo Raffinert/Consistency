@@ -1,7 +1,7 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 94–99 — pre-commit guard proof completion](../codex-plan-precommit-guard-proof-completion.md)
-- Partially implemented pre-commit guard dogfood wave with remaining acceptance gaps superseded by the active plan: [Tasks 87–93](../codex-plan-dogfood-precommit-guard-validation.md)
+- Completed pre-commit guard proof wave: [Tasks 94–99](../codex-plan-precommit-guard-proof-completion.md)
+- Completed pre-commit guard dogfood wave: [Tasks 87–93](../codex-plan-dogfood-precommit-guard-validation.md)
 - Completed post-alpha production integration plan: [Tasks 80–86 — durable policy work and release baseline](../codex-plan-post-alpha-production-integration-v1.md)
 - Completed weaker-model final alpha v3 plan: [Tasks 73–79](../codex-plan-weaker-model-final-alpha-v3.md)
 - Partially implemented mechanical alpha-finish wave with remaining acceptance gaps superseded by later plans: [Tasks 67–72](../codex-plan-mechanical-alpha-finish.md)
@@ -16,5 +16,5 @@
 - Architecture review: [post-safety-hardening review](../architecture-review-after-safety-hardening.md)
 - `archive/`: historical context only; these files are not current instructions.
 
-The active plan is the implementation source of truth. Preserve completed/implemented plans and the archive
+Preserve completed/implemented plans and the archive
 when researching why earlier design decisions were made; use `docs/architecture.md` for current runtime contracts.
