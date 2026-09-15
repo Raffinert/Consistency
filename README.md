@@ -1,48 +1,126 @@
 # Raffinert.Relations
 
-Raffinert.Relations is an experimental declarative dependency engine for .NET object models.
+**Incremental consistency for .NET object models.**
 
-The dependency-free core package supports .NET 8 and .NET 10, and its behavioral suite runs on both
-frameworks. The EF adapter and its isolated integration suite target .NET 10 and EF Core 10; benchmarks
-currently run on .NET 10.
+Raffinert.Relations lets you declare relationships, derived values, and invariants as expression trees.
+It analyzes those declarations to build the dependency graph, indexes, reverse navigation, invalidation
+rules, and incremental propagation needed to keep a model consistent as objects change.
 
-Relationships are defined as expression trees. The library analyzes those expressions to derive dependencies, access paths, indexes, and change impact, allowing relationship queries to be maintained incrementally without repeating the business rule in index or refresh configuration.
+Instead of manually wiring consistency logic across services and handlers:
 
-## Example
+```mermaid
+flowchart TD
+    A[Field changed] --> B[Invalidate calculation]
+    B --> C[Invalidate dependent calculation]
+    C --> D[Check persisted links]
+    D --> E[Schedule repair]
+```
+
+you declare the relationships and computations once. The runtime determines **what is affected**, **how
+severe the impact is**, and **what work must happen next**.
+
+> You declare domain relationships. Raffinert.Relations derives the consistency machinery.
+
+The dependency-free core targets .NET 8 and .NET 10. The EF Core adapter targets .NET 10 / EF Core 10.
+The project is currently experimental and alpha-oriented.
+
+## Why?
+
+Consistency logic in rich applications tends to spread:
+
+- one service updates a field;
+- another remembers to invalidate a calculation;
+- another knows which persisted links depend on that calculation;
+- another decides whether repair or rematching must happen now or can be deferred.
+
+That works until the domain evolves and one of those paths is forgotten.
+
+Raffinert.Relations makes the dependency graph explicit and executable. The same expressions that define
+relationships and derived values are analyzed to derive indexes, reverse access paths, change impact, and
+propagation behavior.
+
+This is especially useful in domains such as procurement, accounting, pricing, inventory, reservations,
+allocation, eligibility, planning, and other models where one business change can have several dependent
+consequences.
+
+## Core capabilities
+
+- Expression-defined binary relations whose original predicate remains the semantic authority
+- Automatic dependency and nested member-path analysis
+- Incremental hash indexes and reverse navigation where analysis proves them safe
+- Correct scan fallback for unsupported or opaque query expressions
+- Lazy derived state with **Fresh**, **Dirty**, and **Invalid** semantics
+- Derived-value dependency graphs, including projected cross-object dependencies
+- Exact and conservative propagation strategies
+- Incremental `Count`, `LongCount`, `Any`, and numeric `Sum` plans
+- Invariants with immediate evaluation, invalidation, or deferred repair
+- Summary and causal impact reporting
+- Binding execution plans for transaction/outbox integration
+- Optional EF Core change-tracker integration
+- Compiled-model and runtime diagnostics
+
+The core package has no EF Core or dependency-injection dependency.
+
+## What Raffinert.Relations is not
+
+It is not an ORM, event bus, or general-purpose workflow engine.
+
+It does not replace your domain objects or persisted business relationships. Its job is narrower:
+**given a graph of relationships and computations, efficiently determine and maintain the consequences
+of change.**
+
+## Start with a relation
+
+Relations are ordinary expression trees:
 
 ```csharp
 var model = new RelationModelBuilder();
 
-var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
-var poLines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
+var invoices = model.Objects<InvoiceLine>()
+    .Key(x => x.Id);
 
-var matches = model.Relation(invoices, poLines).Where((invoice, poLine) =>
-    invoice.PurchaseOrderNumber == poLine.PurchaseOrderNumber &&
-    invoice.ItemNumber == poLine.ItemNumber);
+var poLines = model.Objects<PurchaseOrderLine>()
+    .Key(x => x.Id);
 
-var runtime = model.Build().CreateRuntime();
+var candidates = model.Relation(invoices, poLines)
+    .Where((invoice, poLine) =>
+        invoice.PurchaseOrderNumber == poLine.PurchaseOrderNumber &&
+        invoice.ItemNumber == poLine.ItemNumber);
+
+var compiled = model.Build();
+var runtime = compiled.CreateRuntime();
+
 runtime.Add(invoices, invoice);
 runtime.Add(poLines, poLine);
 
-var related = runtime.Related(matches, invoice);
-
-var oldItem = poLine.ItemNumber;
-poLine.ItemNumber = "ITEM-2";
-runtime.Apply(Change.Property(poLines, poLine, x => x.ItemNumber, oldItem, poLine.ItemNumber));
+var related = runtime.Related(candidates, invoice);
 ```
 
-`Change.Property` observes a mutation that has already happened; it never mutates the domain object.
-The object-set argument can be omitted when the instance belongs to exactly one registered set.
-An object's declared key is immutable while the object is registered. Reported key changes are rejected;
-remove and re-add the object when its identity genuinely needs to change.
+Raffinert.Relations analyzes the predicate and derives hash access paths where it can do so safely.
+Unsupported expressions retain the original compiled predicate and fall back to scanning rather than
+changing semantics.
 
-A `ChangeSet` is fully validated before runtime-maintained indexes and dependency state are updated.
-Repeated changes to one instance/member must form a contiguous value chain (`A -> B`, `B -> C`) and
-are normalized to their net effect; conflicting chains are rejected. Domain mutation remains external
-and is not transactional. Pass `ChangeValidationMode.StrictNewValue` to `Apply` to additionally verify
-that each member currently equals its reported final new value.
+## Report ordinary domain changes
 
-Use `MutationSet` when one domain operation includes object lifecycle, property, and collection changes:
+Domain objects remain ordinary objects. Mutate them normally, then report what changed:
+
+```csharp
+var oldItemNumber = invoice.ItemNumber;
+invoice.ItemNumber = "ITEM-2";
+
+runtime.Apply(
+    Change.Property(
+        invoices,
+        invoice,
+        x => x.ItemNumber,
+        oldItemNumber,
+        invoice.ItemNumber));
+```
+
+`Change.Property` observes a mutation that has already happened; it does not mutate the object itself.
+The runtime validates the change and updates only the runtime-owned state affected by it.
+
+A domain operation can report lifecycle, property, and collection changes together:
 
 ```csharp
 runtime.Apply(MutationSet.Create(
@@ -52,59 +130,68 @@ runtime.Apply(MutationSet.Create(
     Change.Remove(poLines, removedLine)));
 ```
 
-The runtime validates the complete mutation set before updating runtime-owned state, commits it as one
-logical operation, and dispatches dependency policy callbacks only after the final state is committed.
-External unit-of-work integrations can split those phases explicitly:
+The complete mutation set is validated before runtime-maintained state is committed.
+
+## Derived values
+
+Relations become more useful when they feed derived state.
+
+For example, a purchase-order line can derive its received quantity from matching goods receipts:
 
 ```csharp
-var prepared = runtime.Prepare(mutations, ChangeValidationMode.StrictNewValue);
-await database.SaveChangesAsync();
-runtime.Commit(prepared);
-runtime.Dispatch(prepared);
+var receivedQuantity = model.Derived(poLines)
+    .Using(receipts)
+    .Incrementally()
+    .Compute((line, matches) =>
+        matches.Sum(receipt => receipt.Quantity));
 ```
 
-Use `CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal)` in that sequence when the database is
-already durable, or when external work does not need to share the business database transaction, and the
-committed impact must be observed before callbacks are dispatched. This is not the same-database atomic-outbox
-pattern. For outbox rows that must commit atomically with business data and exactly match later runtime
-installation, use the binding `PlanDetailed` workflow described below. The EF Core unit of work exposes the
-same manual prepared-plan operation.
+Recognized exact aggregates can update already-fresh cache entries directly from relation/item deltas.
+Unrecognized expressions retain the original compiled computation as the semantic fallback.
 
-Existing authoritative objects can initialize a fresh runtime without pretending startup is a business
-mutation. Bootstrap keeps `Version == 0`, emits no policy work, and leaves derived values lazy:
+Derived values can depend on other derived values and form a compiled dependency DAG:
 
 ```csharp
-var runtime = compiled.CreateRuntime(seed =>
-{
-    seed.Add(poLines, loadedLines);
-    seed.Add(receipts, loadedReceipts);
-});
+var availableQuantity = model.Derived(poLines)
+    .Using(receivedQuantity)
+    .Compute((line, received) =>
+        line.OrderedQuantity - received);
 ```
 
-Preparation performs ordinary mutation validation without changing runtime-owned state. A prepared
-mutation records `runtime.Version`; commit rejects it as stale if another runtime mutation committed in
-the meantime. Commit updates runtime state but never invokes application callbacks, which remain isolated
-in the dispatch phase.
+They can also consume upstream values through tracked object references:
 
-Collection navigation is explicit: mutate the domain collection first, then report it with
-`Change.CollectionAdd`, `Change.CollectionRemove`, or `Change.CollectionReset`. The runtime maintains
-owner/item reverse navigation so later item-property changes resolve affected owners incrementally.
-Membership uses reference-identity set semantics: equal-but-distinct objects remain distinct, while
-duplicate occurrences of the same reference count as one dependency membership. Report
-`CollectionRemove` only when the final occurrence is absent; use `CollectionReset` after duplicate-count,
-ordering, wholesale replacement, or other changes where an add/remove signal is insufficient. Ordering
-and multiplicity are not independently indexed, but reset reevaluates expressions that depend on them.
-Nested collections and one item shared by multiple registered roots are reverse-tracked; after removal,
-later item mutations no longer affect the former owner.
+```csharp
+var linkValidity = model.Derived(invoiceLinks)
+    .Using(link => link.PurchaseOrderLine, availableQuantity, unitRate)
+    .Compute((link, available, rate) =>
+        link.ReservedQuantity <= available &&
+        link.CapturedRate == rate);
+```
 
-Cached derived computations, invariant predicates, and relations materialized for derived propagation
-must have complete dependency analysis. `Build()` rejects opaque code or mutable captured/static state by
-default because the runtime cannot keep those caches reliably fresh. Direct-query-only relations may stay
-opaque because their original predicate is evaluated on every query. Deliberate prototypes can call
-`AllowIncompleteDependencies()` on the affected relation, derived value, or invariant; `DebugView` then
-labels the weaker guarantee explicitly, and cached freshness must not be treated as fully tracked.
+A change can therefore propagate through a graph such as:
 
-Derived definitions can express domain correctness severity independently of query optimization:
+```mermaid
+flowchart LR
+    GR[Goods receipt change] --> RQ[ReceivedQuantity]
+    RQ --> AQ[AvailableQuantity]
+    UR[UnitRate] --> LV[LinkValidity]
+    AQ --> LV
+    LV --> INV[Invariant / repair decision]
+    INV --> RM[Repair or rematch]
+```
+
+The application does not need to manually orchestrate every edge in that graph.
+
+## Dirty vs Invalid
+
+A dependency becoming stale is not always the same as becoming unsafe.
+
+Raffinert.Relations distinguishes those cases:
+
+- **Dirty** — the cached value must be recomputed when freshness matters.
+- **Invalid** — the value must not be relied upon before recomputation or revalidation.
+
+A relation-backed derived value can classify different kinds of impact independently:
 
 ```csharp
 var received = model.Derived(poLines)
@@ -113,245 +200,170 @@ var received = model.Derived(poLines)
         .MembershipAdded(DependencySeverity.Dirty)
         .MembershipRemoved(DependencySeverity.Invalid)
         .ItemChanged(DependencySeverity.Invalid))
-    .Compute((line, matches) => matches.Sum(receipt => receipt.Quantity));
+    .Compute((line, matches) =>
+        matches.Sum(receipt => receipt.Quantity));
 ```
 
-`Dirty` means the cached result must be recomputed when freshness matters; `Invalid` means it must not
-be relied upon before recomputation. The same policy has identical semantics for scan and hash plans.
+Typed source-member policies can also classify value transitions—for example, a quantity decrease can be
+`Invalid` while an increase remains merely `Dirty`.
 
-For outbox, queue, or background-work integrations, `ApplyDetailed` commits synchronously but returns
-policy work as data before any application callback runs:
+## Invariants and repair
+
+Invariants consume direct or derived state and can react when correctness is affected. Reactions can be
+immediate or represented as deferred repair work.
+
+This lets a domain model express patterns such as:
+
+```mermaid
+flowchart LR
+    Q[PO quantity decreased] --> A[AvailableQuantity invalid]
+    A --> L[Existing link may be invalid]
+    L --> R[Schedule repair]
+```
+
+without embedding the repair orchestration into every command handler that can affect quantity.
+
+## Explain what changed
+
+Basic `Apply` performs the runtime update without building diagnostic impact data.
+
+When impact needs to be inspected or persisted, use a detailed operation:
 
 ```csharp
-RuntimeApplication application = runtime.ApplyDetailed(mutations);
-RuntimeApplyResult result = application.Result;
-DurablePolicyWork durableWork = result.GetDurablePolicyWork();
+var application = runtime.ApplyDetailed(
+    mutations,
+    RuntimeImpactDetailLevel.Causal);
 
-foreach (var request in durableWork.RepairRequests)
-{
-    outbox.Add(request.DefinitionKey, request.Source, request.Reason);
-}
-
-application.Dispatch.Invoke(); // optional configured in-process callbacks
+Console.WriteLine(
+    RuntimeImpactTraceRenderer.Render(application.Result));
 ```
 
-`RuntimeApplyResult` is rich in-process diagnostic and impact data. `DurablePolicyWork` is its strict,
-data-only projection for durable repair and immediate-evaluation scheduling; projection fails if any policy
-request lacks a named invariant, named object set, or canonically supported source key. The full causal result
-is not declared a stable wire format by this API.
+Detailed results can include relation pair deltas, affected derived values, invariant impacts, policy
+requests, mutation origins, and deterministic direct-cause records.
 
-Detailed apply defaults to summary data. Opt into deterministic direct-cause records only when an
-explanation is needed:
+For durable background work, project the in-process result to strict data-only work:
 
 ```csharp
-var application = runtime.ApplyDetailed(mutations, RuntimeImpactDetailLevel.Causal);
-Console.WriteLine(RuntimeImpactTraceRenderer.Render(application.Result));
+DurablePolicyWork durableWork =
+    application.Result.GetDurablePolicyWork();
 ```
 
-Typed source-member policies classify normalized value transitions once in the model—for example, an
-ordered-quantity decrease can be `Invalid` while an increase remains `Dirty`. Basic `Apply` captures
-neither summary nor causal records.
+Stable definition names and canonical source identities are required when data crosses a process boundary.
 
-Derived values can reuse an upstream derived value owned by an object reached through a tracked
-direct reference. The selected target must be non-null and registered in the exact object set that owns the
-upstream value. Lifecycle batches are validated against their final state, so target + dependent can be
-added or removed together while removing a target with surviving dependents is rejected. Projection
-fan-out is maintained in reference-identity reverse indexes rather than found by scanning the downstream
-set. This keeps a persisted link model separate while declaring purchase-order calculations once:
+## Transaction and outbox integration
+
+External persistence can separate mutation preparation, runtime commit, and callback dispatch:
 
 ```csharp
-var linkValidity = model.Derived(invoiceLinks)
-    .Using(link => link.PurchaseOrderLine, availableQuantity, unitRate)
-    .Compute((link, available, rate) =>
-        link.ReservedQuantity <= available && link.CapturedRate == rate);
+var prepared = runtime.Prepare(
+    mutations,
+    ChangeValidationMode.StrictNewValue);
+
+await database.SaveChangesAsync();
+
+runtime.Commit(prepared);
+runtime.Dispatch(prepared);
 ```
 
-The result also includes relation pair deltas, derived and invariant impacts, immediate-evaluation
-requests, and the original `ChangeImpact`. Numeric definition IDs and `Source` object references are
-in-process conveniences only. Persist `DefinitionKey` plus canonical `DurableSourceIdentity`; the
-`GetDurableIdentity()` helper fails explicitly when the invariant/object set is unnamed or the key cannot
-be represented canonically.
-
-Standalone aggregates can opt into exact incremental maintenance:
+When durable external work must exactly match the runtime result, use a binding plan:
 
 ```csharp
-var received = model.Derived(poLines)
-    .Using(receipts)
-    .Incrementally()
-    .Compute((line, matches) => matches.Sum(receipt => receipt.Quantity));
+var plan = runtime.PlanDetailed(
+    prepared,
+    RuntimeImpactDetailLevel.Causal);
+
+PersistDurablePolicyWork(
+    plan.Result.GetDurablePolicyWork());
+
+await database.CommitAsync();
+
+runtime.Commit(plan);
+runtime.Dispatch(plan);
 ```
 
-Exact `Count`, `LongCount`, parameterless `Any`, and direct numeric `Sum` expressions have incremental
-plans. They update already-fresh cache entries from relation/item deltas without enumerating the full
-match list. Unrecognized expressions retain the original compiled computation as the semantic fallback;
-the selected plan is shown in `DebugView`.
+`PlanDetailed` is binding: semantic classification and propagation are executed once, runtime state is
+restored, and the plan retains the forward state needed by the later commit. `Commit(plan)` installs that
+same result rather than rerunning semantic code.
 
-Full-recompute relation consumers may instead call `PreferConservativePropagation()` before `Compute(...)`.
-This avoids retaining permanent matching pairs and invalidates a safe source superset; lazy reads
-still execute the original predicate. Recognized join keys route right-side changes through the union
-of their old/new source candidate buckets; scan/opaque relations safely fall back to all sources.
-Incremental computations and exact membership-severity policies
-retain exact materialized propagation. Query access, reverse candidate access, and propagation plan are
-reported independently in compiled diagnostics.
+`PreviewDetailed` is intentionally different: it is diagnostic and non-binding, so a later ordinary commit
+may execute semantic code again.
 
-`DebugView` also identifies each relation's `None` or `ExactPropagation` materialization mode.
-`runtime.Diagnostics.Relations` reports forward/reverse access-index entries, materialized pair count,
-average fan-out, and a density-warning flag. Configure advisory thresholds with
-`CreateRuntime(new RuntimeDiagnosticOptions { ... })`; they do not reject or limit runtime mutations.
+If the business database commits but runtime installation later fails, the database is authoritative;
+rebuild or reconcile the runtime from durable state rather than retrying the database mutation blindly.
 
-`compiled.Diagnostics` is the machine-readable counterpart to `DebugView`. It provides immutable object
-set, relation, derived-value, and invariant records with deterministic IDs, types/expressions,
-relation and upstream-derived input IDs, access plans, completeness issues, materialization, LINQ semantics, computation plans, and
-configured reactions/severities. Runtime counters additionally track reindexed roots, affected sources,
-membership pairs added/removed, full and incremental derived computations, and policy requests since the
-last `ResetDiagnostics()` call.
+## EF Core integration
 
-## Implemented
+The EF Core adapter can translate change-tracker state into the same core mutation model.
 
-- Typed object sets with stable keys
-- Separate mutable object-set builders and stable `ObjectSet<T>` runtime handles
-- Binary relations whose original compiled predicate remains the semantic authority
-- Dependency and nested member-path analysis
-- Safe-by-default cached dependency completeness validation with explicit weaker-guarantee opt-ins
-- Automatic single and composite hash indexes for safe equality joins
-- Explicit scan and hash-join access planning
-- Reverse hash access for exact derived-state propagation
-- Ordinal and ordinal-ignore-case comparer-aware string joins
-- Correct scan fallback for opaque or unsupported predicates
-- Incremental add, remove, and scalar-property index maintenance
-- Explicit collection add/remove/reset with incremental owner/item navigation
-- Shared arbitrary-depth reverse navigation for nested paths
-- Compiled null-safe member-path and cached single-member readers
-- Access-impact and semantic-impact reporting
-- Deterministic, atomically validated `ChangeSet` and unified lifecycle/property/collection `MutationSet` application
-- Bidirectional relation queries
-- Lazy derived state with distinct fresh, dirty, and invalid states
-- Source-only derived values and one/two-upstream derived composition through a compiled DAG
-- Configurable direct-source severity on source-only, relation-backed, and composed derived values
-- Typed value-sensitive source-member severity with fixed fallback behavior
-- Opt-in incremental `Count`, `LongCount`, `Any`, and direct numeric `Sum` computation plans
-- Documented monotonic state transitions with explicit recomputation and revalidation recovery
-- Public per-derived dependency severity for membership additions/removals and item changes, independent of access planning
-- Exact source-scoped derived invalidation backed by bidirectional relation membership
-- Unified relation-impact snapshots for delta, semantic, and access propagation
-- Focused member/relation/derived/invariant/policy dependency-graph propagation
-- Source lifecycle cleanup for derived, invariant, and materialized relation state
-- Role-aware dependency analysis for derived computations and invariant predicates
-- LINQ dependency extraction for common aggregate, filter, and projection operators
-- Explicit membership/item/ordering semantics for selection, cardinality, distinct, paging, and containment operators
-- Single- and multi-input invariant evaluation with immediate, dirty, invalidation, and repair policies
-- Post-commit immediate evaluation and deduplicated repair-request dispatch
-- Data-only `RuntimeApplyResult` impacts and policy requests with a separate resumable `PolicyDispatchHandle`
-- Opt-in exact/conservative causal explanations and deterministic trace rendering
-- A separate EF Core change-tracker adapter package
-- EF Core unit-of-work capture with prepare-before-save, versioned commit-after-success, relationship resets, and explicit set mapping
-- A BenchmarkDotNet benchmark project
-- Propagation precision diagnostics and 1/10/100-change benchmarks at 10k/100k scale
-- Measured range-planning benchmark (current equality-prefix strategy retained)
-- Human-readable compiled model diagnostics through `DebugView`
-- Per-relation materialization, index-size, pair-count, fan-out, and configurable density diagnostics
-- Structured compiled-model diagnostics and cumulative incremental-work runtime counters
-- Deterministic full-graph randomized optimized-versus-scan correctness coverage
-- Core behavior verification on .NET 8 and .NET 10; EF Core adapter verification on .NET 10
-- CI restore/build/test/format/pack validation and NuGet-ready package metadata
-- Deterministic SourceLink-enabled packages, repository commit metadata, package validation, and `.snupkg` symbols
+`SaveChangesAndApply` / `SaveChangesAndApplyAsync` provide the simple ordering case. More advanced
+transaction/outbox workflows can explicitly capture a `RelationUnitOfWork`, then use its prepare, plan,
+commit, and dispatch phases.
 
-## Further work
+Generated keys are supported, including workflows where final identities become available only after the
+first `SaveChanges` inside a database transaction.
 
-- Additional access plans only for measured workloads that satisfy the
-  [optimizer admission policy](docs/optimizer-policy.md)
-- Optional asynchronous dispatch integrations built on structured policy requests
+See the architecture and example documentation for the exact transaction boundaries and recovery rules.
 
-The core package has no EF Core or dependency-injection dependency.
+## Exact vs conservative propagation
 
-Definitions that cross a process boundary can be assigned stable logical keys with `Named(...)` on
-object-set builders, relations, derived values, and invariants. Names are ordinal-independent and must be
-unique within the compiled model. Structured policy requests expose both the local numeric invariant ID
-and its optional `DefinitionKey`, plus a `SourceIdentity` containing the object-set key, CLR type, and
-registered source key. `SourceIdentity.IsDurable` requires both a named source object set and a
-canonically representable key. A durable policy request additionally requires a stable invariant
-`DefinitionKey`; unnamed definitions and numeric IDs remain intended for in-process diagnostics only.
+Correctness and storage strategy are separate concerns.
+
+Exact propagation can retain matching relation pairs and invalidate only exact affected sources.
+Full-recompute consumers can instead opt into conservative propagation, avoiding permanent pair retention
+while invalidating a safe source superset.
+
+The original relation predicate remains the semantic authority in either case.
+
+Query access, reverse candidate access, and propagation strategy are reported independently in compiled
+diagnostics.
+
+## Dependency analysis safety
+
+Cached derived computations, invariants, and relations used for propagation require complete dependency
+analysis by default.
+
+`Build()` rejects opaque code or mutable captured/static state when the runtime could not guarantee cache
+freshness. Direct-query-only relations may remain opaque because their predicate is evaluated at query time.
+
+Deliberate prototypes can opt into weaker guarantees with `AllowIncompleteDependencies()`. Diagnostics make
+that weaker contract visible.
+
+## Diagnostics and performance
+
+`compiled.DebugView` provides a human-readable description of the compiled model.
+
+`compiled.Diagnostics` exposes structured object-set, relation, derived-value, invariant, access-plan,
+propagation, and completeness information.
+
+`runtime.Diagnostics` exposes incremental-work counters and relation statistics such as index sizes,
+materialized pair count, fan-out, and density warnings.
+
+The repository also contains BenchmarkDotNet benchmarks and recorded results for propagation precision,
+planning, bootstrap/projection, commit safety, and related runtime costs.
+
+## Runtime contracts worth knowing
+
+- Domain mutation is external; change objects report mutations that have already happened.
+- Registered object keys are immutable. Remove/re-add when identity genuinely changes.
+- Mutation sets are validated atomically before runtime-owned state is committed.
+- Collection navigation is explicit through add/remove/reset change records.
+- A prepared mutation is versioned and rejected if the runtime advances before commit.
+- Policy callbacks are dispatched only after runtime-owned state commits.
+- `RelationRuntime` is not thread-safe; callers must externally synchronize mutations and queries.
+
+The detailed edge-case contracts live in the architecture documentation rather than this landing page.
 
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)
-- [Current implementation roadmap](docs/roadmaps/README.md)
 - [End-to-end purchase order and goods receipt example](docs/purchase-order-example.md)
+- [Current implementation roadmap](docs/roadmaps/README.md)
 - [Measured-workload optimizer policy](docs/optimizer-policy.md)
 - [Release and versioning process](RELEASING.md)
+- [Changelog](CHANGELOG.md)
 
-The EF Core adapter captures and prepares a `RelationUnitOfWork` before `SaveChanges`, then commits its
-mutations as one atomic runtime batch and dispatches callbacks only after the database operation succeeds.
-`SaveChangesAndApply`/`SaveChangesAndApplyAsync` provide this ordering. Manual integrations can call the
-unit of work's `Prepare`, `Commit`, and `Dispatch` methods directly.
-If the database succeeds but runtime commit fails, the convenience methods throw
-`RelationRuntimeSynchronizationException`. The database must not be retried blindly: reconcile or rebuild
-the runtime from authoritative state, then prepare new runtime work. Policy callback failures are distinct;
-they occur after runtime commit and resumable dispatch can continue from the failed action.
-Added and deleted entities require a `RelationUnitOfWorkMappings` entry; selectors disambiguate CLR types
-used by multiple object sets. Modified scalars, references, owned entries, and collection resets are
-translated through the same core change contracts. A stale prepared mutation is rejected if runtime state
-advances between preparation and commit and requires application-level reconciliation; it cannot roll back
-the database transaction.
+## Project status
 
-For database-generated keys, additions are prepared while EF still owns the temporary/default value but
-are committed only after `SaveChanges`, when the generated stable key is available. If `SaveChanges`
-participates in an explicit or ambient transaction, success does not mean that transaction is durable:
-capture and `Prepare` before saving, then call the unit's `Commit` and `Dispatch` only after the surrounding
-transaction commits. Discard the prepared unit on rollback. Calling `SaveChangesAndApply` inside an
-uncommitted external transaction advances runtime state too early, so use the manual three-phase API there.
-
-When durable impact/outbox rows must share the business transaction and keys are application-assigned,
-prepare before saving, create a binding plan after the first save, persist it, and commit runtime state
-only after database durability:
-
-```csharp
-var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
-unit.Prepare(runtime);
-await using var transaction = await context.Database.BeginTransactionAsync();
-await context.SaveChangesAsync();
-var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-if (plan is not null)
-    PersistDurablePolicyWork(context, plan.Result.GetDurablePolicyWork());
-await context.SaveChangesAsync();
-await transaction.CommitAsync();
-unit.Commit(runtime);
-unit.Dispatch(runtime);
-```
-
-`PlanDetailed` is binding: it executes semantic classification and propagation once, restores runtime
-state, and retains an internal forward patch. The later `Commit` installs that exact patch without
-rerunning classifiers or predicates. Use it whenever durable external work depends on exact parity.
-`PreviewDetailed` remains a non-binding diagnostic and may execute semantic code again at normal commit.
-Both APIs predict impact for the already-mutated, prepared domain state; neither applies hypothetical
-old/new values to an untouched object graph. Planning and preview invoke no callbacks and leave runtime
-version, indexes, caches, diagnostics, and prepared-mutation state unchanged.
-If database commit succeeds but runtime commit subsequently fails, rebuild/reconcile the runtime from the
-authoritative database; the durable outbox record remains the recovery signal.
-
-For store-generated identity/sequence keys, capture before `SaveChanges` but postpone `Prepare` until the
-first save inside the transaction assigns final keys and performs relationship fixup. Then call
-`PlanDetailed`, persist the outbox rows, commit the database transaction, and finally commit/dispatch the
-plan. Multiple additions may start with the same default key because uniqueness is validated only when
-their final generated keys are available. Keys of objects already registered in a runtime remain immutable.
-Modified reference navigations use tracked original foreign-key metadata to recover the real old principal;
-if EF cannot resolve that old reference unambiguously, capture fails instead of fabricating `null`.
-
-When using `SaveChanges(acceptAllChangesOnSuccess: false)`, commit and dispatch the captured unit once, then
-call `ChangeTracker.AcceptAllChanges()` separately; do not recapture the still-`Added`/`Modified` entries.
-
-`RelationRuntime` is not thread-safe. Mutations and queries must be externally synchronized.
-
-Both packages check their complete public surface with `Microsoft.CodeAnalysis.PublicApiAnalyzers` and
-checked-in `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` baselines. Public signature additions,
-removals, and nullability changes therefore fail the normal build until deliberately approved. The
-public `ObjectSetBuilder<T>` remains intentional: it is the transient type-safe stage that requires a
-stable key before yielding the runtime `ObjectSet<T>` handle.
-
-Release builds are deterministic and SourceLink-enabled, embed repository URL/branch/commit metadata,
-run package validation, and produce `.snupkg` symbol packages. See `CHANGELOG.md` for release notes and
-`RELEASING.md` for the prerelease version policy and manual publication checklist. Main-branch CI only
-uploads package artifacts; it never publishes them.
-
-Immediate invariant evaluations and repair callbacks run only after runtime-owned state has committed.
-If a callback throws, the operation surfaces that exception but does not roll back the committed runtime state.
+Raffinert.Relations is experimental. The core behavior suite runs on .NET 8 and .NET 10; the EF Core
+integration suite targets .NET 10. CI restores, builds, tests, formats, packs, and validates the public API
+and package metadata. Main-branch CI produces package artifacts but does not publish them automatically.
