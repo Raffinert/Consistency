@@ -1,33 +1,33 @@
 #nullable enable
-Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor
-Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.RelationConsistencySaveChangesInterceptor(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions! options) -> void
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SaveChangesFailed(Microsoft.EntityFrameworkCore.Diagnostics.DbContextErrorEventData! eventData) -> void
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SaveChangesFailedAsync(Microsoft.EntityFrameworkCore.Diagnostics.DbContextErrorEventData! eventData, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavedChanges(Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesCompletedEventData! eventData, int result) -> int
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavedChangesAsync(Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesCompletedEventData! eventData, int result, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavingChanges(Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData! eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result) -> Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>
-override Raffinert.Relations.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavingChangesAsync(Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData! eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
-Raffinert.Relations.EntityFrameworkCore.RelationConsistencyDbContextExtensions
-static Raffinert.Relations.EntityFrameworkCore.RelationConsistencyDbContextExtensions.SaveChangesConsistently(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions? options = null) -> int
-static Raffinert.Relations.EntityFrameworkCore.RelationConsistencyDbContextExtensions.SaveChangesConsistentlyAsync(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions.DetailLevel.get -> Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions.DetailLevel.init -> void
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions.RelationEfCoreConsistencyOptions() -> void
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions.SaveBehavior.get -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreConsistencyOptions.SaveBehavior.init -> void
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior.RecalculateAndValidate = 1 -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior.Validate = 0 -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior
-Raffinert.Relations.EntityFrameworkCore.RelationInvariantViolationException
-Raffinert.Relations.EntityFrameworkCore.RelationInvariantViolationException.Violations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.PlannedInvariantEvaluation!>!
-Raffinert.Relations.EntityFrameworkCore.RelationMaterializationSourceNotTrackedException
-Raffinert.Relations.EntityFrameworkCore.RelationStoreGeneratedKeyRequiresManualWorkflowException
-Raffinert.Relations.EntityFrameworkCore.RelationUnsupportedTransactionException
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Enforce<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Map<TEntity>(Raffinert.Relations.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Materialize<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! property) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
-Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.RelationEfCoreMappings() -> void
-Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode, Raffinert.Relations.PlannedDerivedEvaluationMode derivedEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan?
-Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan?
+Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor
+Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.RelationConsistencySaveChangesInterceptor(Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions! options) -> void
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SaveChangesFailed(Microsoft.EntityFrameworkCore.Diagnostics.DbContextErrorEventData! eventData) -> void
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SaveChangesFailedAsync(Microsoft.EntityFrameworkCore.Diagnostics.DbContextErrorEventData! eventData, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavedChanges(Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesCompletedEventData! eventData, int result) -> int
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavedChangesAsync(Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesCompletedEventData! eventData, int result, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavingChanges(Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData! eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result) -> Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>
+override Raffinert.Consistency.EntityFrameworkCore.RelationConsistencySaveChangesInterceptor.SavingChangesAsync(Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData! eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
+Raffinert.Consistency.EntityFrameworkCore.RelationConsistencyDbContextExtensions
+static Raffinert.Consistency.EntityFrameworkCore.RelationConsistencyDbContextExtensions.SaveChangesConsistently(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions? options = null) -> int
+static Raffinert.Consistency.EntityFrameworkCore.RelationConsistencyDbContextExtensions.SaveChangesConsistentlyAsync(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions.DetailLevel.get -> Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions.DetailLevel.init -> void
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions.RelationEfCoreConsistencyOptions() -> void
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions.SaveBehavior.get -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreConsistencyOptions.SaveBehavior.init -> void
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior.RecalculateAndValidate = 1 -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior.Validate = 0 -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreSaveBehavior
+Raffinert.Consistency.EntityFrameworkCore.RelationInvariantViolationException
+Raffinert.Consistency.EntityFrameworkCore.RelationInvariantViolationException.Violations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.PlannedInvariantEvaluation!>!
+Raffinert.Consistency.EntityFrameworkCore.RelationMaterializationSourceNotTrackedException
+Raffinert.Consistency.EntityFrameworkCore.RelationStoreGeneratedKeyRequiresManualWorkflowException
+Raffinert.Consistency.EntityFrameworkCore.RelationUnsupportedTransactionException
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings.Enforce<TSource>(Raffinert.Consistency.Invariant<TSource!>! invariant) -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings.Map<TEntity>(Raffinert.Consistency.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings.Materialize<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! property) -> Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Consistency.EntityFrameworkCore.RelationEfCoreMappings.RelationEfCoreMappings() -> void
+Raffinert.Consistency.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel, Raffinert.Consistency.PlannedInvariantEvaluationMode invariantEvaluationMode, Raffinert.Consistency.PlannedDerivedEvaluationMode derivedEvaluationMode) -> Raffinert.Consistency.PreparedImpactPlan?
+Raffinert.Consistency.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel, Raffinert.Consistency.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Consistency.PreparedImpactPlan?

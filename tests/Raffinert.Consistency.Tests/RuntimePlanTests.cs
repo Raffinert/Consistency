@@ -5,13 +5,13 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Randomized_hash_results_equal_forced_scan_after_mutations()
     {
-        var hashModel = new RelationModelBuilder();
+        var hashModel = new ConsistencyModelBuilder();
         var hashLeft = hashModel.Objects<CodeHolder>().Key(x => x.Id);
         var hashRight = hashModel.Objects<CodeHolder>().Key(x => x.Id);
         var hashRelation = hashModel.Relation(hashLeft, hashRight).Where((a, b) => a.Code == b.Code && b.Enabled);
         var hashRuntime = hashModel.Build().CreateRuntime();
 
-        var scanModel = new RelationModelBuilder().UseScanPlansForTesting();
+        var scanModel = new ConsistencyModelBuilder().UseScanPlansForTesting();
         var scanLeft = scanModel.Objects<CodeHolder>().Key(x => x.Id);
         var scanRight = scanModel.Objects<CodeHolder>().Key(x => x.Id);
         var scanRelation = scanModel.Relation(scanLeft, scanRight).Where((a, b) => a.Code == b.Code && b.Enabled);
@@ -79,7 +79,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Ordinal_ignore_case_string_equality_uses_matching_hash_semantics()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<CodeHolder>().Key(x => x.Id);
         var right = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(left, right).Where((a, b) =>
@@ -96,7 +96,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Relation_can_be_queried_from_the_right_without_a_reverse_hash_index()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<CodeHolder>().Key(x => x.Id);
         var right = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(left, right).Where((a, b) => a.Code == b.Code);
@@ -114,7 +114,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Runtime_diagnostics_report_local_predicate_work_and_affected_sources()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);

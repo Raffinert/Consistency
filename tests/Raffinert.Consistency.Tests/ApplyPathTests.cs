@@ -46,7 +46,7 @@ public sealed class ApplyPathTests
     private static Scenario CreateScenario()
     {
         var callbacks = new List<int>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(sources)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -63,7 +63,7 @@ public sealed class ApplyPathTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Source> Sources,
         Derived<Source, int> Value,
         Invariant<Source> Invariant,

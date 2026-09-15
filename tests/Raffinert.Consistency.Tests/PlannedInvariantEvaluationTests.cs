@@ -148,7 +148,7 @@ public sealed class PlannedInvariantEvaluationTests
     public void Planning_affected_violation_does_not_dispatch_repair_callback()
     {
         var repairs = new List<Item>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Key(x => x.Id);
         var value = model.Derived(items).Compute(x => x.Value);
         var invariant = model.Invariant(items).Using(value).Must((_, current) => current >= 0)
@@ -170,7 +170,7 @@ public sealed class PlannedInvariantEvaluationTests
     [Fact]
     public void Plan_affected_includes_direct_invariant_source_member_dependency()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Key(x => x.Id);
         var value = model.Derived(items).Compute(x => x.Value);
         var invariant = model.Invariant(items).Using(value)
@@ -212,7 +212,7 @@ public sealed class PlannedInvariantEvaluationTests
 
     private static Scenario Create(Action? onEvaluate = null, bool includeSecond = false, bool empty = false)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Named("items").Key(x => x.Id);
         var value = model.Derived(items).Compute(x => x.Value).Named("value");
         var invariant = model.Invariant(items).Using(value).Must((source, current) =>
@@ -242,7 +242,7 @@ public sealed class PlannedInvariantEvaluationTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Item> Items,
         Invariant<Item> Invariant,
         Item Item);

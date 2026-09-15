@@ -5,9 +5,9 @@ public sealed class ModelValidationTests
     [Fact]
     public void Key_rejects_nested_navigation_and_opaque_expressions()
     {
-        var nestedModel = new RelationModelBuilder();
+        var nestedModel = new ConsistencyModelBuilder();
         var nested = nestedModel.Objects<PurchaseOrderLine>();
-        var methodModel = new RelationModelBuilder();
+        var methodModel = new ConsistencyModelBuilder();
         var method = methodModel.Objects<PurchaseOrderLine>();
 
         var nestedError = Assert.Throws<ArgumentException>(() => nested.Key(value => value.PurchaseOrder!.Id));
@@ -20,9 +20,9 @@ public sealed class ModelValidationTests
     [Fact]
     public void Key_accepts_direct_and_composite_value_members()
     {
-        var directModel = new RelationModelBuilder();
+        var directModel = new ConsistencyModelBuilder();
         _ = directModel.Objects<PurchaseOrderLine>().Key(value => value.Id);
-        var compositeModel = new RelationModelBuilder();
+        var compositeModel = new ConsistencyModelBuilder();
         _ = compositeModel.Objects<PurchaseOrderLine>()
             .Key(value => new { value.PurchaseOrderNumber, value.ItemNumber });
 
@@ -33,7 +33,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Build_rejects_an_object_set_without_a_key()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         model.Objects<InvoiceLine>();
 
         var error = Assert.Throws<InvalidOperationException>(() => model.Build());
@@ -44,8 +44,8 @@ public sealed class ModelValidationTests
     [Fact]
     public void Relation_rejects_a_set_from_another_builder()
     {
-        var first = new RelationModelBuilder();
-        var second = new RelationModelBuilder();
+        var first = new ConsistencyModelBuilder();
+        var second = new ConsistencyModelBuilder();
         var left = first.Objects<InvoiceLine>().Key(x => x.Id);
         var right = second.Objects<PurchaseOrderLine>().Key(x => x.Id);
 
@@ -55,7 +55,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Compiled_model_metadata_is_immutable()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var builder = model.Objects<InvoiceLine>();
         builder.Key(x => x.Id);
         model.Build();
@@ -66,7 +66,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Duplicate_runtime_keys_are_rejected()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<InvoiceLine>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var id = Guid.NewGuid();
@@ -78,7 +78,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Notified_key_mutation_is_rejected_with_re_registration_guidance()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<MutableKeyHolder>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var original = Guid.NewGuid();
@@ -95,7 +95,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Removal_uses_the_registered_key_after_an_unreported_key_mutation()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<MutableKeyHolder>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var registeredKey = Guid.NewGuid();
@@ -113,7 +113,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Opaque_invariant_predicate_is_rejected_unless_explicitly_allowed()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -133,7 +133,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Opaque_materialized_relation_is_rejected_unless_explicitly_allowed()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item));
@@ -148,7 +148,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Opaque_direct_query_relation_remains_valid_and_does_not_claim_cached_freshness()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item));
@@ -166,7 +166,7 @@ public sealed class ModelValidationTests
     [Fact]
     public void Explicit_opt_in_allows_an_incomplete_materialized_relation_and_marks_diagnostics()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item))

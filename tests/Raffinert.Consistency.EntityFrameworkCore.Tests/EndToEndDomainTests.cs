@@ -165,7 +165,7 @@ public sealed class EndToEndDomainTests
 
     private static Scenario BuildScenario(List<PurchaseLine> repairs)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseLine>().Key(value => value.Id);
         var receipts = model.Objects<GoodsReceipt>().Key(value => value.Id);
         var matches = model.Relation(lines, receipts).Where((line, receipt) =>
@@ -186,7 +186,7 @@ public sealed class EndToEndDomainTests
     }
 
     private sealed record Scenario(
-        CompiledRelationModel Model,
+        CompiledConsistencyModel Model,
         ObjectSet<PurchaseLine> Lines,
         ObjectSet<GoodsReceipt> Receipts,
         Relation<PurchaseLine, GoodsReceipt> Matches,

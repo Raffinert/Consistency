@@ -229,7 +229,7 @@ public sealed class RandomizedFullGraphTests
 
     private static Scenario CreateScenario(bool forceScan)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<DerivedSourceRecord>().Key(value => value.Id);
@@ -267,7 +267,7 @@ public sealed class RandomizedFullGraphTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
         Relation<DerivedSourceRecord, DerivedItemRecord> Relation,

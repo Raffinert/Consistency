@@ -5,7 +5,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Recognized_cardinality_plans_keep_fresh_values_updated_from_membership_deltas()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -40,7 +40,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Incremental_sum_updates_from_item_and_membership_deltas()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -73,7 +73,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Forced_full_recompute_plan_remains_the_semantic_fallback()
     {
-        var model = new RelationModelBuilder().UseFullRecomputePlansForTesting();
+        var model = new ConsistencyModelBuilder().UseFullRecomputePlansForTesting();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -162,7 +162,7 @@ public sealed partial class DerivedStateTests
 
         static IncrementalScenario CreateScenario(bool forceFullRecompute)
         {
-            var model = new RelationModelBuilder();
+            var model = new ConsistencyModelBuilder();
             if (forceFullRecompute)
                 model.UseFullRecomputePlansForTesting();
             var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);

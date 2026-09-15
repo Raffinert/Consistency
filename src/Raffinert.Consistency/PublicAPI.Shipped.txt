@@ -1,618 +1,618 @@
 #nullable enable
-Raffinert.Relations.DependencyImpactCause
-Raffinert.Relations.DependencyImpactCause.DependencyImpactCause(Raffinert.Relations.ImpactCausePrecision Precision) -> void
-Raffinert.Relations.DependencyImpactCause.Precision.get -> Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.DependencyImpactCause.Precision.init -> void
-Raffinert.Relations.DirectSourceMemberCause
-Raffinert.Relations.DirectSourceMemberCause.ClassifiedSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DirectSourceMemberCause.ClassifiedSeverity.init -> void
-Raffinert.Relations.DirectSourceMemberCause.DirectSourceMemberCause(int OriginId, string! MemberName, string! Policy, Raffinert.Relations.DependencySeverity ClassifiedSeverity) -> void
-Raffinert.Relations.DirectSourceMemberCause.MemberName.get -> string!
-Raffinert.Relations.DirectSourceMemberCause.MemberName.init -> void
-Raffinert.Relations.DirectSourceMemberCause.OriginId.get -> int
-Raffinert.Relations.DirectSourceMemberCause.OriginId.init -> void
-Raffinert.Relations.DirectSourceMemberCause.Policy.get -> string!
-Raffinert.Relations.DirectSourceMemberCause.Policy.init -> void
-Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.ImpactCausePrecision.Conservative = 1 -> Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.ImpactCausePrecision.Exact = 0 -> Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.MutationOrigin
-Raffinert.Relations.MutationOrigin.Kind.get -> Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.MutationOrigin.Kind.init -> void
-Raffinert.Relations.MutationOrigin.CollectionItem.get -> object?
-Raffinert.Relations.MutationOrigin.CollectionItem.init -> void
-Raffinert.Relations.MutationOrigin.CollectionKind.get -> Raffinert.Relations.CollectionChangeKind?
-Raffinert.Relations.MutationOrigin.CollectionKind.init -> void
-Raffinert.Relations.MutationOrigin.MemberName.get -> string?
-Raffinert.Relations.MutationOrigin.MemberName.init -> void
-Raffinert.Relations.MutationOrigin.MutationOrigin(int OriginId, Raffinert.Relations.MutationOriginKind Kind, object! Source, string? MemberName) -> void
-Raffinert.Relations.MutationOrigin.OriginId.get -> int
-Raffinert.Relations.MutationOrigin.OriginId.init -> void
-Raffinert.Relations.MutationOrigin.Source.get -> object!
-Raffinert.Relations.MutationOrigin.Source.init -> void
-Raffinert.Relations.MutationOrigin.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
-Raffinert.Relations.MutationOrigin.SourceIdentity.init -> void
-Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.MutationOriginKind.CollectionChanged = 1 -> Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.MutationOriginKind.ObjectAdded = 2 -> Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.MutationOriginKind.ObjectRemoved = 3 -> Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.MutationOriginKind.SourceMemberChanged = 0 -> Raffinert.Relations.MutationOriginKind
-Raffinert.Relations.RelationDependencyCause
-Raffinert.Relations.RelationDependencyCause.CausePrecision.get -> Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.RelationDependencyCause.CausePrecision.init -> void
-Raffinert.Relations.RelationDependencyCause.DefinitionKey.get -> string?
-Raffinert.Relations.RelationDependencyCause.DefinitionKey.init -> void
-Raffinert.Relations.RelationDependencyCause.Kind.get -> Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RelationDependencyCause.Kind.init -> void
-Raffinert.Relations.RelationDependencyCause.OriginIds.get -> System.Collections.Generic.IReadOnlyList<int>!
-Raffinert.Relations.RelationDependencyCause.OriginIds.init -> void
-Raffinert.Relations.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Relations.RelationImpactCauseKind Kind, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
-Raffinert.Relations.RelationDependencyCause.RelationId.get -> int
-Raffinert.Relations.RelationDependencyCause.RelationId.init -> void
-Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RelationImpactCauseKind.ConservativeCandidate = 3 -> Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RelationImpactCauseKind.MembershipAdded = 0 -> Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RelationImpactCauseKind.MembershipRemoved = 1 -> Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RelationImpactCauseKind.RelatedItemChanged = 2 -> Raffinert.Relations.RelationImpactCauseKind
-Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.RuntimeImpactDetailLevel.Causal = 1 -> Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.RuntimeImpactDetailLevel.Summary = 0 -> Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.RuntimeImpactTraceRenderer
-static Raffinert.Relations.RuntimeImpactTraceRenderer.Render(Raffinert.Relations.RuntimeApplyResult! result) -> string!
-Raffinert.Relations.UpstreamDerivedCause
-Raffinert.Relations.UpstreamDerivedCause.CausePrecision.get -> Raffinert.Relations.ImpactCausePrecision
-Raffinert.Relations.UpstreamDerivedCause.CausePrecision.init -> void
-Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.get -> string?
-Raffinert.Relations.UpstreamDerivedCause.DefinitionKey.init -> void
-Raffinert.Relations.UpstreamDerivedCause.UpstreamImpactId.get -> int?
-Raffinert.Relations.UpstreamDerivedCause.UpstreamImpactId.init -> void
-Raffinert.Relations.UpstreamDerivedCause.DerivedId.get -> int
-Raffinert.Relations.UpstreamDerivedCause.DerivedId.init -> void
-Raffinert.Relations.UpstreamDerivedCause.UpstreamDerivedCause(int DerivedId, Raffinert.Relations.ImpactCausePrecision CausePrecision) -> void
-override Raffinert.Relations.ObjectSet<T>.ToString() -> string!
-override Raffinert.Relations.ObjectSetBuilder<T>.ToString() -> string!
-Raffinert.Relations.AccessImpact
-Raffinert.Relations.AccessImpact.AccessImpact(int ReindexedRelations, int ReindexedRoots) -> void
-Raffinert.Relations.AccessImpact.ReindexedRelations.get -> int
-Raffinert.Relations.AccessImpact.ReindexedRelations.init -> void
-Raffinert.Relations.AccessImpact.ReindexedRoots.get -> int
-Raffinert.Relations.AccessImpact.ReindexedRoots.init -> void
-Raffinert.Relations.Change
-Raffinert.Relations.ChangeImpact
-Raffinert.Relations.ChangeImpact.Access.get -> Raffinert.Relations.AccessImpact!
-Raffinert.Relations.ChangeImpact.Access.init -> void
-Raffinert.Relations.ChangeImpact.ChangeImpact(Raffinert.Relations.AccessImpact! Access, Raffinert.Relations.SemanticImpact! Semantic) -> void
-Raffinert.Relations.ChangeImpact.Semantic.get -> Raffinert.Relations.SemanticImpact!
-Raffinert.Relations.ChangeImpact.Semantic.init -> void
-Raffinert.Relations.ChangeSet
-Raffinert.Relations.ChangeValidationMode
-Raffinert.Relations.ChangeValidationMode.Default = 0 -> Raffinert.Relations.ChangeValidationMode
-Raffinert.Relations.ChangeValidationMode.StrictNewValue = 1 -> Raffinert.Relations.ChangeValidationMode
-Raffinert.Relations.CollectionChange
-Raffinert.Relations.CollectionChange.Item.get -> object?
-Raffinert.Relations.CollectionChange.Kind.get -> Raffinert.Relations.CollectionChangeKind
-Raffinert.Relations.CollectionChangeKind
-Raffinert.Relations.CollectionChangeKind.Add = 0 -> Raffinert.Relations.CollectionChangeKind
-Raffinert.Relations.CollectionChangeKind.Remove = 1 -> Raffinert.Relations.CollectionChangeKind
-Raffinert.Relations.CollectionChangeKind.Reset = 2 -> Raffinert.Relations.CollectionChangeKind
-Raffinert.Relations.CompiledModelDiagnostics
-Raffinert.Relations.CompiledModelDiagnostics.CompiledModelDiagnostics(System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ObjectSetModelDiagnostics!>! ObjectSets, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationModelDiagnostics!>! Relations, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedModelDiagnostics!>! DerivedValues, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantModelDiagnostics!>! Invariants) -> void
-Raffinert.Relations.CompiledModelDiagnostics.DerivedValues.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedModelDiagnostics!>!
-Raffinert.Relations.CompiledModelDiagnostics.DerivedValues.init -> void
-Raffinert.Relations.CompiledModelDiagnostics.Invariants.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantModelDiagnostics!>!
-Raffinert.Relations.CompiledModelDiagnostics.Invariants.init -> void
-Raffinert.Relations.CompiledModelDiagnostics.ObjectSets.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ObjectSetModelDiagnostics!>!
-Raffinert.Relations.CompiledModelDiagnostics.ObjectSets.init -> void
-Raffinert.Relations.CompiledModelDiagnostics.Relations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationModelDiagnostics!>!
-Raffinert.Relations.CompiledModelDiagnostics.Relations.init -> void
-Raffinert.Relations.CompiledRelationModel
-Raffinert.Relations.CompiledRelationModel.CreateRuntime() -> Raffinert.Relations.RelationRuntime!
-Raffinert.Relations.CompiledRelationModel.CreateRuntime(System.Action<Raffinert.Relations.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Relations.RelationRuntime!
-Raffinert.Relations.CompiledRelationModel.CreateRuntime(Raffinert.Relations.RuntimeDiagnosticOptions! diagnosticOptions) -> Raffinert.Relations.RelationRuntime!
-Raffinert.Relations.CompiledRelationModel.CreateRuntime(Raffinert.Relations.RuntimeDiagnosticOptions! diagnosticOptions, System.Action<Raffinert.Relations.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Relations.RelationRuntime!
-Raffinert.Relations.CompiledRelationModel.DebugView.get -> string!
-Raffinert.Relations.CompiledRelationModel.Diagnostics.get -> Raffinert.Relations.CompiledModelDiagnostics!
-Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.DependencyCompletenessIssue.ExternalState = 2 -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.DependencyCompletenessIssue.None = 0 -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.DependencyCompletenessIssue.OpaqueCode = 1 -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DependencySeverity.Dirty = 0 -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DependencySeverity.Invalid = 1 -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.Derived<TSource, TValue>
-Raffinert.Relations.Derived<TSource, TValue>.AllowIncompleteDependencies() -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.Derived<TSource, TValue>.DefinitionKey.get -> string?
-Raffinert.Relations.Derived<TSource, TValue>.Named(string! definitionKey) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedBuilder<TSource>
-Raffinert.Relations.DerivedBuilder<TSource>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedBuilder<TSource!>!
-Raffinert.Relations.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Relations.Relation<TSource!, TItem!>! relation) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
-Raffinert.Relations.DerivedBuilder<TSource>.Using<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Relations.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
-Raffinert.Relations.DerivedBuilder<TSource>.Using<TUpstreamSource, TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Relations.Derived<TUpstreamSource!, TFirst>! first, Raffinert.Relations.Derived<TUpstreamSource!, TSecond>! second) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
-Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! upstream) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue>!
-Raffinert.Relations.DerivedBuilder<TSource>.Using<TValue1, TValue2>(Raffinert.Relations.Derived<TSource!, TValue1>! first, Raffinert.Relations.Derived<TSource!, TValue2>! second) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TValue1, TValue2>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUpstreamBuilder<TSource!, TUpstream>!
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TUpstream>!
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
-Raffinert.Relations.DerivedImpactPolicyBuilder
-Raffinert.Relations.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> void
-Raffinert.Relations.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
-Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipAdded(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
-Raffinert.Relations.DerivedImpactPolicyBuilder.MembershipRemoved(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
-Raffinert.Relations.DerivedImpactPolicyBuilder.SourceChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder!
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.DerivedImpactPolicyBuilder() -> void
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.ItemChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.MembershipAdded(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.MembershipRemoved(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.SourceMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Relations.DependencySeverity>! classify) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
-Raffinert.Relations.DerivedImpactPolicyBuilder<TSource>.SourceChanged(Raffinert.Relations.DependencySeverity severity) -> Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!
-Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedLinqSemantics.Item = 2 -> Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedLinqSemantics.Membership = 1 -> Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedLinqSemantics.None = 0 -> Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedLinqSemantics.Ordering = 4 -> Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedModelDiagnostics
-Raffinert.Relations.DerivedModelDiagnostics.CompletenessIssues.get -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.DerivedModelDiagnostics.CompletenessIssues.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.Computation.get -> string!
-Raffinert.Relations.DerivedModelDiagnostics.Computation.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.ComputationPlan.get -> string!
-Raffinert.Relations.DerivedModelDiagnostics.ComputationPlan.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Raffinert.Relations.DerivedModelDiagnostics.Dependencies.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.get -> string?
-Raffinert.Relations.DerivedModelDiagnostics.DefinitionKey.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.DerivedId.get -> int
-Raffinert.Relations.DerivedModelDiagnostics.DerivedId.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! RelationIds, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Relations.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Relations.DependencySeverity MembershipAddedSeverity, Raffinert.Relations.DependencySeverity MembershipRemovedSeverity, Raffinert.Relations.DependencySeverity ItemChangedSeverity, Raffinert.Relations.DependencySeverity SourceChangedSeverity) -> void
-Raffinert.Relations.DerivedModelDiagnostics.HasConditionalSourcePolicy.get -> bool
-Raffinert.Relations.DerivedModelDiagnostics.HasConditionalSourcePolicy.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
-Raffinert.Relations.DerivedModelDiagnostics.IncompleteDependenciesAllowed.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DerivedModelDiagnostics.ItemChangedSeverity.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.LinqSemantics.get -> Raffinert.Relations.DerivedLinqSemantics
-Raffinert.Relations.DerivedModelDiagnostics.LinqSemantics.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.MembershipAddedSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DerivedModelDiagnostics.MembershipAddedSeverity.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.MembershipRemovedSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DerivedModelDiagnostics.MembershipRemovedSeverity.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.RelationIds.get -> System.Collections.Generic.IReadOnlyList<int>!
-Raffinert.Relations.DerivedModelDiagnostics.RelationIds.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.get -> int
-Raffinert.Relations.DerivedModelDiagnostics.SourceObjectSetId.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleCount.get -> int
-Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleCount.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Raffinert.Relations.DerivedModelDiagnostics.SourceMemberRuleNames.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.get -> bool
-Raffinert.Relations.DerivedModelDiagnostics.UsesRelationMembership.init -> void
-Raffinert.Relations.DerivedModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
-Raffinert.Relations.DerivedModelDiagnostics.UpstreamDerivedIds.init -> void
-Raffinert.Relations.DerivedMutationImpact
-Raffinert.Relations.DerivedMutationImpact.DerivedId.get -> int
-Raffinert.Relations.DerivedMutationImpact.DerivedId.init -> void
-Raffinert.Relations.DerivedMutationImpact.DefinitionKey.get -> string?
-Raffinert.Relations.DerivedMutationImpact.DefinitionKey.init -> void
-Raffinert.Relations.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>! Sources) -> void
-Raffinert.Relations.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
-Raffinert.Relations.DerivedMutationImpact.Sources.init -> void
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Relations.Derived<TSource!, TValue>!
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Relations.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
-Raffinert.Relations.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Relations.DerivedUsingBuilder<TSource!, TItem!>!
-Raffinert.Relations.DerivedValueState
-Raffinert.Relations.DerivedValueState.Dirty = 1 -> Raffinert.Relations.DerivedValueState
-Raffinert.Relations.DerivedValueState.Fresh = 0 -> Raffinert.Relations.DerivedValueState
-Raffinert.Relations.DerivedValueState.Invalid = 2 -> Raffinert.Relations.DerivedValueState
-Raffinert.Relations.DurablePolicyRequestIdentity
-Raffinert.Relations.DurablePolicyRequestIdentity.DefinitionKey.get -> string!
-Raffinert.Relations.DurablePolicyRequestIdentity.DefinitionKey.init -> void
-Raffinert.Relations.DurablePolicyRequestIdentity.DurablePolicyRequestIdentity(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source) -> void
-Raffinert.Relations.DurablePolicyRequestIdentity.Source.get -> Raffinert.Relations.DurableSourceIdentity!
-Raffinert.Relations.DurablePolicyRequestIdentity.Source.init -> void
-Raffinert.Relations.DurablePolicyWork
-Raffinert.Relations.DurablePolicyWork.DurablePolicyWork(System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableRepairRequestInfo!>! RepairRequests, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableImmediateEvaluationRequestInfo!>! ImmediateEvaluationRequests) -> void
-Raffinert.Relations.DurablePolicyWork.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableImmediateEvaluationRequestInfo!>!
-Raffinert.Relations.DurablePolicyWork.ImmediateEvaluationRequests.init -> void
-Raffinert.Relations.DurablePolicyWork.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DurableRepairRequestInfo!>!
-Raffinert.Relations.DurablePolicyWork.RepairRequests.init -> void
-Raffinert.Relations.DurableRepairRequestInfo
-Raffinert.Relations.DurableRepairRequestInfo.DefinitionKey.get -> string!
-Raffinert.Relations.DurableRepairRequestInfo.DefinitionKey.init -> void
-Raffinert.Relations.DurableRepairRequestInfo.DurableRepairRequestInfo(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source, Raffinert.Relations.DependencySeverity Reason) -> void
-Raffinert.Relations.DurableRepairRequestInfo.Reason.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.DurableRepairRequestInfo.Reason.init -> void
-Raffinert.Relations.DurableRepairRequestInfo.Source.get -> Raffinert.Relations.DurableSourceIdentity!
-Raffinert.Relations.DurableRepairRequestInfo.Source.init -> void
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DefinitionKey.get -> string!
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DefinitionKey.init -> void
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo.DurableImmediateEvaluationRequestInfo(string! DefinitionKey, Raffinert.Relations.DurableSourceIdentity! Source) -> void
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo.Source.get -> Raffinert.Relations.DurableSourceIdentity!
-Raffinert.Relations.DurableImmediateEvaluationRequestInfo.Source.init -> void
-Raffinert.Relations.DurableSourceIdentity
-Raffinert.Relations.DurableSourceIdentity.DurableSourceIdentity(string! ObjectSetKey, string! SourceType, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>! KeyParts) -> void
-Raffinert.Relations.DurableSourceIdentity.KeyParts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceKeyPart!>!
-Raffinert.Relations.DurableSourceIdentity.KeyParts.init -> void
-Raffinert.Relations.DurableSourceIdentity.ObjectSetKey.get -> string!
-Raffinert.Relations.DurableSourceIdentity.ObjectSetKey.init -> void
-Raffinert.Relations.DurableSourceIdentity.SourceType.get -> string!
-Raffinert.Relations.DurableSourceIdentity.SourceType.init -> void
-Raffinert.Relations.ImmediateEvaluationRequestInfo
-Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.get -> string?
-Raffinert.Relations.ImmediateEvaluationRequestInfo.DefinitionKey.init -> void
-Raffinert.Relations.ImmediateEvaluationRequestInfo.ImmediateEvaluationRequestInfo(int InvariantId, object! Source) -> void
-Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.get -> int
-Raffinert.Relations.ImmediateEvaluationRequestInfo.InvariantId.init -> void
-Raffinert.Relations.ImmediateEvaluationRequestInfo.GetDurableIdentity() -> Raffinert.Relations.DurablePolicyRequestIdentity!
-Raffinert.Relations.ImmediateEvaluationRequestInfo.IsDurable.get -> bool
-Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.get -> object!
-Raffinert.Relations.ImmediateEvaluationRequestInfo.Source.init -> void
-Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
-Raffinert.Relations.ImmediateEvaluationRequestInfo.SourceIdentity.init -> void
-Raffinert.Relations.Invariant<TSource>
-Raffinert.Relations.Invariant<TSource>.AllowIncompleteDependencies() -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.Invariant<TSource>.DefinitionKey.get -> string?
-Raffinert.Relations.Invariant<TSource>.Named(string! definitionKey) -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.Invariant<TSource>.ReactWith(Raffinert.Relations.InvariantReaction reaction) -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.Invariant<TSource>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.InvariantBuilder<TSource>
-Raffinert.Relations.InvariantBuilder<TSource>.Using<TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TValue>!
-Raffinert.Relations.InvariantBuilder<TSource>.Using<TFirst, TSecond>(Raffinert.Relations.Derived<TSource!, TFirst>! first, Raffinert.Relations.Derived<TSource!, TSecond>! second) -> Raffinert.Relations.InvariantUsingBuilder<TSource!, TFirst, TSecond>!
-Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantEvaluationState.Dirty = 3 -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantEvaluationState.Invalid = 4 -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantEvaluationState.Unknown = 0 -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantEvaluationState.Valid = 1 -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantEvaluationState.Violated = 2 -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.InvariantModelDiagnostics
-Raffinert.Relations.InvariantModelDiagnostics.CompletenessIssues.get -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.InvariantModelDiagnostics.CompletenessIssues.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Raffinert.Relations.InvariantModelDiagnostics.Dependencies.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.get -> string?
-Raffinert.Relations.InvariantModelDiagnostics.DefinitionKey.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
-Raffinert.Relations.InvariantModelDiagnostics.IncompleteDependenciesAllowed.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.InvariantId.get -> int
-Raffinert.Relations.InvariantModelDiagnostics.InvariantId.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Relations.InvariantReaction Reaction) -> void
-Raffinert.Relations.InvariantModelDiagnostics.Predicate.get -> string!
-Raffinert.Relations.InvariantModelDiagnostics.Predicate.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.Reaction.get -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantModelDiagnostics.Reaction.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.SourceObjectSetId.get -> int
-Raffinert.Relations.InvariantModelDiagnostics.SourceObjectSetId.init -> void
-Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
-Raffinert.Relations.InvariantModelDiagnostics.UpstreamDerivedIds.init -> void
-Raffinert.Relations.InvariantMutationImpact
-Raffinert.Relations.InvariantMutationImpact.InvariantId.get -> int
-Raffinert.Relations.InvariantMutationImpact.InvariantId.init -> void
-Raffinert.Relations.InvariantMutationImpact.DefinitionKey.get -> string?
-Raffinert.Relations.InvariantMutationImpact.DefinitionKey.init -> void
-Raffinert.Relations.InvariantMutationImpact.InvariantMutationImpact(int InvariantId, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>! Sources) -> void
-Raffinert.Relations.InvariantMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.SourceDependencyImpact!>!
-Raffinert.Relations.InvariantMutationImpact.Sources.init -> void
-Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantReactionCause
-Raffinert.Relations.InvariantReactionCause.InvariantReactionCause(Raffinert.Relations.InvariantReaction Reaction, Raffinert.Relations.DependencySeverity InputSeverity, Raffinert.Relations.DependencySeverity OutputSeverity) -> void
-Raffinert.Relations.InvariantReactionCause.InputSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.InvariantReactionCause.InputSeverity.init -> void
-Raffinert.Relations.InvariantReactionCause.OutputSeverity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.InvariantReactionCause.OutputSeverity.init -> void
-Raffinert.Relations.InvariantReactionCause.Reaction.get -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantReactionCause.Reaction.init -> void
-Raffinert.Relations.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantReaction.MarkDirty = 1 -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantReaction.MarkInvalid = 2 -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Relations.InvariantReaction
-Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>
-Raffinert.Relations.InvariantUsingBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.InvariantUsingBuilder<TSource, TFirst, TSecond>
-Raffinert.Relations.InvariantUsingBuilder<TSource, TFirst, TSecond>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, bool>!>! predicate) -> Raffinert.Relations.Invariant<TSource!>!
-Raffinert.Relations.MutationSet
-Raffinert.Relations.ObjectAdded
-Raffinert.Relations.ObjectAdded.Instance.get -> object!
-Raffinert.Relations.ObjectRemoved
-Raffinert.Relations.ObjectRemoved.Instance.get -> object!
-Raffinert.Relations.ObjectSet<T>
-Raffinert.Relations.ObjectSet<T>.DefinitionKey.get -> string?
-Raffinert.Relations.ObjectSetBuilder<T>
-Raffinert.Relations.ObjectSetBuilder<T>.Key<TKey>(System.Linq.Expressions.Expression<System.Func<T!, TKey>!>! key) -> Raffinert.Relations.ObjectSet<T!>!
-Raffinert.Relations.ObjectSetBuilder<T>.Named(string! definitionKey) -> Raffinert.Relations.ObjectSetBuilder<T!>!
-Raffinert.Relations.ObjectSetBuilder<T>.Set.get -> Raffinert.Relations.ObjectSet<T!>!
-Raffinert.Relations.ObjectSetModelDiagnostics
-Raffinert.Relations.ObjectSetModelDiagnostics.KeyExpression.get -> string!
-Raffinert.Relations.ObjectSetModelDiagnostics.KeyExpression.init -> void
-Raffinert.Relations.ObjectSetModelDiagnostics.DefinitionKey.get -> string?
-Raffinert.Relations.ObjectSetModelDiagnostics.DefinitionKey.init -> void
-Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetId.get -> int
-Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetId.init -> void
-Raffinert.Relations.ObjectSetModelDiagnostics.ObjectSetModelDiagnostics(int ObjectSetId, System.Type! ObjectType, string! KeyExpression) -> void
-Raffinert.Relations.ObjectSetModelDiagnostics.ObjectType.get -> System.Type!
-Raffinert.Relations.ObjectSetModelDiagnostics.ObjectType.init -> void
-Raffinert.Relations.PreparedImpactPlan
-Raffinert.Relations.PreparedImpactPlan.BaseVersion.get -> long
-Raffinert.Relations.PreparedImpactPlan.DetailLevel.get -> Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.PreparedImpactPlan.IsCommitted.get -> bool
-Raffinert.Relations.PreparedImpactPlan.Result.get -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.PreparedMutation
-Raffinert.Relations.PreparedMutation.BaseVersion.get -> long
-Raffinert.Relations.PreparedMutation.IsCommitted.get -> bool
-Raffinert.Relations.PreparedMutation.IsDispatched.get -> bool
-Raffinert.Relations.PropertyChange
-Raffinert.Relations.PropertyChange.NewValue.get -> object?
-Raffinert.Relations.PropertyChange.OldValue.get -> object?
-Raffinert.Relations.Relation<TLeft, TRight>
-Raffinert.Relations.Relation<TLeft, TRight>.AllowIncompleteDependencies() -> Raffinert.Relations.Relation<TLeft!, TRight!>!
-Raffinert.Relations.Relation<TLeft, TRight>.DefinitionKey.get -> string?
-Raffinert.Relations.Relation<TLeft, TRight>.Named(string! definitionKey) -> Raffinert.Relations.Relation<TLeft!, TRight!>!
-Raffinert.Relations.RelationAccessPlanKind
-Raffinert.Relations.RelationAccessPlanKind.HashJoin = 1 -> Raffinert.Relations.RelationAccessPlanKind
-Raffinert.Relations.RelationAccessPlanKind.Scan = 0 -> Raffinert.Relations.RelationAccessPlanKind
-Raffinert.Relations.RelationBuilder<TLeft, TRight>
-Raffinert.Relations.RelationBuilder<TLeft, TRight>.Where(System.Linq.Expressions.Expression<System.Func<TLeft!, TRight!, bool>!>! predicate) -> Raffinert.Relations.Relation<TLeft!, TRight!>!
-Raffinert.Relations.RelationMaterializationMode
-Raffinert.Relations.RelationMaterializationMode.ExactPropagation = 1 -> Raffinert.Relations.RelationMaterializationMode
-Raffinert.Relations.RelationMaterializationMode.None = 0 -> Raffinert.Relations.RelationMaterializationMode
-Raffinert.Relations.RelationModelBuilder
-Raffinert.Relations.RelationModelBuilder.Build() -> Raffinert.Relations.CompiledRelationModel!
-Raffinert.Relations.RelationModelBuilder.Derived<TSource>(Raffinert.Relations.ObjectSet<TSource!>! source) -> Raffinert.Relations.DerivedBuilder<TSource!>!
-Raffinert.Relations.RelationModelBuilder.Invariant<TSource>(Raffinert.Relations.ObjectSet<TSource!>! source) -> Raffinert.Relations.InvariantBuilder<TSource!>!
-Raffinert.Relations.RelationModelBuilder.Objects<T>() -> Raffinert.Relations.ObjectSetBuilder<T!>!
-Raffinert.Relations.RelationModelBuilder.Relation<TLeft, TRight>(Raffinert.Relations.ObjectSet<TLeft!>! left, Raffinert.Relations.ObjectSet<TRight!>! right) -> Raffinert.Relations.RelationBuilder<TLeft!, TRight!>!
-Raffinert.Relations.RelationModelBuilder.RelationModelBuilder() -> void
-Raffinert.Relations.RelationModelDiagnostics
-Raffinert.Relations.RelationModelDiagnostics.AccessPlan.get -> Raffinert.Relations.RelationAccessPlanKind
-Raffinert.Relations.RelationModelDiagnostics.AccessPlan.init -> void
-Raffinert.Relations.RelationModelDiagnostics.CompletenessIssues.get -> Raffinert.Relations.DependencyCompletenessIssue
-Raffinert.Relations.RelationModelDiagnostics.CompletenessIssues.init -> void
-Raffinert.Relations.RelationModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Raffinert.Relations.RelationModelDiagnostics.Dependencies.init -> void
-Raffinert.Relations.RelationModelDiagnostics.DefinitionKey.get -> string?
-Raffinert.Relations.RelationModelDiagnostics.DefinitionKey.init -> void
-Raffinert.Relations.RelationModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
-Raffinert.Relations.RelationModelDiagnostics.IncompleteDependenciesAllowed.init -> void
-Raffinert.Relations.RelationModelDiagnostics.JoinKeys.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Raffinert.Relations.RelationModelDiagnostics.JoinKeys.init -> void
-Raffinert.Relations.RelationModelDiagnostics.LeftObjectSetId.get -> int
-Raffinert.Relations.RelationModelDiagnostics.LeftObjectSetId.init -> void
-Raffinert.Relations.RelationModelDiagnostics.LeftType.get -> System.Type!
-Raffinert.Relations.RelationModelDiagnostics.LeftType.init -> void
-Raffinert.Relations.RelationModelDiagnostics.Materialization.get -> Raffinert.Relations.RelationMaterializationMode
-Raffinert.Relations.RelationModelDiagnostics.Materialization.init -> void
-Raffinert.Relations.RelationModelDiagnostics.Predicate.get -> string!
-Raffinert.Relations.RelationModelDiagnostics.Predicate.init -> void
-Raffinert.Relations.RelationModelDiagnostics.PropagationPlan.get -> Raffinert.Relations.RelationPropagationPlanKind
-Raffinert.Relations.RelationModelDiagnostics.PropagationPlan.init -> void
-Raffinert.Relations.RelationModelDiagnostics.PropagationReason.get -> string!
-Raffinert.Relations.RelationModelDiagnostics.PropagationReason.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RelationId.get -> int
-Raffinert.Relations.RelationModelDiagnostics.RelationId.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RelationModelDiagnostics(int RelationId, int LeftObjectSetId, int RightObjectSetId, System.Type! LeftType, System.Type! RightType, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, System.Collections.Generic.IReadOnlyList<string!>! JoinKeys, Raffinert.Relations.RelationAccessPlanKind AccessPlan, Raffinert.Relations.RelationAccessPlanKind? ReverseAccessPlan, Raffinert.Relations.RelationMaterializationMode Materialization, Raffinert.Relations.RelationPropagationPlanKind PropagationPlan, bool RetainsPairMembership, string! PropagationReason, Raffinert.Relations.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed) -> void
-Raffinert.Relations.RelationModelDiagnostics.ReverseAccessPlan.get -> Raffinert.Relations.RelationAccessPlanKind?
-Raffinert.Relations.RelationModelDiagnostics.ReverseAccessPlan.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RetainsPairMembership.get -> bool
-Raffinert.Relations.RelationModelDiagnostics.RetainsPairMembership.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RightObjectSetId.get -> int
-Raffinert.Relations.RelationModelDiagnostics.RightObjectSetId.init -> void
-Raffinert.Relations.RelationModelDiagnostics.RightType.get -> System.Type!
-Raffinert.Relations.RelationModelDiagnostics.RightType.init -> void
-Raffinert.Relations.RelationMutationImpact
-Raffinert.Relations.RelationMutationImpact.AddedPairs.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationPairImpact!>!
-Raffinert.Relations.RelationMutationImpact.AddedPairs.init -> void
-Raffinert.Relations.RelationMutationImpact.AffectedSources.get -> System.Collections.Generic.IReadOnlyList<object!>!
-Raffinert.Relations.RelationMutationImpact.AffectedSources.init -> void
-Raffinert.Relations.RelationMutationImpact.DefinitionKey.get -> string?
-Raffinert.Relations.RelationMutationImpact.DefinitionKey.init -> void
-Raffinert.Relations.RelationMutationImpact.LeftType.get -> System.Type!
-Raffinert.Relations.RelationMutationImpact.LeftType.init -> void
-Raffinert.Relations.RelationMutationImpact.RelationId.get -> int
-Raffinert.Relations.RelationMutationImpact.RelationId.init -> void
-Raffinert.Relations.RelationMutationImpact.RelationMutationImpact(int RelationId, System.Type! LeftType, System.Type! RightType, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationPairImpact!>! AddedPairs, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationPairImpact!>! RemovedPairs, System.Collections.Generic.IReadOnlyList<object!>! AffectedSources) -> void
-Raffinert.Relations.RelationMutationImpact.RemovedPairs.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationPairImpact!>!
-Raffinert.Relations.RelationMutationImpact.RemovedPairs.init -> void
-Raffinert.Relations.RelationMutationImpact.RightType.get -> System.Type!
-Raffinert.Relations.RelationMutationImpact.RightType.init -> void
-Raffinert.Relations.RelationPairImpact
-Raffinert.Relations.RelationPairImpact.Left.get -> object!
-Raffinert.Relations.RelationPairImpact.Left.init -> void
-Raffinert.Relations.RelationPairImpact.RelationPairImpact(object! Left, object! Right) -> void
-Raffinert.Relations.RelationPairImpact.Right.get -> object!
-Raffinert.Relations.RelationPairImpact.Right.init -> void
-Raffinert.Relations.RelationPropagationPlanKind
-Raffinert.Relations.RelationPropagationPlanKind.ConservativeInvalidation = 2 -> Raffinert.Relations.RelationPropagationPlanKind
-Raffinert.Relations.RelationPropagationPlanKind.ExactMaterialized = 1 -> Raffinert.Relations.RelationPropagationPlanKind
-Raffinert.Relations.RelationPropagationPlanKind.None = 0 -> Raffinert.Relations.RelationPropagationPlanKind
-Raffinert.Relations.RelationRuntime
-Raffinert.Relations.RelationRuntime.Add<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance) -> void
-Raffinert.Relations.RelationRuntime.Add<T>(T! instance) -> void
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.ChangeSet! changeSet) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.ChangeSet! changeSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.CollectionChange! change) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! change) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.Apply(Raffinert.Relations.PropertyChange! change, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.RuntimeApplication!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.RuntimeApplication!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
-Raffinert.Relations.RelationRuntime.ApplyDetailed(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Relations.RuntimeApplication!
-Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedMutation! prepared) -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RelationRuntime.CommitDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.RelationRuntime.Commit(Raffinert.Relations.PreparedImpactPlan! plan) -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.RelationRuntime.PlanDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.PreparedImpactPlan!
-Raffinert.Relations.RelationRuntime.PreviewDetailed(Raffinert.Relations.PreparedMutation! prepared, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel = Raffinert.Relations.RuntimeImpactDetailLevel.Summary) -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.RelationRuntime.Diagnostics.get -> Raffinert.Relations.RuntimeDiagnostics!
-Raffinert.Relations.RelationRuntime.Dispatch(Raffinert.Relations.PreparedMutation! prepared) -> void
-Raffinert.Relations.RelationRuntime.Evaluate<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> bool
-Raffinert.Relations.RelationRuntime.Get<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
-Raffinert.Relations.RelationRuntime.GetState<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, TSource! source) -> Raffinert.Relations.DerivedValueState
-Raffinert.Relations.RelationRuntime.GetState<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant, TSource! source) -> Raffinert.Relations.InvariantEvaluationState
-Raffinert.Relations.RelationRuntime.Prepare(Raffinert.Relations.MutationSet! mutationSet) -> Raffinert.Relations.PreparedMutation!
-Raffinert.Relations.RelationRuntime.Prepare(Raffinert.Relations.MutationSet! mutationSet, Raffinert.Relations.ChangeValidationMode validationMode) -> Raffinert.Relations.PreparedMutation!
-Raffinert.Relations.RelationRuntime.Related<TLeft, TRight>(Raffinert.Relations.Relation<TLeft!, TRight!>! relation, TLeft! left) -> System.Collections.Generic.IReadOnlyList<TRight!>!
-Raffinert.Relations.RelationRuntime.Related<TLeft, TRight>(TLeft! left, Raffinert.Relations.Relation<TLeft!, TRight!>! relation) -> System.Collections.Generic.IReadOnlyList<TRight!>!
-Raffinert.Relations.RelationRuntime.RelatedFromLeft<TLeft, TRight>(Raffinert.Relations.Relation<TLeft!, TRight!>! relation, TLeft! left) -> System.Collections.Generic.IReadOnlyList<TRight!>!
-Raffinert.Relations.RelationRuntime.RelatedFromRight<TLeft, TRight>(Raffinert.Relations.Relation<TLeft!, TRight!>! relation, TRight! right) -> System.Collections.Generic.IReadOnlyList<TLeft!>!
-Raffinert.Relations.RelationRuntime.Remove<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance) -> bool
-Raffinert.Relations.RelationRuntime.Remove<T>(T! instance) -> bool
-Raffinert.Relations.RelationRuntime.ResetDiagnostics() -> void
-Raffinert.Relations.RelationRuntime.Version.get -> long
-Raffinert.Relations.RelationRuntimeDiagnostics
-Raffinert.Relations.RelationRuntimeDiagnostics.AverageFanOut.get -> double
-Raffinert.Relations.RelationRuntimeDiagnostics.AverageFanOut.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.ForwardIndexEntries.get -> int
-Raffinert.Relations.RelationRuntimeDiagnostics.ForwardIndexEntries.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.HasDensityWarning.get -> bool
-Raffinert.Relations.RelationRuntimeDiagnostics.HasDensityWarning.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.LeftType.get -> System.Type!
-Raffinert.Relations.RelationRuntimeDiagnostics.LeftType.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.Materialization.get -> Raffinert.Relations.RelationMaterializationMode
-Raffinert.Relations.RelationRuntimeDiagnostics.Materialization.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.MaterializedPairCount.get -> int
-Raffinert.Relations.RelationRuntimeDiagnostics.MaterializedPairCount.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.RelationId.get -> int
-Raffinert.Relations.RelationRuntimeDiagnostics.RelationId.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.RelationRuntimeDiagnostics(int RelationId, System.Type! LeftType, System.Type! RightType, Raffinert.Relations.RelationMaterializationMode Materialization, int ForwardIndexEntries, int ReverseIndexEntries, int MaterializedPairCount, double AverageFanOut, bool HasDensityWarning) -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.ReverseIndexEntries.get -> int
-Raffinert.Relations.RelationRuntimeDiagnostics.ReverseIndexEntries.init -> void
-Raffinert.Relations.RelationRuntimeDiagnostics.RightType.get -> System.Type!
-Raffinert.Relations.RelationRuntimeDiagnostics.RightType.init -> void
-Raffinert.Relations.RepairRequestInfo
-Raffinert.Relations.RepairRequestInfo.DefinitionKey.get -> string?
-Raffinert.Relations.RepairRequestInfo.DefinitionKey.init -> void
-Raffinert.Relations.RepairRequestInfo.InvariantId.get -> int
-Raffinert.Relations.RepairRequestInfo.InvariantId.init -> void
-Raffinert.Relations.RepairRequestInfo.GetDurableIdentity() -> Raffinert.Relations.DurablePolicyRequestIdentity!
-Raffinert.Relations.RepairRequestInfo.IsDurable.get -> bool
-Raffinert.Relations.RepairRequestInfo.Reason.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.RepairRequestInfo.Reason.init -> void
-Raffinert.Relations.RepairRequestInfo.RepairRequestInfo(int InvariantId, object! Source, Raffinert.Relations.DependencySeverity Reason) -> void
-Raffinert.Relations.RepairRequestInfo.Source.get -> object!
-Raffinert.Relations.RepairRequestInfo.Source.init -> void
-Raffinert.Relations.RepairRequestInfo.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
-Raffinert.Relations.RepairRequestInfo.SourceIdentity.init -> void
-Raffinert.Relations.SourceIdentity
-Raffinert.Relations.SourceIdentity.DurableIdentity.get -> Raffinert.Relations.DurableSourceIdentity?
-Raffinert.Relations.SourceIdentity.DurableIdentity.init -> void
-Raffinert.Relations.SourceIdentity.IsDurable.get -> bool
-Raffinert.Relations.SourceIdentity.ObjectSetKey.get -> string?
-Raffinert.Relations.SourceIdentity.ObjectSetKey.init -> void
-Raffinert.Relations.SourceIdentity.SourceIdentity(string? ObjectSetKey, System.Type! SourceType, object! SourceKey) -> void
-Raffinert.Relations.SourceIdentity.SourceKey.get -> object!
-Raffinert.Relations.SourceIdentity.SourceKey.init -> void
-Raffinert.Relations.SourceIdentity.SourceType.get -> System.Type!
-Raffinert.Relations.SourceIdentity.SourceType.init -> void
-Raffinert.Relations.SourceKeyPart
-Raffinert.Relations.SourceKeyPart.Name.get -> string?
-Raffinert.Relations.SourceKeyPart.Name.init -> void
-Raffinert.Relations.SourceKeyPart.SourceKeyPart(string? Name, string! Type, string! Value) -> void
-Raffinert.Relations.SourceKeyPart.Type.get -> string!
-Raffinert.Relations.SourceKeyPart.Type.init -> void
-Raffinert.Relations.SourceKeyPart.Value.get -> string!
-Raffinert.Relations.SourceKeyPart.Value.init -> void
-Raffinert.Relations.SourceDependencyImpact
-Raffinert.Relations.SourceDependencyImpact.Causes.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DependencyImpactCause!>!
-Raffinert.Relations.SourceDependencyImpact.Causes.init -> void
-Raffinert.Relations.SourceDependencyImpact.ImpactId.get -> int?
-Raffinert.Relations.SourceDependencyImpact.ImpactId.init -> void
-Raffinert.Relations.SourceDependencyImpact.Severity.get -> Raffinert.Relations.DependencySeverity
-Raffinert.Relations.SourceDependencyImpact.Severity.init -> void
-Raffinert.Relations.SourceDependencyImpact.Source.get -> object!
-Raffinert.Relations.SourceDependencyImpact.Source.init -> void
-Raffinert.Relations.SourceDependencyImpact.SourceDependencyImpact(object! Source, Raffinert.Relations.DependencySeverity Severity) -> void
-Raffinert.Relations.SourceDependencyImpact.SourceIdentity.get -> Raffinert.Relations.SourceIdentity?
-Raffinert.Relations.SourceDependencyImpact.SourceIdentity.init -> void
-Raffinert.Relations.RuntimeApplyResult
-Raffinert.Relations.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Relations.ChangeImpact!
-Raffinert.Relations.RuntimeApplyResult.DetailLevel.get -> Raffinert.Relations.RuntimeImpactDetailLevel
-Raffinert.Relations.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.DerivedMutationImpact!>!
-Raffinert.Relations.RuntimeApplyResult.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.ImmediateEvaluationRequestInfo!>!
-Raffinert.Relations.RuntimeApplyResult.InvariantImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.InvariantMutationImpact!>!
-Raffinert.Relations.RuntimeApplyResult.GetDurablePolicyWork() -> Raffinert.Relations.DurablePolicyWork!
-Raffinert.Relations.RuntimeApplyResult.MutationOrigins.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.MutationOrigin!>!
-Raffinert.Relations.RuntimeApplyResult.RelationImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationMutationImpact!>!
-Raffinert.Relations.RuntimeApplyResult.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RepairRequestInfo!>!
-Raffinert.Relations.RuntimeApplication
-Raffinert.Relations.RuntimeApplication.Dispatch.get -> Raffinert.Relations.PolicyDispatchHandle!
-Raffinert.Relations.RuntimeApplication.Dispatch.init -> void
-Raffinert.Relations.RuntimeApplication.Result.get -> Raffinert.Relations.RuntimeApplyResult!
-Raffinert.Relations.RuntimeApplication.Result.init -> void
-Raffinert.Relations.RuntimeApplication.RuntimeApplication(Raffinert.Relations.RuntimeApplyResult! Result, Raffinert.Relations.PolicyDispatchHandle! Dispatch) -> void
-Raffinert.Relations.PolicyDispatchHandle
-Raffinert.Relations.PolicyDispatchHandle.Invoke() -> void
-Raffinert.Relations.PolicyDispatchHandle.IsDispatched.get -> bool
-Raffinert.Relations.RuntimeDiagnosticOptions
-Raffinert.Relations.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.get -> double
-Raffinert.Relations.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.init -> void
-Raffinert.Relations.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.get -> int
-Raffinert.Relations.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.init -> void
-Raffinert.Relations.RuntimeDiagnosticOptions.RuntimeDiagnosticOptions() -> void
-Raffinert.Relations.RuntimeDiagnostics
-Raffinert.Relations.RuntimeSeedBuilder
-Raffinert.Relations.RuntimeSeedBuilder.Add<T>(Raffinert.Relations.ObjectSet<T!>! set, System.Collections.Generic.IEnumerable<T!>! instances) -> Raffinert.Relations.RuntimeSeedBuilder!
-Raffinert.Relations.RuntimeSeedBuilder.RuntimeSeedBuilder() -> void
-Raffinert.Relations.RuntimeDiagnostics.AffectedSources.get -> long
-Raffinert.Relations.RuntimeDiagnostics.AffectedSources.init -> void
-Raffinert.Relations.RuntimeDiagnostics.DerivedFullRecomputations.get -> long
-Raffinert.Relations.RuntimeDiagnostics.DerivedFullRecomputations.init -> void
-Raffinert.Relations.RuntimeDiagnostics.IncrementalDerivedUpdates.get -> long
-Raffinert.Relations.RuntimeDiagnostics.IncrementalDerivedUpdates.init -> void
-Raffinert.Relations.RuntimeDiagnostics.PolicyRequestsEmitted.get -> long
-Raffinert.Relations.RuntimeDiagnostics.PolicyRequestsEmitted.init -> void
-Raffinert.Relations.RuntimeDiagnostics.PredicateEvaluations.get -> long
-Raffinert.Relations.RuntimeDiagnostics.PredicateEvaluations.init -> void
-Raffinert.Relations.RuntimeDiagnostics.ReindexedRoots.get -> long
-Raffinert.Relations.RuntimeDiagnostics.ReindexedRoots.init -> void
-Raffinert.Relations.RuntimeDiagnostics.RelationPairsAdded.get -> long
-Raffinert.Relations.RuntimeDiagnostics.RelationPairsAdded.init -> void
-Raffinert.Relations.RuntimeDiagnostics.RelationPairsRemoved.get -> long
-Raffinert.Relations.RuntimeDiagnostics.RelationPairsRemoved.init -> void
-Raffinert.Relations.RuntimeDiagnostics.Relations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationRuntimeDiagnostics!>!
-Raffinert.Relations.RuntimeDiagnostics.Relations.init -> void
-Raffinert.Relations.RuntimeDiagnostics.RuntimeDiagnostics(long PredicateEvaluations, long ReindexedRoots, long AffectedSources, long RelationPairsAdded, long RelationPairsRemoved, long DerivedFullRecomputations, long IncrementalDerivedUpdates, long PolicyRequestsEmitted, System.Collections.Generic.IReadOnlyList<Raffinert.Relations.RelationRuntimeDiagnostics!>! Relations) -> void
-Raffinert.Relations.RuntimeDiagnostics.ProjectedTargetCount.get -> int
-Raffinert.Relations.RuntimeDiagnostics.ProjectedTargetCount.init -> void
-Raffinert.Relations.RuntimeDiagnostics.ProjectedDependencyConsumerCount.get -> int
-Raffinert.Relations.RuntimeDiagnostics.ProjectedDependencyConsumerCount.init -> void
-Raffinert.Relations.RuntimeDiagnostics.ProjectionIndexCount.get -> int
-Raffinert.Relations.RuntimeDiagnostics.ProjectionIndexCount.init -> void
-Raffinert.Relations.RuntimeDiagnostics.ReverseProjectionEntryCount.get -> int
-Raffinert.Relations.RuntimeDiagnostics.ReverseProjectionEntryCount.init -> void
-Raffinert.Relations.RuntimeMutation
-Raffinert.Relations.SemanticImpact
-Raffinert.Relations.SemanticImpact.AffectedRelations.get -> int
-Raffinert.Relations.SemanticImpact.AffectedRelations.init -> void
-Raffinert.Relations.SemanticImpact.AffectedRoots.get -> int
-Raffinert.Relations.SemanticImpact.AffectedRoots.init -> void
-Raffinert.Relations.SemanticImpact.SemanticImpact(int AffectedRelations, int AffectedRoots) -> void
-static Raffinert.Relations.Change.Add<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance) -> Raffinert.Relations.ObjectAdded!
-static Raffinert.Relations.Change.CollectionAdd<TOwner, TItem>(Raffinert.Relations.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionAdd<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionRemove<TOwner, TItem>(Raffinert.Relations.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionRemove<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionReset(object! owner, System.Reflection.MemberInfo! member) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionReset<TOwner, TItem>(Raffinert.Relations.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.CollectionReset<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection) -> Raffinert.Relations.CollectionChange!
-static Raffinert.Relations.Change.Property(object! instance, System.Reflection.MemberInfo! member, object? oldValue, object? newValue) -> Raffinert.Relations.PropertyChange!
-static Raffinert.Relations.Change.Property<T, TValue>(Raffinert.Relations.ObjectSet<T!>! set, T! instance, System.Linq.Expressions.Expression<System.Func<T!, TValue>!>! property, TValue oldValue, TValue newValue) -> Raffinert.Relations.PropertyChange!
-static Raffinert.Relations.Change.Property<T, TValue>(T! instance, System.Linq.Expressions.Expression<System.Func<T!, TValue>!>! property, TValue oldValue, TValue newValue) -> Raffinert.Relations.PropertyChange!
-static Raffinert.Relations.Change.Property<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance, System.Reflection.MemberInfo! member, object? oldValue, object? newValue) -> Raffinert.Relations.PropertyChange!
-static Raffinert.Relations.Change.Remove<T>(Raffinert.Relations.ObjectSet<T!>! set, T! instance) -> Raffinert.Relations.ObjectRemoved!
-static Raffinert.Relations.ChangeSet.Create(params Raffinert.Relations.PropertyChange![]! changes) -> Raffinert.Relations.ChangeSet!
-static Raffinert.Relations.MutationSet.Create(params Raffinert.Relations.RuntimeMutation![]! mutations) -> Raffinert.Relations.MutationSet!
+Raffinert.Consistency.DependencyImpactCause
+Raffinert.Consistency.DependencyImpactCause.DependencyImpactCause(Raffinert.Consistency.ImpactCausePrecision Precision) -> void
+Raffinert.Consistency.DependencyImpactCause.Precision.get -> Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.DependencyImpactCause.Precision.init -> void
+Raffinert.Consistency.DirectSourceMemberCause
+Raffinert.Consistency.DirectSourceMemberCause.ClassifiedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DirectSourceMemberCause.ClassifiedSeverity.init -> void
+Raffinert.Consistency.DirectSourceMemberCause.DirectSourceMemberCause(int OriginId, string! MemberName, string! Policy, Raffinert.Consistency.DependencySeverity ClassifiedSeverity) -> void
+Raffinert.Consistency.DirectSourceMemberCause.MemberName.get -> string!
+Raffinert.Consistency.DirectSourceMemberCause.MemberName.init -> void
+Raffinert.Consistency.DirectSourceMemberCause.OriginId.get -> int
+Raffinert.Consistency.DirectSourceMemberCause.OriginId.init -> void
+Raffinert.Consistency.DirectSourceMemberCause.Policy.get -> string!
+Raffinert.Consistency.DirectSourceMemberCause.Policy.init -> void
+Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.ImpactCausePrecision.Conservative = 1 -> Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.ImpactCausePrecision.Exact = 0 -> Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.MutationOrigin
+Raffinert.Consistency.MutationOrigin.Kind.get -> Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.MutationOrigin.Kind.init -> void
+Raffinert.Consistency.MutationOrigin.CollectionItem.get -> object?
+Raffinert.Consistency.MutationOrigin.CollectionItem.init -> void
+Raffinert.Consistency.MutationOrigin.CollectionKind.get -> Raffinert.Consistency.CollectionChangeKind?
+Raffinert.Consistency.MutationOrigin.CollectionKind.init -> void
+Raffinert.Consistency.MutationOrigin.MemberName.get -> string?
+Raffinert.Consistency.MutationOrigin.MemberName.init -> void
+Raffinert.Consistency.MutationOrigin.MutationOrigin(int OriginId, Raffinert.Consistency.MutationOriginKind Kind, object! Source, string? MemberName) -> void
+Raffinert.Consistency.MutationOrigin.OriginId.get -> int
+Raffinert.Consistency.MutationOrigin.OriginId.init -> void
+Raffinert.Consistency.MutationOrigin.Source.get -> object!
+Raffinert.Consistency.MutationOrigin.Source.init -> void
+Raffinert.Consistency.MutationOrigin.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.MutationOrigin.SourceIdentity.init -> void
+Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.MutationOriginKind.CollectionChanged = 1 -> Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.MutationOriginKind.ObjectAdded = 2 -> Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.MutationOriginKind.ObjectRemoved = 3 -> Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.MutationOriginKind.SourceMemberChanged = 0 -> Raffinert.Consistency.MutationOriginKind
+Raffinert.Consistency.RelationDependencyCause
+Raffinert.Consistency.RelationDependencyCause.CausePrecision.get -> Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.RelationDependencyCause.CausePrecision.init -> void
+Raffinert.Consistency.RelationDependencyCause.DefinitionKey.get -> string?
+Raffinert.Consistency.RelationDependencyCause.DefinitionKey.init -> void
+Raffinert.Consistency.RelationDependencyCause.Kind.get -> Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RelationDependencyCause.Kind.init -> void
+Raffinert.Consistency.RelationDependencyCause.OriginIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Consistency.RelationDependencyCause.OriginIds.init -> void
+Raffinert.Consistency.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Consistency.RelationImpactCauseKind Kind, Raffinert.Consistency.ImpactCausePrecision CausePrecision) -> void
+Raffinert.Consistency.RelationDependencyCause.RelationId.get -> int
+Raffinert.Consistency.RelationDependencyCause.RelationId.init -> void
+Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RelationImpactCauseKind.ConservativeCandidate = 3 -> Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RelationImpactCauseKind.MembershipAdded = 0 -> Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RelationImpactCauseKind.MembershipRemoved = 1 -> Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RelationImpactCauseKind.RelatedItemChanged = 2 -> Raffinert.Consistency.RelationImpactCauseKind
+Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.RuntimeImpactDetailLevel.Causal = 1 -> Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.RuntimeImpactDetailLevel.Summary = 0 -> Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.RuntimeImpactTraceRenderer
+static Raffinert.Consistency.RuntimeImpactTraceRenderer.Render(Raffinert.Consistency.RuntimeApplyResult! result) -> string!
+Raffinert.Consistency.UpstreamDerivedCause
+Raffinert.Consistency.UpstreamDerivedCause.CausePrecision.get -> Raffinert.Consistency.ImpactCausePrecision
+Raffinert.Consistency.UpstreamDerivedCause.CausePrecision.init -> void
+Raffinert.Consistency.UpstreamDerivedCause.DefinitionKey.get -> string?
+Raffinert.Consistency.UpstreamDerivedCause.DefinitionKey.init -> void
+Raffinert.Consistency.UpstreamDerivedCause.UpstreamImpactId.get -> int?
+Raffinert.Consistency.UpstreamDerivedCause.UpstreamImpactId.init -> void
+Raffinert.Consistency.UpstreamDerivedCause.DerivedId.get -> int
+Raffinert.Consistency.UpstreamDerivedCause.DerivedId.init -> void
+Raffinert.Consistency.UpstreamDerivedCause.UpstreamDerivedCause(int DerivedId, Raffinert.Consistency.ImpactCausePrecision CausePrecision) -> void
+override Raffinert.Consistency.ObjectSet<T>.ToString() -> string!
+override Raffinert.Consistency.ObjectSetBuilder<T>.ToString() -> string!
+Raffinert.Consistency.AccessImpact
+Raffinert.Consistency.AccessImpact.AccessImpact(int ReindexedRelations, int ReindexedRoots) -> void
+Raffinert.Consistency.AccessImpact.ReindexedRelations.get -> int
+Raffinert.Consistency.AccessImpact.ReindexedRelations.init -> void
+Raffinert.Consistency.AccessImpact.ReindexedRoots.get -> int
+Raffinert.Consistency.AccessImpact.ReindexedRoots.init -> void
+Raffinert.Consistency.Change
+Raffinert.Consistency.ChangeImpact
+Raffinert.Consistency.ChangeImpact.Access.get -> Raffinert.Consistency.AccessImpact!
+Raffinert.Consistency.ChangeImpact.Access.init -> void
+Raffinert.Consistency.ChangeImpact.ChangeImpact(Raffinert.Consistency.AccessImpact! Access, Raffinert.Consistency.SemanticImpact! Semantic) -> void
+Raffinert.Consistency.ChangeImpact.Semantic.get -> Raffinert.Consistency.SemanticImpact!
+Raffinert.Consistency.ChangeImpact.Semantic.init -> void
+Raffinert.Consistency.ChangeSet
+Raffinert.Consistency.ChangeValidationMode
+Raffinert.Consistency.ChangeValidationMode.Default = 0 -> Raffinert.Consistency.ChangeValidationMode
+Raffinert.Consistency.ChangeValidationMode.StrictNewValue = 1 -> Raffinert.Consistency.ChangeValidationMode
+Raffinert.Consistency.CollectionChange
+Raffinert.Consistency.CollectionChange.Item.get -> object?
+Raffinert.Consistency.CollectionChange.Kind.get -> Raffinert.Consistency.CollectionChangeKind
+Raffinert.Consistency.CollectionChangeKind
+Raffinert.Consistency.CollectionChangeKind.Add = 0 -> Raffinert.Consistency.CollectionChangeKind
+Raffinert.Consistency.CollectionChangeKind.Remove = 1 -> Raffinert.Consistency.CollectionChangeKind
+Raffinert.Consistency.CollectionChangeKind.Reset = 2 -> Raffinert.Consistency.CollectionChangeKind
+Raffinert.Consistency.CompiledModelDiagnostics
+Raffinert.Consistency.CompiledModelDiagnostics.CompiledModelDiagnostics(System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.ObjectSetModelDiagnostics!>! ObjectSets, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationModelDiagnostics!>! Relations, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DerivedModelDiagnostics!>! DerivedValues, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.InvariantModelDiagnostics!>! Invariants) -> void
+Raffinert.Consistency.CompiledModelDiagnostics.DerivedValues.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DerivedModelDiagnostics!>!
+Raffinert.Consistency.CompiledModelDiagnostics.DerivedValues.init -> void
+Raffinert.Consistency.CompiledModelDiagnostics.Invariants.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.InvariantModelDiagnostics!>!
+Raffinert.Consistency.CompiledModelDiagnostics.Invariants.init -> void
+Raffinert.Consistency.CompiledModelDiagnostics.ObjectSets.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.ObjectSetModelDiagnostics!>!
+Raffinert.Consistency.CompiledModelDiagnostics.ObjectSets.init -> void
+Raffinert.Consistency.CompiledModelDiagnostics.Relations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationModelDiagnostics!>!
+Raffinert.Consistency.CompiledModelDiagnostics.Relations.init -> void
+Raffinert.Consistency.CompiledConsistencyModel
+Raffinert.Consistency.CompiledConsistencyModel.CreateRuntime() -> Raffinert.Consistency.ConsistencyRuntime!
+Raffinert.Consistency.CompiledConsistencyModel.CreateRuntime(System.Action<Raffinert.Consistency.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Consistency.ConsistencyRuntime!
+Raffinert.Consistency.CompiledConsistencyModel.CreateRuntime(Raffinert.Consistency.RuntimeDiagnosticOptions! diagnosticOptions) -> Raffinert.Consistency.ConsistencyRuntime!
+Raffinert.Consistency.CompiledConsistencyModel.CreateRuntime(Raffinert.Consistency.RuntimeDiagnosticOptions! diagnosticOptions, System.Action<Raffinert.Consistency.RuntimeSeedBuilder!>! configureSeed) -> Raffinert.Consistency.ConsistencyRuntime!
+Raffinert.Consistency.CompiledConsistencyModel.DebugView.get -> string!
+Raffinert.Consistency.CompiledConsistencyModel.Diagnostics.get -> Raffinert.Consistency.CompiledModelDiagnostics!
+Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.DependencyCompletenessIssue.ExternalState = 2 -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.DependencyCompletenessIssue.None = 0 -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.DependencyCompletenessIssue.OpaqueCode = 1 -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DependencySeverity.Dirty = 0 -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DependencySeverity.Invalid = 1 -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.Derived<TSource, TValue>
+Raffinert.Consistency.Derived<TSource, TValue>.AllowIncompleteDependencies() -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.Derived<TSource, TValue>.DefinitionKey.get -> string?
+Raffinert.Consistency.Derived<TSource, TValue>.Named(string! definitionKey) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>
+Raffinert.Consistency.DerivedBuilder<TSource>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Using<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Using<TUpstreamSource, TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TFirst>! first, Raffinert.Consistency.Derived<TUpstreamSource!, TSecond>! second) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Using<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! upstream) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Using<TValue1, TValue2>(Raffinert.Consistency.Derived<TSource!, TValue1>! first, Raffinert.Consistency.Derived<TSource!, TValue2>! second) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TValue1, TValue2>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TFirst, TSecond>
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TUpstream>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
+Raffinert.Consistency.DerivedImpactPolicyBuilder
+Raffinert.Consistency.DerivedImpactPolicyBuilder.DerivedImpactPolicyBuilder() -> void
+Raffinert.Consistency.DerivedImpactPolicyBuilder.ItemChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder!
+Raffinert.Consistency.DerivedImpactPolicyBuilder.MembershipAdded(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder!
+Raffinert.Consistency.DerivedImpactPolicyBuilder.MembershipRemoved(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder!
+Raffinert.Consistency.DerivedImpactPolicyBuilder.SourceChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder!
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.DerivedImpactPolicyBuilder() -> void
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.ItemChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.MembershipAdded(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.MembershipRemoved(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.SourceMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Consistency.DependencySeverity>! classify) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.SourceChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedLinqSemantics.Item = 2 -> Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedLinqSemantics.Membership = 1 -> Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedLinqSemantics.None = 0 -> Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedLinqSemantics.Ordering = 4 -> Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedModelDiagnostics
+Raffinert.Consistency.DerivedModelDiagnostics.CompletenessIssues.get -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.DerivedModelDiagnostics.CompletenessIssues.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.Computation.get -> string!
+Raffinert.Consistency.DerivedModelDiagnostics.Computation.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.ComputationPlan.get -> string!
+Raffinert.Consistency.DerivedModelDiagnostics.ComputationPlan.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.DerivedModelDiagnostics.Dependencies.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Consistency.DerivedModelDiagnostics.DefinitionKey.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.DerivedId.get -> int
+Raffinert.Consistency.DerivedModelDiagnostics.DerivedId.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.DerivedModelDiagnostics(int DerivedId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! RelationIds, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Computation, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Consistency.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, bool UsesRelationMembership, Raffinert.Consistency.DerivedLinqSemantics LinqSemantics, string! ComputationPlan, Raffinert.Consistency.DependencySeverity MembershipAddedSeverity, Raffinert.Consistency.DependencySeverity MembershipRemovedSeverity, Raffinert.Consistency.DependencySeverity ItemChangedSeverity, Raffinert.Consistency.DependencySeverity SourceChangedSeverity) -> void
+Raffinert.Consistency.DerivedModelDiagnostics.HasConditionalSourcePolicy.get -> bool
+Raffinert.Consistency.DerivedModelDiagnostics.HasConditionalSourcePolicy.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
+Raffinert.Consistency.DerivedModelDiagnostics.IncompleteDependenciesAllowed.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedModelDiagnostics.ItemChangedSeverity.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.LinqSemantics.get -> Raffinert.Consistency.DerivedLinqSemantics
+Raffinert.Consistency.DerivedModelDiagnostics.LinqSemantics.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.MembershipAddedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedModelDiagnostics.MembershipAddedSeverity.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.MembershipRemovedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedModelDiagnostics.MembershipRemovedSeverity.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.RelationIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Consistency.DerivedModelDiagnostics.RelationIds.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.SourceObjectSetId.get -> int
+Raffinert.Consistency.DerivedModelDiagnostics.SourceObjectSetId.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleCount.get -> int
+Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleCount.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleNames.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.UsesRelationMembership.get -> bool
+Raffinert.Consistency.DerivedModelDiagnostics.UsesRelationMembership.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Consistency.DerivedModelDiagnostics.UpstreamDerivedIds.init -> void
+Raffinert.Consistency.DerivedMutationImpact
+Raffinert.Consistency.DerivedMutationImpact.DerivedId.get -> int
+Raffinert.Consistency.DerivedMutationImpact.DerivedId.init -> void
+Raffinert.Consistency.DerivedMutationImpact.DefinitionKey.get -> string?
+Raffinert.Consistency.DerivedMutationImpact.DefinitionKey.init -> void
+Raffinert.Consistency.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>! Sources) -> void
+Raffinert.Consistency.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>!
+Raffinert.Consistency.DerivedMutationImpact.Sources.init -> void
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Incrementally() -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.DerivedValueState.Dirty = 1 -> Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.DerivedValueState.Fresh = 0 -> Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.DerivedValueState.Invalid = 2 -> Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.DurablePolicyRequestIdentity
+Raffinert.Consistency.DurablePolicyRequestIdentity.DefinitionKey.get -> string!
+Raffinert.Consistency.DurablePolicyRequestIdentity.DefinitionKey.init -> void
+Raffinert.Consistency.DurablePolicyRequestIdentity.DurablePolicyRequestIdentity(string! DefinitionKey, Raffinert.Consistency.DurableSourceIdentity! Source) -> void
+Raffinert.Consistency.DurablePolicyRequestIdentity.Source.get -> Raffinert.Consistency.DurableSourceIdentity!
+Raffinert.Consistency.DurablePolicyRequestIdentity.Source.init -> void
+Raffinert.Consistency.DurablePolicyWork
+Raffinert.Consistency.DurablePolicyWork.DurablePolicyWork(System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DurableRepairRequestInfo!>! RepairRequests, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DurableImmediateEvaluationRequestInfo!>! ImmediateEvaluationRequests) -> void
+Raffinert.Consistency.DurablePolicyWork.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DurableImmediateEvaluationRequestInfo!>!
+Raffinert.Consistency.DurablePolicyWork.ImmediateEvaluationRequests.init -> void
+Raffinert.Consistency.DurablePolicyWork.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DurableRepairRequestInfo!>!
+Raffinert.Consistency.DurablePolicyWork.RepairRequests.init -> void
+Raffinert.Consistency.DurableRepairRequestInfo
+Raffinert.Consistency.DurableRepairRequestInfo.DefinitionKey.get -> string!
+Raffinert.Consistency.DurableRepairRequestInfo.DefinitionKey.init -> void
+Raffinert.Consistency.DurableRepairRequestInfo.DurableRepairRequestInfo(string! DefinitionKey, Raffinert.Consistency.DurableSourceIdentity! Source, Raffinert.Consistency.DependencySeverity Reason) -> void
+Raffinert.Consistency.DurableRepairRequestInfo.Reason.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DurableRepairRequestInfo.Reason.init -> void
+Raffinert.Consistency.DurableRepairRequestInfo.Source.get -> Raffinert.Consistency.DurableSourceIdentity!
+Raffinert.Consistency.DurableRepairRequestInfo.Source.init -> void
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo.DefinitionKey.get -> string!
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo.DefinitionKey.init -> void
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo.DurableImmediateEvaluationRequestInfo(string! DefinitionKey, Raffinert.Consistency.DurableSourceIdentity! Source) -> void
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo.Source.get -> Raffinert.Consistency.DurableSourceIdentity!
+Raffinert.Consistency.DurableImmediateEvaluationRequestInfo.Source.init -> void
+Raffinert.Consistency.DurableSourceIdentity
+Raffinert.Consistency.DurableSourceIdentity.DurableSourceIdentity(string! ObjectSetKey, string! SourceType, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceKeyPart!>! KeyParts) -> void
+Raffinert.Consistency.DurableSourceIdentity.KeyParts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceKeyPart!>!
+Raffinert.Consistency.DurableSourceIdentity.KeyParts.init -> void
+Raffinert.Consistency.DurableSourceIdentity.ObjectSetKey.get -> string!
+Raffinert.Consistency.DurableSourceIdentity.ObjectSetKey.init -> void
+Raffinert.Consistency.DurableSourceIdentity.SourceType.get -> string!
+Raffinert.Consistency.DurableSourceIdentity.SourceType.init -> void
+Raffinert.Consistency.ImmediateEvaluationRequestInfo
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.DefinitionKey.get -> string?
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.DefinitionKey.init -> void
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.ImmediateEvaluationRequestInfo(int InvariantId, object! Source) -> void
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.InvariantId.get -> int
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.InvariantId.init -> void
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.GetDurableIdentity() -> Raffinert.Consistency.DurablePolicyRequestIdentity!
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.IsDurable.get -> bool
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.Source.get -> object!
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.Source.init -> void
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.ImmediateEvaluationRequestInfo.SourceIdentity.init -> void
+Raffinert.Consistency.Invariant<TSource>
+Raffinert.Consistency.Invariant<TSource>.AllowIncompleteDependencies() -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.Invariant<TSource>.DefinitionKey.get -> string?
+Raffinert.Consistency.Invariant<TSource>.Named(string! definitionKey) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.Invariant<TSource>.ReactWith(Raffinert.Consistency.InvariantReaction reaction) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.Invariant<TSource>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.InvariantBuilder<TSource>
+Raffinert.Consistency.InvariantBuilder<TSource>.Using<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived) -> Raffinert.Consistency.InvariantUsingBuilder<TSource!, TValue>!
+Raffinert.Consistency.InvariantBuilder<TSource>.Using<TFirst, TSecond>(Raffinert.Consistency.Derived<TSource!, TFirst>! first, Raffinert.Consistency.Derived<TSource!, TSecond>! second) -> Raffinert.Consistency.InvariantUsingBuilder<TSource!, TFirst, TSecond>!
+Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantEvaluationState.Dirty = 3 -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantEvaluationState.Invalid = 4 -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantEvaluationState.Unknown = 0 -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantEvaluationState.Valid = 1 -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantEvaluationState.Violated = 2 -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.InvariantModelDiagnostics
+Raffinert.Consistency.InvariantModelDiagnostics.CompletenessIssues.get -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.InvariantModelDiagnostics.CompletenessIssues.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.InvariantModelDiagnostics.Dependencies.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Consistency.InvariantModelDiagnostics.DefinitionKey.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
+Raffinert.Consistency.InvariantModelDiagnostics.IncompleteDependenciesAllowed.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.InvariantId.get -> int
+Raffinert.Consistency.InvariantModelDiagnostics.InvariantId.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.InvariantModelDiagnostics(int InvariantId, int SourceObjectSetId, System.Collections.Generic.IReadOnlyList<int>! UpstreamDerivedIds, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, Raffinert.Consistency.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed, Raffinert.Consistency.InvariantReaction Reaction) -> void
+Raffinert.Consistency.InvariantModelDiagnostics.Predicate.get -> string!
+Raffinert.Consistency.InvariantModelDiagnostics.Predicate.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.Reaction.get -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantModelDiagnostics.Reaction.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.SourceObjectSetId.get -> int
+Raffinert.Consistency.InvariantModelDiagnostics.SourceObjectSetId.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+Raffinert.Consistency.InvariantModelDiagnostics.UpstreamDerivedIds.init -> void
+Raffinert.Consistency.InvariantMutationImpact
+Raffinert.Consistency.InvariantMutationImpact.InvariantId.get -> int
+Raffinert.Consistency.InvariantMutationImpact.InvariantId.init -> void
+Raffinert.Consistency.InvariantMutationImpact.DefinitionKey.get -> string?
+Raffinert.Consistency.InvariantMutationImpact.DefinitionKey.init -> void
+Raffinert.Consistency.InvariantMutationImpact.InvariantMutationImpact(int InvariantId, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>! Sources) -> void
+Raffinert.Consistency.InvariantMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>!
+Raffinert.Consistency.InvariantMutationImpact.Sources.init -> void
+Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantReactionCause
+Raffinert.Consistency.InvariantReactionCause.InvariantReactionCause(Raffinert.Consistency.InvariantReaction Reaction, Raffinert.Consistency.DependencySeverity InputSeverity, Raffinert.Consistency.DependencySeverity OutputSeverity) -> void
+Raffinert.Consistency.InvariantReactionCause.InputSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.InvariantReactionCause.InputSeverity.init -> void
+Raffinert.Consistency.InvariantReactionCause.OutputSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.InvariantReactionCause.OutputSeverity.init -> void
+Raffinert.Consistency.InvariantReactionCause.Reaction.get -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantReactionCause.Reaction.init -> void
+Raffinert.Consistency.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantReaction.MarkDirty = 1 -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantReaction.MarkInvalid = 2 -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantUsingBuilder<TSource, TValue>
+Raffinert.Consistency.InvariantUsingBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.InvariantUsingBuilder<TSource, TFirst, TSecond>
+Raffinert.Consistency.InvariantUsingBuilder<TSource, TFirst, TSecond>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.MutationSet
+Raffinert.Consistency.ObjectAdded
+Raffinert.Consistency.ObjectAdded.Instance.get -> object!
+Raffinert.Consistency.ObjectRemoved
+Raffinert.Consistency.ObjectRemoved.Instance.get -> object!
+Raffinert.Consistency.ObjectSet<T>
+Raffinert.Consistency.ObjectSet<T>.DefinitionKey.get -> string?
+Raffinert.Consistency.ObjectSetBuilder<T>
+Raffinert.Consistency.ObjectSetBuilder<T>.Key<TKey>(System.Linq.Expressions.Expression<System.Func<T!, TKey>!>! key) -> Raffinert.Consistency.ObjectSet<T!>!
+Raffinert.Consistency.ObjectSetBuilder<T>.Named(string! definitionKey) -> Raffinert.Consistency.ObjectSetBuilder<T!>!
+Raffinert.Consistency.ObjectSetBuilder<T>.Set.get -> Raffinert.Consistency.ObjectSet<T!>!
+Raffinert.Consistency.ObjectSetModelDiagnostics
+Raffinert.Consistency.ObjectSetModelDiagnostics.KeyExpression.get -> string!
+Raffinert.Consistency.ObjectSetModelDiagnostics.KeyExpression.init -> void
+Raffinert.Consistency.ObjectSetModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Consistency.ObjectSetModelDiagnostics.DefinitionKey.init -> void
+Raffinert.Consistency.ObjectSetModelDiagnostics.ObjectSetId.get -> int
+Raffinert.Consistency.ObjectSetModelDiagnostics.ObjectSetId.init -> void
+Raffinert.Consistency.ObjectSetModelDiagnostics.ObjectSetModelDiagnostics(int ObjectSetId, System.Type! ObjectType, string! KeyExpression) -> void
+Raffinert.Consistency.ObjectSetModelDiagnostics.ObjectType.get -> System.Type!
+Raffinert.Consistency.ObjectSetModelDiagnostics.ObjectType.init -> void
+Raffinert.Consistency.PreparedImpactPlan
+Raffinert.Consistency.PreparedImpactPlan.BaseVersion.get -> long
+Raffinert.Consistency.PreparedImpactPlan.DetailLevel.get -> Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.PreparedImpactPlan.IsCommitted.get -> bool
+Raffinert.Consistency.PreparedImpactPlan.Result.get -> Raffinert.Consistency.RuntimeApplyResult!
+Raffinert.Consistency.PreparedMutation
+Raffinert.Consistency.PreparedMutation.BaseVersion.get -> long
+Raffinert.Consistency.PreparedMutation.IsCommitted.get -> bool
+Raffinert.Consistency.PreparedMutation.IsDispatched.get -> bool
+Raffinert.Consistency.PropertyChange
+Raffinert.Consistency.PropertyChange.NewValue.get -> object?
+Raffinert.Consistency.PropertyChange.OldValue.get -> object?
+Raffinert.Consistency.Relation<TLeft, TRight>
+Raffinert.Consistency.Relation<TLeft, TRight>.AllowIncompleteDependencies() -> Raffinert.Consistency.Relation<TLeft!, TRight!>!
+Raffinert.Consistency.Relation<TLeft, TRight>.DefinitionKey.get -> string?
+Raffinert.Consistency.Relation<TLeft, TRight>.Named(string! definitionKey) -> Raffinert.Consistency.Relation<TLeft!, TRight!>!
+Raffinert.Consistency.RelationAccessPlanKind
+Raffinert.Consistency.RelationAccessPlanKind.HashJoin = 1 -> Raffinert.Consistency.RelationAccessPlanKind
+Raffinert.Consistency.RelationAccessPlanKind.Scan = 0 -> Raffinert.Consistency.RelationAccessPlanKind
+Raffinert.Consistency.RelationBuilder<TLeft, TRight>
+Raffinert.Consistency.RelationBuilder<TLeft, TRight>.Where(System.Linq.Expressions.Expression<System.Func<TLeft!, TRight!, bool>!>! predicate) -> Raffinert.Consistency.Relation<TLeft!, TRight!>!
+Raffinert.Consistency.RelationMaterializationMode
+Raffinert.Consistency.RelationMaterializationMode.ExactPropagation = 1 -> Raffinert.Consistency.RelationMaterializationMode
+Raffinert.Consistency.RelationMaterializationMode.None = 0 -> Raffinert.Consistency.RelationMaterializationMode
+Raffinert.Consistency.ConsistencyModelBuilder
+Raffinert.Consistency.ConsistencyModelBuilder.Build() -> Raffinert.Consistency.CompiledConsistencyModel!
+Raffinert.Consistency.ConsistencyModelBuilder.Derived<TSource>(Raffinert.Consistency.ObjectSet<TSource!>! source) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
+Raffinert.Consistency.ConsistencyModelBuilder.Invariant<TSource>(Raffinert.Consistency.ObjectSet<TSource!>! source) -> Raffinert.Consistency.InvariantBuilder<TSource!>!
+Raffinert.Consistency.ConsistencyModelBuilder.Objects<T>() -> Raffinert.Consistency.ObjectSetBuilder<T!>!
+Raffinert.Consistency.ConsistencyModelBuilder.Relation<TLeft, TRight>(Raffinert.Consistency.ObjectSet<TLeft!>! left, Raffinert.Consistency.ObjectSet<TRight!>! right) -> Raffinert.Consistency.RelationBuilder<TLeft!, TRight!>!
+Raffinert.Consistency.ConsistencyModelBuilder.ConsistencyModelBuilder() -> void
+Raffinert.Consistency.RelationModelDiagnostics
+Raffinert.Consistency.RelationModelDiagnostics.AccessPlan.get -> Raffinert.Consistency.RelationAccessPlanKind
+Raffinert.Consistency.RelationModelDiagnostics.AccessPlan.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.CompletenessIssues.get -> Raffinert.Consistency.DependencyCompletenessIssue
+Raffinert.Consistency.RelationModelDiagnostics.CompletenessIssues.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.Dependencies.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.RelationModelDiagnostics.Dependencies.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.DefinitionKey.get -> string?
+Raffinert.Consistency.RelationModelDiagnostics.DefinitionKey.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.IncompleteDependenciesAllowed.get -> bool
+Raffinert.Consistency.RelationModelDiagnostics.IncompleteDependenciesAllowed.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.JoinKeys.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.RelationModelDiagnostics.JoinKeys.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.LeftObjectSetId.get -> int
+Raffinert.Consistency.RelationModelDiagnostics.LeftObjectSetId.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.LeftType.get -> System.Type!
+Raffinert.Consistency.RelationModelDiagnostics.LeftType.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.Materialization.get -> Raffinert.Consistency.RelationMaterializationMode
+Raffinert.Consistency.RelationModelDiagnostics.Materialization.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.Predicate.get -> string!
+Raffinert.Consistency.RelationModelDiagnostics.Predicate.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.PropagationPlan.get -> Raffinert.Consistency.RelationPropagationPlanKind
+Raffinert.Consistency.RelationModelDiagnostics.PropagationPlan.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.PropagationReason.get -> string!
+Raffinert.Consistency.RelationModelDiagnostics.PropagationReason.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.RelationId.get -> int
+Raffinert.Consistency.RelationModelDiagnostics.RelationId.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.RelationModelDiagnostics(int RelationId, int LeftObjectSetId, int RightObjectSetId, System.Type! LeftType, System.Type! RightType, string! Predicate, System.Collections.Generic.IReadOnlyList<string!>! Dependencies, System.Collections.Generic.IReadOnlyList<string!>! JoinKeys, Raffinert.Consistency.RelationAccessPlanKind AccessPlan, Raffinert.Consistency.RelationAccessPlanKind? ReverseAccessPlan, Raffinert.Consistency.RelationMaterializationMode Materialization, Raffinert.Consistency.RelationPropagationPlanKind PropagationPlan, bool RetainsPairMembership, string! PropagationReason, Raffinert.Consistency.DependencyCompletenessIssue CompletenessIssues, bool IncompleteDependenciesAllowed) -> void
+Raffinert.Consistency.RelationModelDiagnostics.ReverseAccessPlan.get -> Raffinert.Consistency.RelationAccessPlanKind?
+Raffinert.Consistency.RelationModelDiagnostics.ReverseAccessPlan.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.RetainsPairMembership.get -> bool
+Raffinert.Consistency.RelationModelDiagnostics.RetainsPairMembership.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.RightObjectSetId.get -> int
+Raffinert.Consistency.RelationModelDiagnostics.RightObjectSetId.init -> void
+Raffinert.Consistency.RelationModelDiagnostics.RightType.get -> System.Type!
+Raffinert.Consistency.RelationModelDiagnostics.RightType.init -> void
+Raffinert.Consistency.RelationMutationImpact
+Raffinert.Consistency.RelationMutationImpact.AddedPairs.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationPairImpact!>!
+Raffinert.Consistency.RelationMutationImpact.AddedPairs.init -> void
+Raffinert.Consistency.RelationMutationImpact.AffectedSources.get -> System.Collections.Generic.IReadOnlyList<object!>!
+Raffinert.Consistency.RelationMutationImpact.AffectedSources.init -> void
+Raffinert.Consistency.RelationMutationImpact.DefinitionKey.get -> string?
+Raffinert.Consistency.RelationMutationImpact.DefinitionKey.init -> void
+Raffinert.Consistency.RelationMutationImpact.LeftType.get -> System.Type!
+Raffinert.Consistency.RelationMutationImpact.LeftType.init -> void
+Raffinert.Consistency.RelationMutationImpact.RelationId.get -> int
+Raffinert.Consistency.RelationMutationImpact.RelationId.init -> void
+Raffinert.Consistency.RelationMutationImpact.RelationMutationImpact(int RelationId, System.Type! LeftType, System.Type! RightType, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationPairImpact!>! AddedPairs, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationPairImpact!>! RemovedPairs, System.Collections.Generic.IReadOnlyList<object!>! AffectedSources) -> void
+Raffinert.Consistency.RelationMutationImpact.RemovedPairs.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationPairImpact!>!
+Raffinert.Consistency.RelationMutationImpact.RemovedPairs.init -> void
+Raffinert.Consistency.RelationMutationImpact.RightType.get -> System.Type!
+Raffinert.Consistency.RelationMutationImpact.RightType.init -> void
+Raffinert.Consistency.RelationPairImpact
+Raffinert.Consistency.RelationPairImpact.Left.get -> object!
+Raffinert.Consistency.RelationPairImpact.Left.init -> void
+Raffinert.Consistency.RelationPairImpact.RelationPairImpact(object! Left, object! Right) -> void
+Raffinert.Consistency.RelationPairImpact.Right.get -> object!
+Raffinert.Consistency.RelationPairImpact.Right.init -> void
+Raffinert.Consistency.RelationPropagationPlanKind
+Raffinert.Consistency.RelationPropagationPlanKind.ConservativeInvalidation = 2 -> Raffinert.Consistency.RelationPropagationPlanKind
+Raffinert.Consistency.RelationPropagationPlanKind.ExactMaterialized = 1 -> Raffinert.Consistency.RelationPropagationPlanKind
+Raffinert.Consistency.RelationPropagationPlanKind.None = 0 -> Raffinert.Consistency.RelationPropagationPlanKind
+Raffinert.Consistency.ConsistencyRuntime
+Raffinert.Consistency.ConsistencyRuntime.Add<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> void
+Raffinert.Consistency.ConsistencyRuntime.Add<T>(T! instance) -> void
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.ChangeSet! changeSet) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.ChangeSet! changeSet, Raffinert.Consistency.ChangeValidationMode validationMode) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.CollectionChange! change) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.MutationSet! mutationSet) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.MutationSet! mutationSet, Raffinert.Consistency.ChangeValidationMode validationMode) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.PropertyChange! change) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.Apply(Raffinert.Consistency.PropertyChange! change, Raffinert.Consistency.ChangeValidationMode validationMode) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.ApplyDetailed(Raffinert.Consistency.MutationSet! mutationSet) -> Raffinert.Consistency.RuntimeApplication!
+Raffinert.Consistency.ConsistencyRuntime.ApplyDetailed(Raffinert.Consistency.MutationSet! mutationSet, Raffinert.Consistency.ChangeValidationMode validationMode) -> Raffinert.Consistency.RuntimeApplication!
+Raffinert.Consistency.ConsistencyRuntime.ApplyDetailed(Raffinert.Consistency.MutationSet! mutationSet, Raffinert.Consistency.ChangeValidationMode validationMode, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Consistency.RuntimeApplication!
+Raffinert.Consistency.ConsistencyRuntime.ApplyDetailed(Raffinert.Consistency.MutationSet! mutationSet, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel) -> Raffinert.Consistency.RuntimeApplication!
+Raffinert.Consistency.ConsistencyRuntime.Commit(Raffinert.Consistency.PreparedMutation! prepared) -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.ConsistencyRuntime.CommitDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel = Raffinert.Consistency.RuntimeImpactDetailLevel.Summary) -> Raffinert.Consistency.RuntimeApplyResult!
+Raffinert.Consistency.ConsistencyRuntime.Commit(Raffinert.Consistency.PreparedImpactPlan! plan) -> Raffinert.Consistency.RuntimeApplyResult!
+Raffinert.Consistency.ConsistencyRuntime.PlanDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel = Raffinert.Consistency.RuntimeImpactDetailLevel.Summary) -> Raffinert.Consistency.PreparedImpactPlan!
+Raffinert.Consistency.ConsistencyRuntime.PreviewDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel = Raffinert.Consistency.RuntimeImpactDetailLevel.Summary) -> Raffinert.Consistency.RuntimeApplyResult!
+Raffinert.Consistency.ConsistencyRuntime.Diagnostics.get -> Raffinert.Consistency.RuntimeDiagnostics!
+Raffinert.Consistency.ConsistencyRuntime.Dispatch(Raffinert.Consistency.PreparedMutation! prepared) -> void
+Raffinert.Consistency.ConsistencyRuntime.Evaluate<TSource>(Raffinert.Consistency.Invariant<TSource!>! invariant, TSource! source) -> bool
+Raffinert.Consistency.ConsistencyRuntime.Get<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Consistency.ConsistencyRuntime.GetState<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> Raffinert.Consistency.DerivedValueState
+Raffinert.Consistency.ConsistencyRuntime.GetState<TSource>(Raffinert.Consistency.Invariant<TSource!>! invariant, TSource! source) -> Raffinert.Consistency.InvariantEvaluationState
+Raffinert.Consistency.ConsistencyRuntime.Prepare(Raffinert.Consistency.MutationSet! mutationSet) -> Raffinert.Consistency.PreparedMutation!
+Raffinert.Consistency.ConsistencyRuntime.Prepare(Raffinert.Consistency.MutationSet! mutationSet, Raffinert.Consistency.ChangeValidationMode validationMode) -> Raffinert.Consistency.PreparedMutation!
+Raffinert.Consistency.ConsistencyRuntime.Related<TLeft, TRight>(Raffinert.Consistency.Relation<TLeft!, TRight!>! relation, TLeft! left) -> System.Collections.Generic.IReadOnlyList<TRight!>!
+Raffinert.Consistency.ConsistencyRuntime.Related<TLeft, TRight>(TLeft! left, Raffinert.Consistency.Relation<TLeft!, TRight!>! relation) -> System.Collections.Generic.IReadOnlyList<TRight!>!
+Raffinert.Consistency.ConsistencyRuntime.RelatedFromLeft<TLeft, TRight>(Raffinert.Consistency.Relation<TLeft!, TRight!>! relation, TLeft! left) -> System.Collections.Generic.IReadOnlyList<TRight!>!
+Raffinert.Consistency.ConsistencyRuntime.RelatedFromRight<TLeft, TRight>(Raffinert.Consistency.Relation<TLeft!, TRight!>! relation, TRight! right) -> System.Collections.Generic.IReadOnlyList<TLeft!>!
+Raffinert.Consistency.ConsistencyRuntime.Remove<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> bool
+Raffinert.Consistency.ConsistencyRuntime.Remove<T>(T! instance) -> bool
+Raffinert.Consistency.ConsistencyRuntime.ResetDiagnostics() -> void
+Raffinert.Consistency.ConsistencyRuntime.Version.get -> long
+Raffinert.Consistency.RelationRuntimeDiagnostics
+Raffinert.Consistency.RelationRuntimeDiagnostics.AverageFanOut.get -> double
+Raffinert.Consistency.RelationRuntimeDiagnostics.AverageFanOut.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.ForwardIndexEntries.get -> int
+Raffinert.Consistency.RelationRuntimeDiagnostics.ForwardIndexEntries.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.HasDensityWarning.get -> bool
+Raffinert.Consistency.RelationRuntimeDiagnostics.HasDensityWarning.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.LeftType.get -> System.Type!
+Raffinert.Consistency.RelationRuntimeDiagnostics.LeftType.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.Materialization.get -> Raffinert.Consistency.RelationMaterializationMode
+Raffinert.Consistency.RelationRuntimeDiagnostics.Materialization.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.MaterializedPairCount.get -> int
+Raffinert.Consistency.RelationRuntimeDiagnostics.MaterializedPairCount.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.RelationId.get -> int
+Raffinert.Consistency.RelationRuntimeDiagnostics.RelationId.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.RelationRuntimeDiagnostics(int RelationId, System.Type! LeftType, System.Type! RightType, Raffinert.Consistency.RelationMaterializationMode Materialization, int ForwardIndexEntries, int ReverseIndexEntries, int MaterializedPairCount, double AverageFanOut, bool HasDensityWarning) -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.ReverseIndexEntries.get -> int
+Raffinert.Consistency.RelationRuntimeDiagnostics.ReverseIndexEntries.init -> void
+Raffinert.Consistency.RelationRuntimeDiagnostics.RightType.get -> System.Type!
+Raffinert.Consistency.RelationRuntimeDiagnostics.RightType.init -> void
+Raffinert.Consistency.RepairRequestInfo
+Raffinert.Consistency.RepairRequestInfo.DefinitionKey.get -> string?
+Raffinert.Consistency.RepairRequestInfo.DefinitionKey.init -> void
+Raffinert.Consistency.RepairRequestInfo.InvariantId.get -> int
+Raffinert.Consistency.RepairRequestInfo.InvariantId.init -> void
+Raffinert.Consistency.RepairRequestInfo.GetDurableIdentity() -> Raffinert.Consistency.DurablePolicyRequestIdentity!
+Raffinert.Consistency.RepairRequestInfo.IsDurable.get -> bool
+Raffinert.Consistency.RepairRequestInfo.Reason.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.RepairRequestInfo.Reason.init -> void
+Raffinert.Consistency.RepairRequestInfo.RepairRequestInfo(int InvariantId, object! Source, Raffinert.Consistency.DependencySeverity Reason) -> void
+Raffinert.Consistency.RepairRequestInfo.Source.get -> object!
+Raffinert.Consistency.RepairRequestInfo.Source.init -> void
+Raffinert.Consistency.RepairRequestInfo.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.RepairRequestInfo.SourceIdentity.init -> void
+Raffinert.Consistency.SourceIdentity
+Raffinert.Consistency.SourceIdentity.DurableIdentity.get -> Raffinert.Consistency.DurableSourceIdentity?
+Raffinert.Consistency.SourceIdentity.DurableIdentity.init -> void
+Raffinert.Consistency.SourceIdentity.IsDurable.get -> bool
+Raffinert.Consistency.SourceIdentity.ObjectSetKey.get -> string?
+Raffinert.Consistency.SourceIdentity.ObjectSetKey.init -> void
+Raffinert.Consistency.SourceIdentity.SourceIdentity(string? ObjectSetKey, System.Type! SourceType, object! SourceKey) -> void
+Raffinert.Consistency.SourceIdentity.SourceKey.get -> object!
+Raffinert.Consistency.SourceIdentity.SourceKey.init -> void
+Raffinert.Consistency.SourceIdentity.SourceType.get -> System.Type!
+Raffinert.Consistency.SourceIdentity.SourceType.init -> void
+Raffinert.Consistency.SourceKeyPart
+Raffinert.Consistency.SourceKeyPart.Name.get -> string?
+Raffinert.Consistency.SourceKeyPart.Name.init -> void
+Raffinert.Consistency.SourceKeyPart.SourceKeyPart(string? Name, string! Type, string! Value) -> void
+Raffinert.Consistency.SourceKeyPart.Type.get -> string!
+Raffinert.Consistency.SourceKeyPart.Type.init -> void
+Raffinert.Consistency.SourceKeyPart.Value.get -> string!
+Raffinert.Consistency.SourceKeyPart.Value.init -> void
+Raffinert.Consistency.SourceDependencyImpact
+Raffinert.Consistency.SourceDependencyImpact.Causes.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DependencyImpactCause!>!
+Raffinert.Consistency.SourceDependencyImpact.Causes.init -> void
+Raffinert.Consistency.SourceDependencyImpact.ImpactId.get -> int?
+Raffinert.Consistency.SourceDependencyImpact.ImpactId.init -> void
+Raffinert.Consistency.SourceDependencyImpact.Severity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.SourceDependencyImpact.Severity.init -> void
+Raffinert.Consistency.SourceDependencyImpact.Source.get -> object!
+Raffinert.Consistency.SourceDependencyImpact.Source.init -> void
+Raffinert.Consistency.SourceDependencyImpact.SourceDependencyImpact(object! Source, Raffinert.Consistency.DependencySeverity Severity) -> void
+Raffinert.Consistency.SourceDependencyImpact.SourceIdentity.get -> Raffinert.Consistency.SourceIdentity?
+Raffinert.Consistency.SourceDependencyImpact.SourceIdentity.init -> void
+Raffinert.Consistency.RuntimeApplyResult
+Raffinert.Consistency.RuntimeApplyResult.ChangeImpact.get -> Raffinert.Consistency.ChangeImpact!
+Raffinert.Consistency.RuntimeApplyResult.DetailLevel.get -> Raffinert.Consistency.RuntimeImpactDetailLevel
+Raffinert.Consistency.RuntimeApplyResult.DerivedImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DerivedMutationImpact!>!
+Raffinert.Consistency.RuntimeApplyResult.ImmediateEvaluationRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.ImmediateEvaluationRequestInfo!>!
+Raffinert.Consistency.RuntimeApplyResult.InvariantImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.InvariantMutationImpact!>!
+Raffinert.Consistency.RuntimeApplyResult.GetDurablePolicyWork() -> Raffinert.Consistency.DurablePolicyWork!
+Raffinert.Consistency.RuntimeApplyResult.MutationOrigins.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.MutationOrigin!>!
+Raffinert.Consistency.RuntimeApplyResult.RelationImpacts.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationMutationImpact!>!
+Raffinert.Consistency.RuntimeApplyResult.RepairRequests.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RepairRequestInfo!>!
+Raffinert.Consistency.RuntimeApplication
+Raffinert.Consistency.RuntimeApplication.Dispatch.get -> Raffinert.Consistency.PolicyDispatchHandle!
+Raffinert.Consistency.RuntimeApplication.Dispatch.init -> void
+Raffinert.Consistency.RuntimeApplication.Result.get -> Raffinert.Consistency.RuntimeApplyResult!
+Raffinert.Consistency.RuntimeApplication.Result.init -> void
+Raffinert.Consistency.RuntimeApplication.RuntimeApplication(Raffinert.Consistency.RuntimeApplyResult! Result, Raffinert.Consistency.PolicyDispatchHandle! Dispatch) -> void
+Raffinert.Consistency.PolicyDispatchHandle
+Raffinert.Consistency.PolicyDispatchHandle.Invoke() -> void
+Raffinert.Consistency.PolicyDispatchHandle.IsDispatched.get -> bool
+Raffinert.Consistency.RuntimeDiagnosticOptions
+Raffinert.Consistency.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.get -> double
+Raffinert.Consistency.RuntimeDiagnosticOptions.AverageFanOutWarningThreshold.init -> void
+Raffinert.Consistency.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.get -> int
+Raffinert.Consistency.RuntimeDiagnosticOptions.MaterializedPairWarningThreshold.init -> void
+Raffinert.Consistency.RuntimeDiagnosticOptions.RuntimeDiagnosticOptions() -> void
+Raffinert.Consistency.RuntimeDiagnostics
+Raffinert.Consistency.RuntimeSeedBuilder
+Raffinert.Consistency.RuntimeSeedBuilder.Add<T>(Raffinert.Consistency.ObjectSet<T!>! set, System.Collections.Generic.IEnumerable<T!>! instances) -> Raffinert.Consistency.RuntimeSeedBuilder!
+Raffinert.Consistency.RuntimeSeedBuilder.RuntimeSeedBuilder() -> void
+Raffinert.Consistency.RuntimeDiagnostics.AffectedSources.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.AffectedSources.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.DerivedFullRecomputations.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.DerivedFullRecomputations.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.IncrementalDerivedUpdates.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.IncrementalDerivedUpdates.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.PolicyRequestsEmitted.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.PolicyRequestsEmitted.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.PredicateEvaluations.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.PredicateEvaluations.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.ReindexedRoots.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.ReindexedRoots.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.RelationPairsAdded.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.RelationPairsAdded.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.RelationPairsRemoved.get -> long
+Raffinert.Consistency.RuntimeDiagnostics.RelationPairsRemoved.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.Relations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationRuntimeDiagnostics!>!
+Raffinert.Consistency.RuntimeDiagnostics.Relations.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.RuntimeDiagnostics(long PredicateEvaluations, long ReindexedRoots, long AffectedSources, long RelationPairsAdded, long RelationPairsRemoved, long DerivedFullRecomputations, long IncrementalDerivedUpdates, long PolicyRequestsEmitted, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.RelationRuntimeDiagnostics!>! Relations) -> void
+Raffinert.Consistency.RuntimeDiagnostics.ProjectedTargetCount.get -> int
+Raffinert.Consistency.RuntimeDiagnostics.ProjectedTargetCount.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.ProjectedDependencyConsumerCount.get -> int
+Raffinert.Consistency.RuntimeDiagnostics.ProjectedDependencyConsumerCount.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.ProjectionIndexCount.get -> int
+Raffinert.Consistency.RuntimeDiagnostics.ProjectionIndexCount.init -> void
+Raffinert.Consistency.RuntimeDiagnostics.ReverseProjectionEntryCount.get -> int
+Raffinert.Consistency.RuntimeDiagnostics.ReverseProjectionEntryCount.init -> void
+Raffinert.Consistency.RuntimeMutation
+Raffinert.Consistency.SemanticImpact
+Raffinert.Consistency.SemanticImpact.AffectedRelations.get -> int
+Raffinert.Consistency.SemanticImpact.AffectedRelations.init -> void
+Raffinert.Consistency.SemanticImpact.AffectedRoots.get -> int
+Raffinert.Consistency.SemanticImpact.AffectedRoots.init -> void
+Raffinert.Consistency.SemanticImpact.SemanticImpact(int AffectedRelations, int AffectedRoots) -> void
+static Raffinert.Consistency.Change.Add<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> Raffinert.Consistency.ObjectAdded!
+static Raffinert.Consistency.Change.CollectionAdd<TOwner, TItem>(Raffinert.Consistency.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionAdd<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionRemove<TOwner, TItem>(Raffinert.Consistency.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionRemove<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection, TItem! item) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionReset(object! owner, System.Reflection.MemberInfo! member) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionReset<TOwner, TItem>(Raffinert.Consistency.ObjectSet<TOwner!>! set, TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.CollectionReset<TOwner, TItem>(TOwner! owner, System.Linq.Expressions.Expression<System.Func<TOwner!, System.Collections.Generic.IEnumerable<TItem!>!>!>! collection) -> Raffinert.Consistency.CollectionChange!
+static Raffinert.Consistency.Change.Property(object! instance, System.Reflection.MemberInfo! member, object? oldValue, object? newValue) -> Raffinert.Consistency.PropertyChange!
+static Raffinert.Consistency.Change.Property<T, TValue>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance, System.Linq.Expressions.Expression<System.Func<T!, TValue>!>! property, TValue oldValue, TValue newValue) -> Raffinert.Consistency.PropertyChange!
+static Raffinert.Consistency.Change.Property<T, TValue>(T! instance, System.Linq.Expressions.Expression<System.Func<T!, TValue>!>! property, TValue oldValue, TValue newValue) -> Raffinert.Consistency.PropertyChange!
+static Raffinert.Consistency.Change.Property<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance, System.Reflection.MemberInfo! member, object? oldValue, object? newValue) -> Raffinert.Consistency.PropertyChange!
+static Raffinert.Consistency.Change.Remove<T>(Raffinert.Consistency.ObjectSet<T!>! set, T! instance) -> Raffinert.Consistency.ObjectRemoved!
+static Raffinert.Consistency.ChangeSet.Create(params Raffinert.Consistency.PropertyChange![]! changes) -> Raffinert.Consistency.ChangeSet!
+static Raffinert.Consistency.MutationSet.Create(params Raffinert.Consistency.RuntimeMutation![]! mutations) -> Raffinert.Consistency.MutationSet!

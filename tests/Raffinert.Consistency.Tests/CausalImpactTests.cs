@@ -5,7 +5,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Exact_added_and_removed_relation_causes_use_route_trigger_kind()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -73,7 +73,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Conservative_relation_causes_are_marked_conservative()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code)
@@ -101,7 +101,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Relation_cause_does_not_claim_unrelated_batch_origin()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -131,7 +131,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Two_conservative_right_changes_produce_precise_origin_sets_per_left()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -164,7 +164,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Removed_source_origin_captures_durable_identity_before_lifecycle_cleanup()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Named("sources").Key(source => source.Id);
         var runtime = model.Build().CreateRuntime();
         var source = new Source();
@@ -182,7 +182,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Added_source_origin_uses_its_final_key_without_prior_registration()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Named("sources").Key(source => source.Id);
         var runtime = model.Build().CreateRuntime();
         var source = new Source();
@@ -244,7 +244,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Diamond_has_one_downstream_impact_with_both_direct_upstream_causes()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var left = model.Derived(set).Compute(source => source.Quantity).Named("left");
         var right = model.Derived(set).Compute(source => source.Quantity * 2).Named("right");
@@ -270,7 +270,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Projected_upstream_cause_references_the_upstream_source_scoped_impact()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var links = model.Objects<Link>().Key(link => link.Id);
         var quantity = model.Derived(sources).Compute(source => source.Quantity).Named("quantity");
@@ -303,7 +303,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Conservative_upstream_precision_remains_conservative_through_two_derived_levels()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -337,7 +337,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Invariant_upstream_cause_links_to_the_actual_upstream_impact()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var quantity = model.Derived(set).Compute(source => source.Quantity).Named("quantity");
         var reserved = model.Derived(set).Compute(source => source.Reserved).Named("reserved");
@@ -359,7 +359,7 @@ public sealed class CausalImpactTests
     [Fact]
     public void Direct_cause_keeps_local_dirty_severity_when_upstream_makes_final_invalid()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var upstream = model.Derived(set)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -414,7 +414,7 @@ public sealed class CausalImpactTests
 
     private static Scenario CreateScenario()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Named("po-lines").Key(source => source.Id);
         var capacity = model.Derived(set)
             .Impact(policy => policy.SourceMemberChanged(
@@ -435,7 +435,7 @@ public sealed class CausalImpactTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Source> Set,
         Source Source,
         Derived<Source, bool> Validity);

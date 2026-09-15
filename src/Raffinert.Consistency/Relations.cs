@@ -13,12 +13,12 @@ public sealed class RelationBuilder<TLeft, TRight>
     where TLeft : class
     where TRight : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TLeft> _left;
     private readonly ObjectSet<TRight> _right;
     private bool _defined;
 
-    internal RelationBuilder(RelationModelBuilder model, ObjectSet<TLeft> left, ObjectSet<TRight> right)
+    internal RelationBuilder(ConsistencyModelBuilder model, ObjectSet<TLeft> left, ObjectSet<TRight> right)
     {
         _model = model;
         _left = left;
@@ -106,7 +106,7 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
         ObjectSetDefinition<TRight> rightSet,
         Expression<Func<TLeft, TRight, bool>> predicate,
         Expressions.RelationAnalysis analysis,
-        RelationModelBuilder model)
+        ConsistencyModelBuilder model)
     {
         Left = leftSet;
         Right = rightSet;

@@ -19,7 +19,7 @@ var line = new PurchaseOrderLine
 context.Add(line);
 context.SaveChanges();
 
-var builder = new RelationModelBuilder();
+var builder = new ConsistencyModelBuilder();
 var lines = builder.Objects<PurchaseOrderLine>().Key(x => x.Id);
 var available = builder.Derived(lines).Compute(x => x.OrderedQuantity - x.ReceivedQuantity);
 var availability = builder.Invariant(lines).Using(available).Must((_, value) => value >= 0);

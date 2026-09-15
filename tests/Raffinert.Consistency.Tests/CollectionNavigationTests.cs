@@ -5,7 +5,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_add_and_remove_update_relation_derived_and_invariant_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -41,7 +41,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_item_change_resolves_its_owner_incrementally()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -65,7 +65,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_reset_refreshes_owner_membership()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -85,7 +85,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_change_must_describe_the_current_domain_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var runtime = model.Build().CreateRuntime();
         var order = new CollectionOrder { Id = Guid.NewGuid() };
@@ -99,7 +99,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Equal_items_are_tracked_by_reference_identity()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -122,7 +122,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Duplicate_references_have_set_semantics()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -152,7 +152,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_reset_observes_order_changes()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -177,7 +177,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_property_replacement_refreshes_navigation_membership()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -199,7 +199,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Nested_collection_item_changes_resolve_registered_roots()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<ReplaceableCollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -221,7 +221,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Removed_item_mutations_no_longer_affect_former_owner()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -246,7 +246,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Shared_item_mutation_affects_every_owner_by_reference()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
@@ -273,7 +273,7 @@ public sealed class CollectionNavigationTests
     [Fact]
     public void Collection_and_lifecycle_changes_commit_in_one_mutation_batch()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<CollectionOrder>().Key(order => order.Id);
         var invoices = model.Objects<InvoiceLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>

@@ -2,12 +2,12 @@ namespace Raffinert.Consistency.Tests;
 
 public sealed partial class RuntimeTests
 {
-    private static RelationModelBuilder CreateLineModel(
+    private static ConsistencyModelBuilder CreateLineModel(
         out ObjectSet<InvoiceLine> invoices,
         out ObjectSet<PurchaseOrderLine> poLines,
         out Relation<InvoiceLine, PurchaseOrderLine> relation)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         poLines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         relation = model.Relation(invoices, poLines).Where((invoice, line) =>

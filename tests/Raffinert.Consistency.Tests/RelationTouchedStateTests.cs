@@ -5,7 +5,7 @@ public sealed class RelationTouchedStateTests
     [Fact]
     public void Preview_and_plan_commit_restore_and_install_only_touched_relation_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -42,7 +42,7 @@ public sealed class RelationTouchedStateTests
     [Fact]
     public void Relation_failure_restores_both_directions_of_materialized_pairs()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => MatchOrThrow(source, item))
@@ -83,7 +83,7 @@ public sealed class RelationTouchedStateTests
 
     private static Population CreatePopulation(int count)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -106,7 +106,7 @@ public sealed class RelationTouchedStateTests
         : source.Code == item.Code;
 
     private sealed record Population(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         Relation<Source, Item> Relation,
         Item Touched);
 

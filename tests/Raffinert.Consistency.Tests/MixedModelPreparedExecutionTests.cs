@@ -54,7 +54,7 @@ public sealed class MixedModelPreparedExecutionTests
     [Fact]
     public void Classifier_failure_restores_prepared_execution_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<FailureSource>().Key(source => source.Id);
         var derived = model.Derived(sources)
             .Impact(policy => policy.SourceMemberChanged(
@@ -81,7 +81,7 @@ public sealed class MixedModelPreparedExecutionTests
     [Fact]
     public void Incremental_derived_failure_restores_set_relation_cache_and_version()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<FailureSource>().Key(source => source.Id);
         var items = model.Objects<FailureItem>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -110,7 +110,7 @@ public sealed class MixedModelPreparedExecutionTests
     [Fact]
     public void Invariant_evaluation_dispatch_failure_keeps_commit_and_allows_retry()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<FailureSource>().Key(source => source.Id);
         var value = model.Derived(sources).Compute(source => source.Value);
         model.Invariant(sources).Using(value).Must((source, current) => EvaluateInvariant(source, current))
@@ -265,7 +265,7 @@ public sealed class MixedModelPreparedExecutionTests
 
     private static Scenario CreateScenario()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var parents = model.Objects<Parent>().Named("parents").Key(parent => parent.Id);
         var items = model.Objects<Item>().Named("items").Key(item => item.Id);
         var conservativeItems = model.Objects<ConservativeItem>().Named("conservative-items")
@@ -360,7 +360,7 @@ public sealed class MixedModelPreparedExecutionTests
     private enum ExecutionMode { PreparedCommit, PreviewThenCommit, PlanThenCommit, Apply }
     private sealed record Outcome(RuntimeApplyResult Result, string State);
     private sealed record Scenario(
-        RelationRuntime Runtime, ObjectSet<Parent> Parents, ObjectSet<Item> Items,
+        ConsistencyRuntime Runtime, ObjectSet<Parent> Parents, ObjectSet<Item> Items,
         ObjectSet<ConservativeItem> ConservativeItems, ObjectSet<Link> Links,
         Parent First, Parent Second, Item FirstItem, ConservativeItem FirstConservative,
         ConservativeItem SecondConservative, Link Link, Derived<Parent, int> ExactCount,

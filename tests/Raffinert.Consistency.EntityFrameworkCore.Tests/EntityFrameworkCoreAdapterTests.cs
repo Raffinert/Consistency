@@ -25,7 +25,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Save_changes_and_apply_maps_added_modified_and_deleted_entities()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -48,7 +48,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Failed_database_save_does_not_advance_runtime_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -65,7 +65,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Multiple_sets_for_one_clr_type_require_disambiguating_selectors()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var first = model.Objects<CodeHolder>().Key(value => value.Id);
         var second = model.Objects<CodeHolder>().Key(value => value.Id);
         model.Build();
@@ -80,7 +80,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Captured_unit_of_work_is_validated_before_any_runtime_mutation_is_applied()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -100,7 +100,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Save_helper_prepares_runtime_before_invoking_database_save()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Key(value => value.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -118,7 +118,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Manual_unit_of_work_can_commit_causal_details_after_database_success()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
         var code = model.Derived(objects).Compute(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
@@ -144,7 +144,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     [Fact]
     public void Prepared_unit_of_work_can_be_previewed_repeatedly_before_commit()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
         model.Derived(objects).Compute(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();

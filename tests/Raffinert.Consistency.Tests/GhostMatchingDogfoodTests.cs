@@ -5,7 +5,7 @@ public sealed class GhostMatchingDogfoodTests
     [Fact]
     public void Poil_lgr_sum_reports_precommit_violation_and_discard_preserves_runtime()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var poils = model.Objects<Poil>().Named("poils").Key(x => x.Id);
         var lgrs = model.Objects<Lgr>().Named("lgrs").Key(x => x.Id);
         var links = model.Relation(poils, lgrs).Where((poil, lgr) => poil.Id == lgr.PoilId).Named("poil-lgrs");
@@ -45,7 +45,7 @@ public sealed class GhostMatchingDogfoodTests
     [Fact]
     public void Composite_bookkeeping_relation_retargets_in_planned_final_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lgrs = model.Objects<Lgr>().Named("retarget-lgrs").Key(x => x.Id);
         var rows = model.Objects<Polgr>().Named("polgrs").Key(x => x.Id);
         var matches = model.Relation(lgrs, rows).Where((lgr, row) =>

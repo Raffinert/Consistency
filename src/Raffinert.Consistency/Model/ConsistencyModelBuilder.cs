@@ -5,7 +5,7 @@ using Raffinert.Consistency.Expressions;
 namespace Raffinert.Consistency;
 
 /// <summary>Builds an immutable description of object sets and their relations.</summary>
-public sealed class RelationModelBuilder
+public sealed class ConsistencyModelBuilder
 {
     private readonly object _identity = new();
     private readonly List<IObjectSetDefinition> _objectSets = [];
@@ -17,14 +17,14 @@ public sealed class RelationModelBuilder
     internal bool ForceScanPlansForTesting { get; private set; }
     internal bool ForceFullRecomputePlansForTesting { get; private set; }
 
-    internal RelationModelBuilder UseScanPlansForTesting()
+    internal ConsistencyModelBuilder UseScanPlansForTesting()
     {
         ThrowIfBuilt();
         ForceScanPlansForTesting = true;
         return this;
     }
 
-    internal RelationModelBuilder UseFullRecomputePlansForTesting()
+    internal ConsistencyModelBuilder UseFullRecomputePlansForTesting()
     {
         ThrowIfBuilt();
         ForceFullRecomputePlansForTesting = true;
@@ -69,7 +69,7 @@ public sealed class RelationModelBuilder
         return new InvariantBuilder<TSource>(this, source);
     }
 
-    public CompiledRelationModel Build()
+    public CompiledConsistencyModel Build()
     {
         ThrowIfBuilt();
         ValidateDefinitionKeys();
@@ -115,7 +115,7 @@ public sealed class RelationModelBuilder
         var dependencyGraph = CompiledDependencyGraph.Compile(_derivedStates, _invariants);
 
         _built = true;
-        return new CompiledRelationModel(
+        return new CompiledConsistencyModel(
             _objectSets.ToArray(),
             _relations.ToArray(),
             _derivedStates.ToArray(),

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Raffinert.Consistency;
 using Raffinert.Consistency.EntityFrameworkCore;
 
-var model = new RelationModelBuilder();
+var model = new ConsistencyModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);
 var doubled = model.Derived(values).Compute(value => value.Amount * 2).Named("doubled");
 model.Invariant(values).Using(doubled).Must((_, amount) => amount <= 6)

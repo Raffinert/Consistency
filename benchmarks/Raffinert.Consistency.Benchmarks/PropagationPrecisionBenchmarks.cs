@@ -5,7 +5,7 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class PropagationPrecisionBenchmarks
 {
-    private RelationRuntime _runtime = null!;
+    private ConsistencyRuntime _runtime = null!;
     private ObjectSet<PrecisionItem> _items = null!;
     private PrecisionItem[] _changedItems = null!;
 
@@ -18,7 +18,7 @@ public class PropagationPrecisionBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<PrecisionSource>().Key(source => source.Id);
         _items = model.Objects<PrecisionItem>().Key(item => item.Id);
         var relation = model.Relation(sources, _items).Where((source, item) =>

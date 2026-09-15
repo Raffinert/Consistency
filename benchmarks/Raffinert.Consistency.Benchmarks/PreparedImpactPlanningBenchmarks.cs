@@ -60,7 +60,7 @@ public class PreparedImpactPlanningBenchmarks
 
     private static Scenario CreateScenario(int population)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(set, items).Where((source, item) => source.Code == item.Code);
@@ -90,12 +90,12 @@ public class PreparedImpactPlanningBenchmarks
         return new Scenario(runtime, set, source);
     }
 
-    private sealed class Scenario(RelationRuntime runtime, ObjectSet<Source> set, Source source)
+    private sealed class Scenario(ConsistencyRuntime runtime, ObjectSet<Source> set, Source source)
     {
         private int _value;
         private string _code = "A";
         private PreparedMutation? _pending;
-        public RelationRuntime Runtime => runtime;
+        public ConsistencyRuntime Runtime => runtime;
 
         public PreparedMutation Next()
         {
@@ -134,7 +134,7 @@ public class PreparedPatchInstallBenchmarks
     [Params(10_000, 100_000)]
     public int Population { get; set; }
 
-    private RelationRuntime _runtime = null!;
+    private ConsistencyRuntime _runtime = null!;
     private PreparedImpactPlan _summary = null!;
     private PreparedImpactPlan _causal = null!;
 
@@ -150,11 +150,11 @@ public class PreparedPatchInstallBenchmarks
     [Benchmark]
     public RuntimeApplyResult CommitPlannedCausal() => _runtime.Commit(_causal);
 
-    private static (RelationRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(
+    private static (ConsistencyRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(
         RuntimeImpactDetailLevel detail,
         int population)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<PatchSource>().Key(source => source.Id);
         model.Derived(set).Compute(source => source.Value);
         var sources = Enumerable.Range(0, population).Select(_ => new PatchSource()).ToArray();
@@ -179,7 +179,7 @@ public class PreparedPatchInstallComponentBenchmarks
     [Params(10_000, 100_000)]
     public int Population { get; set; }
 
-    private RelationRuntime _runtime = null!;
+    private ConsistencyRuntime _runtime = null!;
     private PreparedImpactPlan _plan = null!;
     private object _rollbackJournal = null!;
 
@@ -201,9 +201,9 @@ public class PreparedPatchInstallComponentBenchmarks
     public void ApplyForwardPatchAndRestoreRollbackJournal() =>
         _runtime.ApplyForwardPatchAndRestoreForBenchmark(_plan, _rollbackJournal);
 
-    private static (RelationRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(int population)
+    private static (ConsistencyRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(int population)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<ComponentSource>().Key(source => source.Id);
         var items = model.Objects<ComponentItem>().Key(item => item.Id);
         var relation = model.Relation(sources, items)

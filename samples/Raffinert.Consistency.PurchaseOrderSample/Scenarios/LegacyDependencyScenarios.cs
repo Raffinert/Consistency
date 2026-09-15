@@ -5,7 +5,7 @@ internal static class LegacyDependencyScenarios
 {
     public static void Run()
     {
-        var repairs = new List<Guid>(); var model = new RelationModelBuilder();
+        var repairs = new List<Guid>(); var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseOrderLine>().Named("po-lines").Key(x => x.Id);
         var receipts = model.Objects<GoodsReceipt>().Named("goods-receipts").Key(x => x.Id);
         var links = model.Objects<PurchaseOrderInvoiceLine>().Named("invoice-links").Key(x => x.Id);

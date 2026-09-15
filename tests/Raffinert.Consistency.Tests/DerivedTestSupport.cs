@@ -2,14 +2,14 @@ namespace Raffinert.Consistency.Tests;
 
 public sealed partial class DerivedStateTests
 {
-    private static RelationModelBuilder CreateQuantityModel(
+    private static ConsistencyModelBuilder CreateQuantityModel(
         out ObjectSet<DerivedSourceRecord> sources,
         out ObjectSet<DerivedItemRecord> items,
         out Derived<DerivedSourceRecord, decimal> derived,
         System.Linq.Expressions.Expression<Func<DerivedSourceRecord, IReadOnlyList<DerivedItemRecord>, decimal>> computation,
         bool forceScan = false)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
@@ -62,7 +62,7 @@ public sealed partial class DerivedStateTests
         items.Sum(item => item.Quantity);
 
     private sealed record QuantityScenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
         Derived<DerivedSourceRecord, decimal> Derived,
@@ -70,7 +70,7 @@ public sealed partial class DerivedStateTests
         DerivedItemRecord Item);
 
     private sealed record IncrementalScenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<DerivedSourceRecord> Sources,
         ObjectSet<DerivedItemRecord> Items,
         Derived<DerivedSourceRecord, decimal> Total,

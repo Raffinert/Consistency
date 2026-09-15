@@ -104,7 +104,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Invalid_change_rejects_the_entire_change_set_before_index_updates()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>

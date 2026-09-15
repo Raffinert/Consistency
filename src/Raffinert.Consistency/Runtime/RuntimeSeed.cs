@@ -23,7 +23,7 @@ internal sealed record RuntimeSeedEntry(
     IObjectSetDefinition Set,
     IReadOnlyList<object> Instances);
 
-public sealed partial class RelationRuntime
+public sealed partial class ConsistencyRuntime
 {
     internal void Bootstrap(IReadOnlyList<RuntimeSeedEntry> entries)
     {

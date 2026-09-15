@@ -5,7 +5,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Cross_set_upstream_invalidates_only_sources_referencing_the_changed_owner()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders)
@@ -36,7 +36,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Replacing_projected_reference_dirties_the_downstream_value()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders).Compute(value => value.Total);
@@ -62,7 +62,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Bootstrap_rejects_missing_or_wrong_set_projected_target()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var upstream = model.Objects<Order>().Key(value => value.Id);
         var other = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
@@ -130,7 +130,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Unsupported_or_null_projection_is_rejected()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders).Compute(value => value.Total);
@@ -141,7 +141,7 @@ public sealed class ProjectedDerivedTests
             .Using(value => value.Container.Order, total)
             .Compute((_, value) => value));
 
-        var validModel = new RelationModelBuilder();
+        var validModel = new ConsistencyModelBuilder();
         var validOrders = validModel.Objects<Order>().Key(value => value.Id);
         var validLinks = validModel.Objects<Link>().Key(value => value.Id);
         var validTotal = validModel.Derived(validOrders).Compute(value => value.Total);
@@ -155,7 +155,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Two_projected_upstreams_merge_severity_and_recompute_from_one_target()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders).Compute(value => value.Total);
@@ -186,7 +186,7 @@ public sealed class ProjectedDerivedTests
     [Fact]
     public void Randomized_indexed_projection_matches_authoritative_recompute()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders).Compute(value => value.Total);
@@ -231,7 +231,7 @@ public sealed class ProjectedDerivedTests
 
     private static IntegrityScenario CreateIntegrityScenario()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders).Compute(value => value.Total);
@@ -243,7 +243,7 @@ public sealed class ProjectedDerivedTests
     private static Order Select(Link link) => link.Order;
 
     private sealed record IntegrityScenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Order> Orders,
         ObjectSet<Link> Links,
         Derived<Link, int> Value);

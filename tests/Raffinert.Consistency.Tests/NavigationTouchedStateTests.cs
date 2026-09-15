@@ -29,7 +29,7 @@ public sealed class NavigationTouchedStateTests
     [Fact]
     public void Shared_navigation_owner_reference_count_restores_exactly()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var roots = model.Objects<NestedRoot>().Key(root => root.Id);
         var value = model.Derived(roots).Compute(root => root.Container.Child.Value);
         var child = new Child { Value = 1 };
@@ -52,7 +52,7 @@ public sealed class NavigationTouchedStateTests
     [Fact]
     public void Collection_navigation_preview_restores_items_and_reverse_owners()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var roots = model.Objects<CollectionRoot>().Key(root => root.Id);
         var total = model.Derived(roots).Compute(root => root.Children.Sum(child => child.Value));
         var existing = new Child { Value = 1 };
@@ -85,7 +85,7 @@ public sealed class NavigationTouchedStateTests
 
     private static ScalarScenario CreateScalarScenario()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
         var value = model.Derived(roots).Compute(root => root.Child.Value);
         var root = new Root { Child = new Child { Value = 1 } };
@@ -95,7 +95,7 @@ public sealed class NavigationTouchedStateTests
 
     private static NavigationPopulation CreateNavigationPopulation(int count)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
         model.Derived(roots).Compute(root => root.Child.Value);
         var values = Enumerable.Range(0, count)
@@ -105,11 +105,11 @@ public sealed class NavigationTouchedStateTests
     }
 
     private sealed record ScalarScenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Root> Roots,
         Root Root,
         Derived<Root, int> Value);
-    private sealed record NavigationPopulation(RelationRuntime Runtime, ObjectSet<Root> Roots, Root Touched);
+    private sealed record NavigationPopulation(ConsistencyRuntime Runtime, ObjectSet<Root> Roots, Root Touched);
 
     private sealed class Root
     {

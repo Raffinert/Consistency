@@ -5,7 +5,7 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class BootstrapAndProjectionBenchmarks
 {
-    private CompiledRelationModel _compiled = null!;
+    private CompiledConsistencyModel _compiled = null!;
     private ObjectSet<Owner> _owners = null!;
     private Owner[] _data = null!;
 
@@ -15,7 +15,7 @@ public class BootstrapAndProjectionBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         _owners = model.Objects<Owner>().Key(value => value.Id);
         model.Derived(_owners).Compute(value => value.Amount);
         _compiled = model.Build();
@@ -23,7 +23,7 @@ public class BootstrapAndProjectionBenchmarks
     }
 
     [Benchmark]
-    public RelationRuntime Bootstrap() => _compiled.CreateRuntime(seed => seed.Add(_owners, _data));
+    public ConsistencyRuntime Bootstrap() => _compiled.CreateRuntime(seed => seed.Add(_owners, _data));
 
     public sealed record Owner(int Id)
     {

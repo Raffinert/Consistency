@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
 public sealed class RelationConsistencySaveChangesInterceptor(
-    RelationRuntime runtime,
+    ConsistencyRuntime runtime,
     RelationEfCoreMappings mappings,
     RelationEfCoreConsistencyOptions options) : SaveChangesInterceptor
 {

@@ -7,7 +7,7 @@ internal static class GhostMatchingScenarios
 {
     public static void Run()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Named("invoice-lines").Key(x => x.Id);
         var poLines = model.Objects<PurchaseOrderLine>().Named("purchase-order-lines").Key(x => x.Id);
         var poils = model.Objects<PurchaseOrderInvoiceLine>().Named("purchase-order-invoice-lines").Key(x => x.Id);

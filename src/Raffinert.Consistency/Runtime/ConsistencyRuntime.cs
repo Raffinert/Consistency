@@ -9,7 +9,7 @@ namespace Raffinert.Consistency;
 /// Stores and queries the runtime state of a compiled relation model. This type is not thread-safe;
 /// mutations and queries must be externally synchronized.
 /// </summary>
-public sealed partial class RelationRuntime
+public sealed partial class ConsistencyRuntime
 {
     [Flags]
     internal enum ModelMemberUsageKind
@@ -94,7 +94,7 @@ public sealed partial class RelationRuntime
         _policyRequestsEmitted = 0;
     }
 
-    internal RelationRuntime(
+    internal ConsistencyRuntime(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,

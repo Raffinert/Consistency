@@ -52,21 +52,21 @@ public class EfCoreConsistencyBenchmarks
 
     private sealed class Scenario : IDisposable
     {
-        private Scenario(BenchmarkContext context, RelationRuntime runtime,
+        private Scenario(BenchmarkContext context, ConsistencyRuntime runtime,
             RelationUnitOfWorkMappings mappings, Source touched, RelationUnitOfWork prepared)
         {
             Context = context; Runtime = runtime; Mappings = mappings; Touched = touched; Prepared = prepared;
         }
 
         public BenchmarkContext Context { get; }
-        public RelationRuntime Runtime { get; }
+        public ConsistencyRuntime Runtime { get; }
         public RelationUnitOfWorkMappings Mappings { get; }
         public Source Touched { get; }
         public RelationUnitOfWork Prepared { get; }
 
         public static Scenario Create(int population)
         {
-            var model = new RelationModelBuilder();
+            var model = new ConsistencyModelBuilder();
             var sources = model.Objects<Source>().Key(x => x.Id);
             var doubled = model.Derived(sources).Compute(x => x.Value * 2);
             model.Invariant(sources).Using(doubled).Must((_, value) => value >= 0);

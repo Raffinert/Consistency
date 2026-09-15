@@ -5,8 +5,8 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class RangePlanningBenchmarks
 {
-    private RelationRuntime _hashRuntime = null!;
-    private RelationRuntime _scanRuntime = null!;
+    private ConsistencyRuntime _hashRuntime = null!;
+    private ConsistencyRuntime _scanRuntime = null!;
     private Relation<RangeSource, RangeRule> _hashRelation = null!;
     private Relation<RangeSource, RangeRule> _scanRelation = null!;
     private RangeSource _hashSource = null!;
@@ -30,10 +30,10 @@ public class RangePlanningBenchmarks
     public int FullScanWithRangeResidual() =>
         _scanRuntime.Related(_scanRelation, _scanSource).Count;
 
-    private (RelationRuntime Runtime, Relation<RangeSource, RangeRule> Relation, RangeSource Source)
+    private (ConsistencyRuntime Runtime, Relation<RangeSource, RangeRule> Relation, RangeSource Source)
         CreateScenario(bool forceScan)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<RangeSource>().Key(source => source.Id);

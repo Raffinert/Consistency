@@ -5,7 +5,7 @@ public sealed class SourceDerivedTests
     [Fact]
     public void Source_only_value_tracks_used_members_and_recomputes_lazily()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var amount = model.Derived(lines).Compute(line => line.Quantity * line.UnitRate);
         var runtime = model.Build().CreateRuntime();
@@ -29,7 +29,7 @@ public sealed class SourceDerivedTests
     [Fact]
     public void Source_only_value_honors_invalid_severity_and_lifecycle_cleanup()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var amount = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -51,7 +51,7 @@ public sealed class SourceDerivedTests
     [Fact]
     public void Failed_source_recomputation_does_not_publish_a_partial_value()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var amount = model.Derived(lines).Compute(line => line.ThrowOnRead
             ? Throw()

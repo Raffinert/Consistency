@@ -81,7 +81,7 @@ public sealed class ConservativePropagationOracleTests
     [Fact]
     public void Composite_and_ordinal_ignore_case_keys_route_old_and_new_candidates()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Entity>().Key(value => value.Id);
         var items = model.Objects<Entity>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -139,7 +139,7 @@ public sealed class ConservativePropagationOracleTests
         private readonly Dictionary<Guid, Entity> _sourceById = [];
         private readonly Dictionary<Guid, Entity> _itemById = [];
 
-        private World(RelationRuntime runtime, ObjectSet<Entity> sources, ObjectSet<Entity> items,
+        private World(ConsistencyRuntime runtime, ObjectSet<Entity> sources, ObjectSet<Entity> items,
             Derived<Entity, int> total)
         {
             Runtime = runtime;
@@ -148,11 +148,11 @@ public sealed class ConservativePropagationOracleTests
             _total = total;
         }
 
-        public RelationRuntime Runtime { get; }
+        public ConsistencyRuntime Runtime { get; }
 
         public static World Create(bool conservative, bool forceScan)
         {
-            var model = new RelationModelBuilder();
+            var model = new ConsistencyModelBuilder();
             if (forceScan)
                 model.UseScanPlansForTesting();
             var sources = model.Objects<Entity>().Key(value => value.Id);

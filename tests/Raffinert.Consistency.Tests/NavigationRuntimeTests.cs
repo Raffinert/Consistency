@@ -5,7 +5,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Runtime_diagnostics_distinguish_query_indexes_from_exact_materialization()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var queryOnly = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -58,7 +58,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Opaque_predicate_falls_back_to_a_semantically_correct_scan()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<CodeHolder>().Key(x => x.Id);
         var right = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(left, right).Where((a, b) => MatchesPrefix(a.Code, b.ItemNumber));
@@ -79,7 +79,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Nested_property_change_reindexes_referencing_roots()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -108,7 +108,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Reference_navigation_change_updates_reverse_navigation_and_index()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var orders = model.Objects<PurchaseOrder>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -149,7 +149,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Null_guarded_nested_relation_is_safe_and_reindexes_when_navigation_is_assigned()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
@@ -174,13 +174,13 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Hash_and_scan_plans_remain_equivalent_after_runtime_changes()
     {
-        var hashModel = new RelationModelBuilder();
+        var hashModel = new ConsistencyModelBuilder();
         var hashLeft = hashModel.Objects<CodeHolder>().Key(x => x.Id);
         var hashRight = hashModel.Objects<CodeHolder>().Key(x => x.Id);
         var hashRelation = hashModel.Relation(hashLeft, hashRight).Where((a, b) => a.Code == b.Code);
         var hashRuntime = hashModel.Build().CreateRuntime();
 
-        var scanModel = new RelationModelBuilder();
+        var scanModel = new ConsistencyModelBuilder();
         var scanLeft = scanModel.Objects<CodeHolder>().Key(x => x.Id);
         var scanRight = scanModel.Objects<CodeHolder>().Key(x => x.Id);
         var scanRelation = scanModel.Relation(scanLeft, scanRight).Where((a, b) => CodesEqual(a, b));
@@ -216,7 +216,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Arbitrary_depth_change_from_an_unregistered_nested_object_reindexes_all_roots()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>
@@ -256,7 +256,7 @@ public sealed partial class RuntimeTests
     [Fact]
     public void Reference_navigation_can_change_from_object_to_null()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Key(x => x.Id);
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(invoices, lines).Where((invoice, line) =>

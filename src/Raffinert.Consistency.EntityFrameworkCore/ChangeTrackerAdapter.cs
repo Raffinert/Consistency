@@ -94,7 +94,7 @@ public sealed class RelationUnitOfWork
     public bool HasChanges => _mutations is not null;
 
     /// <summary>Validates all captured mutations before the database operation begins.</summary>
-    public void Prepare(RelationRuntime runtime)
+    public void Prepare(ConsistencyRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (_isPrepared)
@@ -106,7 +106,7 @@ public sealed class RelationUnitOfWork
     }
 
     /// <summary>Commits prepared runtime state after the database operation succeeds.</summary>
-    public ChangeImpact? Commit(RelationRuntime runtime)
+    public ChangeImpact? Commit(ConsistencyRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (!_isPrepared)
@@ -128,7 +128,7 @@ public sealed class RelationUnitOfWork
     /// return <see langword="null"/>.
     /// </summary>
     public RuntimeApplyResult? CommitDetailed(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
     {
         ArgumentNullException.ThrowIfNull(runtime);
@@ -153,11 +153,11 @@ public sealed class RelationUnitOfWork
     /// <summary>
     /// Produces a non-binding diagnostic preview without committing or dispatching. A later normal commit
     /// executes semantics again. Use
-    /// <see cref="PlanDetailed(RelationRuntime, RuntimeImpactDetailLevel)"/> for durability-sensitive parity. Empty units
+    /// <see cref="PlanDetailed(ConsistencyRuntime, RuntimeImpactDetailLevel)"/> for durability-sensitive parity. Empty units
     /// return <see langword="null"/>.
     /// </summary>
     public RuntimeApplyResult? PreviewDetailed(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
     {
         ArgumentNullException.ThrowIfNull(runtime);
@@ -172,19 +172,19 @@ public sealed class RelationUnitOfWork
     /// </summary>
 #pragma warning disable RS0027 // Preserve the shipped optional-parameter overload exactly.
     public PreparedImpactPlan? PlanDetailed(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
         => PlanDetailed(runtime, detailLevel, PlannedInvariantEvaluationMode.None);
 #pragma warning restore RS0027
 
     public PreparedImpactPlan? PlanDetailed(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RuntimeImpactDetailLevel detailLevel,
         PlannedInvariantEvaluationMode invariantEvaluationMode)
         => PlanDetailed(runtime, detailLevel, invariantEvaluationMode, PlannedDerivedEvaluationMode.None);
 
     public PreparedImpactPlan? PlanDetailed(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RuntimeImpactDetailLevel detailLevel,
         PlannedInvariantEvaluationMode invariantEvaluationMode,
         PlannedDerivedEvaluationMode derivedEvaluationMode)
@@ -199,7 +199,7 @@ public sealed class RelationUnitOfWork
     }
 
     /// <summary>Dispatches post-commit policy callbacks.</summary>
-    public void Dispatch(RelationRuntime runtime)
+    public void Dispatch(ConsistencyRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (_mutations is null)
@@ -215,7 +215,7 @@ public sealed class RelationUnitOfWork
     }
 
     /// <summary>Prepares, commits, and dispatches the captured mutations.</summary>
-    public void Apply(RelationRuntime runtime)
+    public void Apply(ConsistencyRuntime runtime)
     {
         Prepare(runtime);
         Commit(runtime);
@@ -268,7 +268,7 @@ public static class ChangeTrackerAdapter
         return new RelationUnitOfWork(mutations.Length == 0 ? null : MutationSet.Create(mutations));
     }
 
-    public static ChangeImpact? ApplyTrackedChanges(this RelationRuntime runtime, DbContext context)
+    public static ChangeImpact? ApplyTrackedChanges(this ConsistencyRuntime runtime, DbContext context)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(context);
@@ -278,7 +278,7 @@ public static class ChangeTrackerAdapter
 
     public static int SaveChangesAndApply(
         this DbContext context,
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RelationUnitOfWorkMappings mappings)
     {
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
@@ -298,7 +298,7 @@ public static class ChangeTrackerAdapter
 
     public static async Task<int> SaveChangesAndApplyAsync(
         this DbContext context,
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         RelationUnitOfWorkMappings mappings,
         CancellationToken cancellationToken = default)
     {

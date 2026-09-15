@@ -37,7 +37,7 @@ public class CommitSafetyBenchmarks
 
     private Scenario CreateScenario(bool disableSnapshots)
     {
-        var builder = new RelationModelBuilder();
+        var builder = new ConsistencyModelBuilder();
         var sources = builder.Objects<Source>().Key(source => source.Id);
         var items = builder.Objects<Item>().Key(item => item.Id);
         var flags = builder.Objects<Flag>().Key(flag => flag.Id);
@@ -67,7 +67,7 @@ public class CommitSafetyBenchmarks
         return new Scenario(runtime, flag);
     }
 
-    private sealed class Scenario(RelationRuntime runtime, Flag flag)
+    private sealed class Scenario(ConsistencyRuntime runtime, Flag flag)
     {
         public ChangeImpact ApplySinglePropertyMutation()
         {

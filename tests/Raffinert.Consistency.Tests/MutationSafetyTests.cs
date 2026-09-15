@@ -77,7 +77,7 @@ public sealed partial class RuntimeTests
     public void Failed_commit_restores_all_runtime_owned_state()
     {
         var gate = new ThrowingPredicate();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items)

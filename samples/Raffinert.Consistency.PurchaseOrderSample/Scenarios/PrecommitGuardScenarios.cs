@@ -19,7 +19,7 @@ internal static class PrecommitGuardScenarios
 
     private static void OrphanPlans(ScenarioRunner runner)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var invoices = model.Objects<InvoiceLine>().Named("guard-invoices").Key(x => x.Id);
         var poils = model.Objects<PurchaseOrderInvoiceLine>().Named("guard-poils").Key(x => x.Id);
         var relation = model.Relation(invoices, poils)
@@ -59,7 +59,7 @@ internal static class PrecommitGuardScenarios
 
     private static void QuantityPlans(ScenarioRunner runner)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var poils = model.Objects<PurchaseOrderInvoiceLine>().Named("guard-quantity-poils").Key(x => x.Id);
         var lgrs = model.Objects<LinkedGoodsReceipt>().Named("guard-quantity-lgrs").Key(x => x.Id);
         var relation = model.Relation(poils, lgrs).Where((poil, lgr) => poil.Id == lgr.PurchaseOrderInvoiceLineId && !lgr.IsDeleted).Named("guard-poil-lgrs");
@@ -112,7 +112,7 @@ internal static class PrecommitGuardScenarios
 
     private static void ConservationPlans(ScenarioRunner runner)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseOrderLine>().Named("guard-conservation-lines").Key(x => x.Id);
         var rows = model.Objects<PurchaseOrderLineGoodsReceipt>().Named("guard-polgrs").Key(x => x.Id);
         var result = model.Derived(rows).Compute(row =>
@@ -155,7 +155,7 @@ internal static class PrecommitGuardScenarios
 
     private static void ExistencePlans(ScenarioRunner runner)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lgrs = model.Objects<LinkedGoodsReceipt>().Named("guard-existence-lgrs").Key(x => x.Id);
         var polgrs = model.Objects<PurchaseOrderLineGoodsReceipt>().Named("guard-existence-polgrs").Key(x => x.Id);
         var relation = model.Relation(lgrs, polgrs).Where((lgr, row) =>
@@ -188,7 +188,7 @@ internal static class PrecommitGuardScenarios
         runner.Check("D-P6 composite retarget with replacement accepted", RuleEvaluation.Valid, Decision(retargetGood));
     }
 
-    private static PreparedImpactPlan Plan(RelationRuntime runtime, MutationSet mutations) => runtime.PlanDetailed(
+    private static PreparedImpactPlan Plan(ConsistencyRuntime runtime, MutationSet mutations) => runtime.PlanDetailed(
         runtime.Prepare(mutations), RuntimeImpactDetailLevel.Causal, PlannedInvariantEvaluationMode.Affected);
 
     private static RuleEvaluation Decision(PreparedImpactPlan plan) =>

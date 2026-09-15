@@ -6,7 +6,7 @@ public sealed class RuntimeSeedTests
     public void Seed_builds_relations_lazily_without_version_or_policy_wave()
     {
         var callbacks = new List<Guid>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -35,7 +35,7 @@ public sealed class RuntimeSeedTests
     [Fact]
     public void Seed_supports_empty_and_same_clr_type_sets_and_normal_mutations()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var first = model.Objects<Source>().Key(source => source.Id);
         var second = model.Objects<Source>().Key(source => source.Id);
         var compiled = model.Build();
@@ -53,7 +53,7 @@ public sealed class RuntimeSeedTests
     [Fact]
     public void Duplicate_key_or_instance_rejects_seed_creation()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var compiled = model.Build();
         var id = Guid.NewGuid();
@@ -67,7 +67,7 @@ public sealed class RuntimeSeedTests
     [Fact]
     public void Conservative_seed_retains_zero_pairs_but_queries_authoritative_predicate()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);

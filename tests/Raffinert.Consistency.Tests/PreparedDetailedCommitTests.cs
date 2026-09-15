@@ -85,7 +85,7 @@ public sealed class PreparedDetailedCommitTests
         RuntimeImpactDetailLevel detailLevel)
     {
         var calls = 0;
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set)
             .Impact(policy => policy.SourceMemberChanged(source => source.Value, (_, _) =>
@@ -189,7 +189,7 @@ public sealed class PreparedDetailedCommitTests
     [Fact]
     public void Binding_plan_retains_only_a_touched_forward_patch()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var unrelatedItems = model.Objects<OtherItem>().Key(item => item.Id);
@@ -256,7 +256,7 @@ public sealed class PreparedDetailedCommitTests
     [Fact]
     public void Normalized_provenance_preserves_collection_kind_item_and_property_net_transition()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var runtime = model.Build().CreateRuntime();
         var source = new Source();
@@ -280,7 +280,7 @@ public sealed class PreparedDetailedCommitTests
     [Fact]
     public void Null_to_null_property_signal_is_not_inferred_as_collection()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var runtime = model.Build().CreateRuntime();
         var source = new Source();
@@ -297,7 +297,7 @@ public sealed class PreparedDetailedCommitTests
     [InlineData(CollectionChangeKind.Reset)]
     public void Normalized_provenance_retains_remove_and_reset(CollectionChangeKind kind)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var runtime = model.Build().CreateRuntime();
         var item = new object();
@@ -319,7 +319,7 @@ public sealed class PreparedDetailedCommitTests
 
     private static Scenario CreateScenario(List<int> callbacks)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set).Compute(source => source.Value);
         var invariant = model.Invariant(set).Using(value).Must((_, current) => current <= 1)
@@ -335,7 +335,7 @@ public sealed class PreparedDetailedCommitTests
         => RuntimeApplyResultAssert.Equivalent(expected, actual);
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Source> Set,
         Source Source,
         Derived<Source, int> Value,

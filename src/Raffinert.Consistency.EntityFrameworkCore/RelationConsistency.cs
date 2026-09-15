@@ -36,7 +36,7 @@ public sealed class RelationStoreGeneratedKeyRequiresManualWorkflowException : E
 
 public static class RelationConsistencyDbContextExtensions
 {
-    public static int SaveChangesConsistently(this DbContext context, RelationRuntime runtime,
+    public static int SaveChangesConsistently(this DbContext context, ConsistencyRuntime runtime,
         RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions? options = null)
     {
         var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
@@ -47,7 +47,7 @@ public static class RelationConsistencyDbContextExtensions
         return result;
     }
 
-    public static async Task<int> SaveChangesConsistentlyAsync(this DbContext context, RelationRuntime runtime,
+    public static async Task<int> SaveChangesConsistentlyAsync(this DbContext context, ConsistencyRuntime runtime,
         RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -63,13 +63,13 @@ internal sealed record PendingConsistencySave(RelationUnitOfWork Unit, PreparedI
 
 internal static class ConsistencyCoordinator
 {
-    public static void Complete(RelationRuntime runtime, PendingConsistencySave pending)
+    public static void Complete(ConsistencyRuntime runtime, PendingConsistencySave pending)
     {
         try { pending.Unit.Commit(runtime); }
         catch (Exception error) { throw new RelationRuntimeSynchronizationException(runtime.Version, error); }
         pending.Unit.Dispatch(runtime);
     }
-    public static PendingConsistencySave Prepare(DbContext context, RelationRuntime runtime,
+    public static PendingConsistencySave Prepare(DbContext context, ConsistencyRuntime runtime,
         RelationEfCoreMappings mappings, RelationEfCoreConsistencyOptions options)
     {
         ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
@@ -118,7 +118,7 @@ internal static class ConsistencyCoordinator
         }
     }
 
-    private static void ApplyMaterializations(DbContext context, RelationRuntime runtime,
+    private static void ApplyMaterializations(DbContext context, ConsistencyRuntime runtime,
         RelationEfCoreMappings mappings, PreparedImpactPlan plan)
     {
         var applied = new Stack<(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry Entry,

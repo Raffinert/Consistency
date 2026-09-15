@@ -6,7 +6,7 @@ using Raffinert.Consistency.Expressions;
 
 namespace Raffinert.Consistency;
 
-public sealed partial class RelationRuntime
+public sealed partial class ConsistencyRuntime
 {
     private ValidatedMutationBatch ValidateMutations(
         IReadOnlyList<RuntimeMutation> mutations,

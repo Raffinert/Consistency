@@ -50,7 +50,7 @@ public sealed class SourceMemberImpactTests
     [Fact]
     public void Composed_derived_uses_local_member_rule_and_preserves_upstream_invalid()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var upstream = model.Derived(set)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -76,7 +76,7 @@ public sealed class SourceMemberImpactTests
     [Fact]
     public void Classifier_failure_rolls_back_runtime_state_and_version()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set)
             .Impact(policy => policy.SourceMemberChanged<int>(
@@ -110,7 +110,7 @@ public sealed class SourceMemberImpactTests
 
     private static Scenario CreateSourceOnly(int quantity)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set)
             .Impact(policy => policy
@@ -131,8 +131,8 @@ public sealed class SourceMemberImpactTests
     }
 
     private sealed record Scenario(
-        CompiledRelationModel RuntimeModel,
-        RelationRuntime Runtime,
+        CompiledConsistencyModel RuntimeModel,
+        ConsistencyRuntime Runtime,
         ObjectSet<Source> Set,
         Derived<Source, int> Value,
         Source Source);

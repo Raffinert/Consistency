@@ -101,7 +101,7 @@ public sealed class ConservativePropagationTests
 
     private static Scenario Create(bool forceScan = false)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<Entry>().Key(value => value.Id);
@@ -118,7 +118,7 @@ public sealed class ConservativePropagationTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Entry> Sources,
         ObjectSet<Entry> Items,
         Derived<Entry, int> Count);

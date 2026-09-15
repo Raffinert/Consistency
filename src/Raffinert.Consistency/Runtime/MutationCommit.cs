@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace Raffinert.Consistency;
 
-public sealed partial class RelationRuntime
+public sealed partial class ConsistencyRuntime
 {
     private bool _failAfterNextForwardPatchApplyForTesting;
     /// <summary>
@@ -78,7 +78,7 @@ public sealed partial class RelationRuntime
     }
 
     /// <summary>Disables commit snapshots for benchmark comparisons only.</summary>
-    internal RelationRuntime DisableRollbackSnapshotsForBenchmarking()
+    internal ConsistencyRuntime DisableRollbackSnapshotsForBenchmarking()
     {
         _rollbackSnapshotsEnabled = false;
         return this;

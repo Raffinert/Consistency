@@ -52,7 +52,7 @@ public sealed class DependencyTouchedStateTests
     [Fact]
     public void Incremental_relation_value_is_identical_after_plan_commit()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -103,7 +103,7 @@ public sealed class DependencyTouchedStateTests
 
     private static Scenario CreateScenario(int count)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set).Compute(source => source.Value);
         var invariant = model.Invariant(set).Using(value).Must((_, current) => current >= 0);
@@ -118,7 +118,7 @@ public sealed class DependencyTouchedStateTests
     }
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<Source> Set,
         Derived<Source, int> Value,
         Invariant<Source> Invariant,

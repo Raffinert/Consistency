@@ -418,12 +418,12 @@ public sealed record PlannedInvariantEvaluation(
 
 /// <summary>
 /// An immutable, binding impact result and internal runtime-state patch produced by
-/// <see cref="RelationRuntime.PlanDetailed(PreparedMutation, RuntimeImpactDetailLevel)"/>.
+/// <see cref="ConsistencyRuntime.PlanDetailed(PreparedMutation, RuntimeImpactDetailLevel)"/>.
 /// </summary>
 public sealed class PreparedImpactPlan
 {
     internal PreparedImpactPlan(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         PreparedMutation prepared,
         long baseVersion,
         RuntimeImpactDetailLevel detailLevel,
@@ -444,7 +444,7 @@ public sealed class PreparedImpactPlan
         PolicyActions = policyActions;
     }
 
-    internal RelationRuntime Runtime { get; }
+    internal ConsistencyRuntime Runtime { get; }
     internal PreparedMutation Prepared { get; }
     internal object ForwardPatch { get; }
     internal RuntimePolicyActions PolicyActions { get; }
@@ -485,7 +485,7 @@ public sealed class PolicyDispatchHandle
 public sealed class PreparedMutation
 {
     internal PreparedMutation(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         long baseVersion,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
@@ -500,7 +500,7 @@ public sealed class PreparedMutation
         DomainAssumptions = domainAssumptions;
     }
 
-    internal RelationRuntime Runtime { get; }
+    internal ConsistencyRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
     internal IReadOnlyList<PropertyChange> Changes { get; }
     internal IReadOnlyList<NormalizedMutationProvenance> Provenance { get; }

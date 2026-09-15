@@ -5,7 +5,7 @@ public sealed class RuntimeRegistrationTests
     [Fact]
     public void Derived_and_invariant_state_operations_reject_unregistered_sources_without_creating_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var amount = model.Derived(sources).Compute(source => source.Amount);
         var invariant = model.Invariant(sources).Using(amount).Must((_, value) => value >= 0);
@@ -22,7 +22,7 @@ public sealed class RuntimeRegistrationTests
     [Fact]
     public void Removed_and_wrong_set_sources_are_rejected_but_registered_sources_remain_valid()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var first = model.Objects<Source>().Key(source => source.Id);
         var second = model.Objects<Source>().Key(source => source.Id);
         var amount = model.Derived(first).Compute(source => source.Amount);

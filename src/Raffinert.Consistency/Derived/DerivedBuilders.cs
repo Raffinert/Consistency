@@ -39,7 +39,7 @@ public enum InvariantReaction
 
 public sealed class DerivedBuilder<TSource> where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private DerivedImpactPolicy _impactPolicy = new(
         DependencySeverity.Dirty,
@@ -49,7 +49,7 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         false,
         []);
 
-    internal DerivedBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
+    internal DerivedBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source)
     {
         _model = model;
         _source = source;
@@ -147,7 +147,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
     where TSource : class
     where TUpstreamSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
     private readonly Derived<TUpstreamSource, TUpstream> _upstream;
@@ -156,7 +156,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         DependencySeverity.Dirty, false, []);
 
     internal ProjectedDerivedUpstreamBuilder(
-        RelationModelBuilder model,
+        ConsistencyModelBuilder model,
         ObjectSet<TSource> source,
         Expression<Func<TSource, TUpstreamSource>> selector,
         Derived<TUpstreamSource, TUpstream> upstream) =>
@@ -187,7 +187,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TF
     where TSource : class
     where TUpstreamSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
     private readonly Derived<TUpstreamSource, TFirst> _first;
@@ -197,7 +197,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TF
         DependencySeverity.Dirty, false, []);
 
     internal ProjectedDerivedUpstreamBuilder(
-        RelationModelBuilder model,
+        ConsistencyModelBuilder model,
         ObjectSet<TSource> source,
         Expression<Func<TSource, TUpstreamSource>> selector,
         Derived<TUpstreamSource, TFirst> first,
@@ -228,12 +228,12 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TF
 
 public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Derived<TSource, TUpstream> _upstream;
     private DerivedImpactPolicy _impactPolicy = DefaultImpact;
 
-    internal DerivedUpstreamBuilder(RelationModelBuilder model, ObjectSet<TSource> source,
+    internal DerivedUpstreamBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source,
         Derived<TSource, TUpstream> upstream) => (_model, _source, _upstream) = (model, source, upstream);
 
     public DerivedUpstreamBuilder<TSource, TUpstream> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
@@ -261,13 +261,13 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
 
 public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Derived<TSource, TFirst> _first;
     private readonly Derived<TSource, TSecond> _second;
     private DerivedImpactPolicy _impactPolicy = DefaultImpact;
 
-    internal DerivedUpstreamBuilder(RelationModelBuilder model, ObjectSet<TSource> source,
+    internal DerivedUpstreamBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source,
         Derived<TSource, TFirst> first, Derived<TSource, TSecond> second) =>
         (_model, _source, _first, _second) = (model, source, first, second);
 
@@ -300,7 +300,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     where TSource : class
     where TItem : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Relation<TSource, TItem> _relation;
     private DerivedImpactPolicy _impactPolicy = new(
@@ -314,7 +314,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     private bool _useConservativePropagation;
 
     internal DerivedUsingBuilder(
-        RelationModelBuilder model,
+        ConsistencyModelBuilder model,
         ObjectSet<TSource> source,
         Relation<TSource, TItem> relation)
     {
@@ -411,10 +411,10 @@ public sealed class Derived<TSource, TValue>
 
 public sealed class InvariantBuilder<TSource> where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
 
-    internal InvariantBuilder(RelationModelBuilder model, ObjectSet<TSource> source)
+    internal InvariantBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source)
     {
         _model = model;
         _source = source;
@@ -447,10 +447,10 @@ public sealed class InvariantBuilder<TSource> where TSource : class
 public sealed class InvariantUsingBuilder<TSource, TValue>
     where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly Derived<TSource, TValue> _derived;
 
-    internal InvariantUsingBuilder(RelationModelBuilder model, Derived<TSource, TValue> derived)
+    internal InvariantUsingBuilder(ConsistencyModelBuilder model, Derived<TSource, TValue> derived)
     {
         _model = model;
         _derived = derived;
@@ -467,11 +467,11 @@ public sealed class InvariantUsingBuilder<TSource, TValue>
 
 public sealed class InvariantUsingBuilder<TSource, TFirst, TSecond> where TSource : class
 {
-    private readonly RelationModelBuilder _model;
+    private readonly ConsistencyModelBuilder _model;
     private readonly Derived<TSource, TFirst> _first;
     private readonly Derived<TSource, TSecond> _second;
 
-    internal InvariantUsingBuilder(RelationModelBuilder model, Derived<TSource, TFirst> first,
+    internal InvariantUsingBuilder(ConsistencyModelBuilder model, Derived<TSource, TFirst> first,
         Derived<TSource, TSecond> second) => (_model, _first, _second) = (model, first, second);
 
     public Invariant<TSource> Must(Expression<Func<TSource, TFirst, TSecond, bool>> predicate)

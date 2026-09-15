@@ -5,9 +5,9 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class ApplyDetailBenchmarks
 {
-    private RelationRuntime _basic = null!;
-    private RelationRuntime _detailed = null!;
-    private RelationRuntime _causal = null!;
+    private ConsistencyRuntime _basic = null!;
+    private ConsistencyRuntime _detailed = null!;
+    private ConsistencyRuntime _causal = null!;
     private ObjectSet<Source> _basicSet = null!;
     private ObjectSet<Source> _detailedSet = null!;
     private Source[] _basicSources = null!;
@@ -63,9 +63,9 @@ public class ApplyDetailBenchmarks
         MutationSet.Create(sources.Select(source =>
             Change.Property(set, source, value => value.Value, _value - 1, _value)).ToArray());
 
-    private static (RelationRuntime Runtime, ObjectSet<Source> Set, Source[] Sources) CreateScenario(int count)
+    private static (ConsistencyRuntime Runtime, ObjectSet<Source> Set, Source[] Sources) CreateScenario(int count)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         model.Derived(set).Compute(source => source.Value);
         var runtime = model.Build().CreateRuntime();

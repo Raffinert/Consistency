@@ -6,7 +6,7 @@ using Raffinert.Consistency.Expressions;
 
 namespace Raffinert.Consistency;
 
-public sealed class CompiledRelationModel
+public sealed class CompiledConsistencyModel
 {
     private readonly IReadOnlyList<IObjectSetDefinition> _sets;
     private readonly IReadOnlyList<IRelationDefinition> _relations;
@@ -14,7 +14,7 @@ public sealed class CompiledRelationModel
     private readonly IReadOnlyList<IInvariantDefinition> _invariants;
     private readonly CompiledDependencyGraph _dependencyGraph;
 
-    internal CompiledRelationModel(
+    internal CompiledConsistencyModel(
         IReadOnlyList<IObjectSetDefinition> sets,
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
@@ -32,8 +32,8 @@ public sealed class CompiledRelationModel
 
     public string DebugView { get; }
     public CompiledModelDiagnostics Diagnostics { get; }
-    public RelationRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph);
-    public RelationRuntime CreateRuntime(Action<RuntimeSeedBuilder> configureSeed)
+    public ConsistencyRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph);
+    public ConsistencyRuntime CreateRuntime(Action<RuntimeSeedBuilder> configureSeed)
     {
         ArgumentNullException.ThrowIfNull(configureSeed);
         var seed = new RuntimeSeedBuilder();
@@ -42,12 +42,12 @@ public sealed class CompiledRelationModel
         runtime.Bootstrap(seed.Entries);
         return runtime;
     }
-    public RelationRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
+    public ConsistencyRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
     {
         ArgumentNullException.ThrowIfNull(diagnosticOptions);
-        return new RelationRuntime(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, null, diagnosticOptions);
+        return new ConsistencyRuntime(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, null, diagnosticOptions);
     }
-    public RelationRuntime CreateRuntime(
+    public ConsistencyRuntime CreateRuntime(
         RuntimeDiagnosticOptions diagnosticOptions,
         Action<RuntimeSeedBuilder> configureSeed)
     {
@@ -59,7 +59,7 @@ public sealed class CompiledRelationModel
         runtime.Bootstrap(seed.Entries);
         return runtime;
     }
-    internal RelationRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
+    internal ConsistencyRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
         new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, dependencyImpactPolicy);
 
     private string CreateDebugView()

@@ -8,7 +8,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public void Compiled_diagnostics_expose_public_model_structure_and_semantics()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Named("Source").Key(value => value.Id);
         var items = model.Objects<DerivedItemRecord>().Named("Item").Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code)
@@ -59,7 +59,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public void Runtime_diagnostics_count_incremental_work_and_policy_requests_since_reset()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Named("Source").Key(value => value.Id);
         var items = model.Objects<DerivedItemRecord>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -128,7 +128,7 @@ public sealed class DiagnosticsTests
     [Fact]
     public void Duplicate_definition_keys_are_rejected()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         _ = model.Objects<DerivedSourceRecord>().Named("Duplicate").Key(value => value.Id);
         _ = model.Objects<DerivedItemRecord>().Named("Duplicate").Key(value => value.Id);
 
@@ -173,9 +173,9 @@ public sealed class DiagnosticsTests
         }
     }
 
-    private static CompiledRelationModel BuildWithOrder(bool reverse)
+    private static CompiledConsistencyModel BuildWithOrder(bool reverse)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(value => value.Id);
         var items = model.Objects<DerivedItemRecord>().Key(value => value.Id);
         Action byCode = () => model.Relation(sources, items)

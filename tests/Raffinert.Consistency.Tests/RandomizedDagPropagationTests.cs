@@ -266,7 +266,7 @@ public sealed class RandomizedDagPropagationTests
     private sealed record OracleValues(int A, int B, int C, int D, int E, bool Invariant);
 
     private sealed record Scenario(
-        RelationRuntime Runtime,
+        ConsistencyRuntime Runtime,
         ObjectSet<DagSource> Sources,
         ObjectSet<DagItem> Items,
         Derived<DagSource, int> A,
@@ -279,7 +279,7 @@ public sealed class RandomizedDagPropagationTests
     {
         public static Scenario Create(bool conservative, bool forceScan)
         {
-            var model = new RelationModelBuilder();
+            var model = new ConsistencyModelBuilder();
             if (forceScan)
                 model.UseScanPlansForTesting();
             var sources = model.Objects<DagSource>().Key(value => value.Id);

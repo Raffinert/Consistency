@@ -10,7 +10,7 @@ public sealed class RelationEfCoreMappingsTests
     {
         using var context = new MappingContext();
         var entity = Seed(context);
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         var invariant = model.Invariant(objects).Using(value).Must((_, current) => current < 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -24,7 +24,7 @@ public sealed class RelationEfCoreMappingsTests
     public void Materialize_accepts_normal_mapped_writable_property()
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
@@ -43,7 +43,7 @@ public sealed class RelationEfCoreMappingsTests
     public void Materialize_rejects_invalid_ef_property(string propertyName)
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
@@ -60,7 +60,7 @@ public sealed class RelationEfCoreMappingsTests
     public void Materialize_rejects_relations_dependency_member()
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         model.Derived(objects).Compute(x => x.Mirror + 1);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -76,7 +76,7 @@ public sealed class RelationEfCoreMappingsTests
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var related = new RelatedEntity { Id = 1, Value = 0 }; context.Add(related); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var relatedObjects = model.Objects<RelatedEntity>().Key(x => x.Id);
         model.Relation(objects, relatedObjects).Where((left, right) => left.Mirror == right.Value);
         var value = model.Derived(objects).Compute(x => x.Input);
@@ -92,7 +92,7 @@ public sealed class RelationEfCoreMappingsTests
     public void Materialize_rejects_invariant_dependency_member()
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         model.Invariant(objects).Using(value).Must((source, current) => source.Mirror <= current);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -110,7 +110,7 @@ public sealed class RelationEfCoreMappingsTests
         var target = new ProjectionTarget { Id = 1, Value = 1 };
         var link = new ProjectionLink { Id = 1, Target = target };
         context.Add(link); context.SaveChanges();
-        var model = new RelationModelBuilder(); var links = model.Objects<ProjectionLink>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var links = model.Objects<ProjectionLink>().Key(x => x.Id);
         var targets = model.Objects<ProjectionTarget>().Key(x => x.Id);
         var upstream = model.Derived(targets).Compute(x => x.Value);
         model.Derived(links).Using(x => x.Target, upstream).Compute((_, value) => value);
@@ -126,7 +126,7 @@ public sealed class RelationEfCoreMappingsTests
     [Fact]
     public void Materialize_rejects_duplicate_target_and_duplicate_derived()
     {
-        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var first = model.Derived(objects).Compute(x => x.Input);
         var second = model.Derived(objects).Compute(x => x.Input + 1);
         var mappings = new RelationEfCoreMappings().Materialize(first, x => x.Mirror);
@@ -139,10 +139,10 @@ public sealed class RelationEfCoreMappingsTests
     public void Materialize_rejects_handle_from_another_runtime()
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var firstModel = new RelationModelBuilder(); var firstObjects = firstModel.Objects<MappingEntity>().Key(x => x.Id);
+        var firstModel = new ConsistencyModelBuilder(); var firstObjects = firstModel.Objects<MappingEntity>().Key(x => x.Id);
         var foreign = firstModel.Derived(firstObjects).Compute(x => x.Input);
         firstModel.Build();
-        var secondModel = new RelationModelBuilder(); var secondObjects = secondModel.Objects<MappingEntity>().Key(x => x.Id);
+        var secondModel = new ConsistencyModelBuilder(); var secondObjects = secondModel.Objects<MappingEntity>().Key(x => x.Id);
         var runtime = secondModel.Build().CreateRuntime(seed => seed.Add(secondObjects, [entity]));
         entity.Input = 2;
 

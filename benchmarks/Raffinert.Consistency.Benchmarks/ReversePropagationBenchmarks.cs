@@ -26,7 +26,7 @@ public class ReversePropagationBenchmarks
 
     private Scenario CreateScenario(bool forceScan)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<BenchItem>().Key(item => item.Id);
@@ -45,7 +45,7 @@ public class ReversePropagationBenchmarks
     }
 
     private sealed class Scenario(
-        RelationRuntime runtime,
+        ConsistencyRuntime runtime,
         ObjectSet<BenchItem> items,
         BenchItem item)
     {

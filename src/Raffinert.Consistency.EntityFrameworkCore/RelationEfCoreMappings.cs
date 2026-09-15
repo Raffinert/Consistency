@@ -45,14 +45,14 @@ public sealed class RelationEfCoreMappings
     internal bool HasEnforced => _enforced.Count > 0;
     internal bool HasMaterializations => _materializations.Count > 0;
     internal IReadOnlyList<Materialization> Materializations => _materializations;
-    internal HashSet<int> Validate(DbContext context, RelationRuntime runtime)
+    internal HashSet<int> Validate(DbContext context, ConsistencyRuntime runtime)
     {
         var ids = _enforced.Select(runtime.GetInvariantId).ToHashSet();
         foreach (var mapping in _materializations)
         {
             _ = runtime.GetDerivedId(mapping.Definition);
             var usage = runtime.GetMemberUsage(mapping.Definition.SourceSet, mapping.Property);
-            if (usage != RelationRuntime.ModelMemberUsageKind.None)
+            if (usage != ConsistencyRuntime.ModelMemberUsageKind.None)
                 throw new InvalidOperationException($"Materialized mirrors are sink-only and cannot feed the Relations graph ({usage}).");
             var entity = context.Model.FindEntityType(mapping.Definition.SourceSet.ObjectType)
                 ?? throw new InvalidOperationException("The materialized source type is not mapped by EF Core.");

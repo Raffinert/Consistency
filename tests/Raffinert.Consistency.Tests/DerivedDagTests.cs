@@ -5,7 +5,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Source_derived_values_compose_lazily_through_a_chain()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var ordered = model.Derived(lines).Compute(line => line.Ordered);
         var remaining = model.Derived(lines).Using(ordered)
@@ -33,7 +33,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Relation_derived_value_propagates_to_composed_downstream_value()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Line>().Key(line => line.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.LineId);
@@ -52,7 +52,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Two_upstreams_merge_source_scoped_severity_in_a_diamond()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -97,7 +97,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Composed_value_configures_direct_source_severity_without_weakening_upstream_severity()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -127,7 +127,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Two_upstream_builder_supports_invalid_direct_source_impact_and_normalized_inputs()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var ordered = model.Derived(lines).Compute(line => line.Ordered);
         var received = model.Derived(lines).Compute(line => line.Received);
@@ -153,7 +153,7 @@ public sealed class DerivedDagTests
     public void Multi_input_invariant_merges_upstreams_and_schedules_once_per_source()
     {
         var repairs = new List<Line>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var ordered = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
@@ -183,7 +183,7 @@ public sealed class DerivedDagTests
     [Fact]
     public void Multi_input_immediate_invariant_refreshes_all_upstreams_after_commit()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var ordered = model.Derived(lines).Compute(line => line.Ordered);
         var received = model.Derived(lines).Compute(line => line.Received);
@@ -214,7 +214,7 @@ public sealed class DerivedDagTests
 
     private static (int Id, DependencySeverity Severity)[] ApplyOrderedBatch(bool upstreamFirst)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))

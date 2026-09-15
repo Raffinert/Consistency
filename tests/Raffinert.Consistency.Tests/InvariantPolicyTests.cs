@@ -5,7 +5,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Direct_source_change_marks_a_cached_derived_computation_dirty()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -26,7 +26,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Immediate_invariant_policy_recomputes_after_relation_impact()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -53,7 +53,7 @@ public sealed partial class DerivedStateTests
     public void Repair_policy_schedules_affected_source_objects()
     {
         var scheduled = new List<CodeHolder>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -76,7 +76,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Public_impact_policy_can_invalidate_removed_membership()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -100,7 +100,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Mixed_membership_delta_is_classified_per_source()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -143,7 +143,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Public_impact_policy_can_invalidate_direct_source_changes()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -164,7 +164,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Public_impact_policy_can_invalidate_item_changes()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -189,7 +189,7 @@ public sealed partial class DerivedStateTests
     [InlineData(true)]
     public void Public_impact_policy_is_independent_of_access_plan(bool forceScan)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
@@ -215,7 +215,7 @@ public sealed partial class DerivedStateTests
     public void Prepared_mutation_dispatches_callbacks_only_after_explicit_dispatch()
     {
         var scheduled = new List<CodeHolder>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -250,7 +250,7 @@ public sealed partial class DerivedStateTests
     {
         var calls = new int[3];
         var failSecond = true;
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -291,7 +291,7 @@ public sealed partial class DerivedStateTests
     public void Detailed_apply_exposes_stable_impacts_and_repair_requests_before_dispatch()
     {
         var scheduled = new List<CodeHolder>();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -346,7 +346,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Detailed_apply_exposes_immediate_evaluation_requests()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -378,14 +378,14 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Throwing_repair_callback_observes_committed_state_without_rollback()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code);
         var count = model.Derived(sources).Using(relation)
             .Compute((source, matches) => matches.Count);
-        RelationRuntime? runtime = null;
+        ConsistencyRuntime? runtime = null;
         Invariant<CodeHolder>? invariant = null;
         var observedRelatedCount = -1;
         var observedDerivedState = DerivedValueState.Fresh;
@@ -421,7 +421,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Immediate_evaluations_finish_before_repair_callbacks_dispatch()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -431,7 +431,7 @@ public sealed partial class DerivedStateTests
         var immediate = model.Invariant(sources).Using(count)
             .Must((source, value) => value == 0)
             .ReactWith(InvariantReaction.EvaluateImmediately);
-        RelationRuntime? runtime = null;
+        ConsistencyRuntime? runtime = null;
         var observedImmediateState = InvariantEvaluationState.Unknown;
         model.Invariant(sources).Using(count)
             .Must((source, value) => value <= 1)

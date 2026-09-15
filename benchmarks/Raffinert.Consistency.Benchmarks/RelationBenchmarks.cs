@@ -5,17 +5,17 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class RelationBenchmarks
 {
-    private RelationRuntime _singleRuntime = null!;
+    private ConsistencyRuntime _singleRuntime = null!;
     private ObjectSet<BenchItem> _singleRight = null!;
     private Relation<BenchItem, BenchItem> _singleRelation = null!;
     private BenchItem _singleSource = null!;
     private BenchItem _scalarTarget = null!;
 
-    private RelationRuntime _compositeRuntime = null!;
+    private ConsistencyRuntime _compositeRuntime = null!;
     private Relation<BenchItem, BenchItem> _compositeRelation = null!;
     private BenchItem _compositeSource = null!;
 
-    private RelationRuntime _navigationRuntime = null!;
+    private ConsistencyRuntime _navigationRuntime = null!;
     private Relation<BenchItem, BenchItem> _navigationRelation = null!;
     private BenchItem _navigationSource = null!;
     private ObjectSet<BenchItem> _navigationRight = null!;
@@ -83,7 +83,7 @@ public class RelationBenchmarks
 
     private void SetupSingleKey()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<BenchItem>().Key(item => item.Id);
         _singleRight = model.Objects<BenchItem>().Key(item => item.Id);
         _singleRelation = model.Relation(left, _singleRight).Where((a, b) => a.Code == b.Code);
@@ -101,7 +101,7 @@ public class RelationBenchmarks
 
     private void SetupCompositeKey()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<BenchItem>().Key(item => item.Id);
         var right = model.Objects<BenchItem>().Key(item => item.Id);
         _compositeRelation = model.Relation(left, right).Where((a, b) =>
@@ -120,7 +120,7 @@ public class RelationBenchmarks
 
     private void SetupNavigation()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var left = model.Objects<BenchItem>().Key(item => item.Id);
         _navigationRight = model.Objects<BenchItem>().Key(item => item.Id);
         _navigationRelation = model.Relation(left, _navigationRight).Where((a, b) =>

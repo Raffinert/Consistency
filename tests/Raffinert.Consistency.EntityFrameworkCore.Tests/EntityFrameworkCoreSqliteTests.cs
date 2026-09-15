@@ -11,7 +11,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -32,7 +32,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
         var gate = new ThrowingRelationGate();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
         var relation = model.Relation(objects, objects)
             .Where((left, right) => gate.Match(left, right))
@@ -61,7 +61,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -86,7 +86,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -112,7 +112,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
         model.Derived(objects).Compute(entity => entity.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
@@ -143,7 +143,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -176,7 +176,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var secondContext = database.CreateContext();
         var first = firstContext.ConcurrencyEntities.Single(entity => entity.Id == id);
         var second = secondContext.ConcurrencyEntities.Single(entity => entity.Id == id);
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<ConcurrencyEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         runtime.Add(objects, first);
@@ -199,7 +199,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -218,7 +218,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
         var code = model.Derived(objects).Compute(entity => entity.Code).Named("code");
         model.Invariant(objects).Using(code).Must((_, value) => value == "valid")
@@ -228,7 +228,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var first = new GeneratedEntity { Code = "valid" };
         var second = new GeneratedEntity { Code = "valid" };
         context.AddRange(first, second);
-        RelationRuntime runtime;
+        ConsistencyRuntime runtime;
         RelationUnitOfWork unit;
 
         using (var transaction = context.Database.BeginTransaction())
@@ -269,7 +269,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var child = new CascadeChild { Id = Guid.NewGuid(), Parent = oldParent };
         context.AddRange(oldParent, newParent, child);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var children = model.Objects<CascadeChild>().Key(entity => entity.Id);
         model.Derived(children)
             .Impact(policy => policy.SourceMemberChanged(entity => entity.Parent, (oldValue, newValue) =>
@@ -297,7 +297,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var parent = new CascadeParent { Id = Guid.NewGuid() };
         context.Add(parent); context.SaveChanges();
         var label = new LabelEntity { Id = Guid.NewGuid(), Code = "A" };
-        var model = new RelationModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
         var labels = model.Objects<LabelEntity>().Key(x => x.Id);
         var relation = model.Relation(parents, labels).Where((left, right) => left.Children.Any(x => x.Code == right.Code));
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(parents, [parent]); seed.Add(labels, [label]); });
@@ -317,7 +317,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var child = new CascadeChild { Id = Guid.NewGuid(), Parent = parent, Code = "A" };
         parent.Children.Add(child); context.Add(parent); context.SaveChanges();
         var label = new LabelEntity { Id = Guid.NewGuid(), Code = "A" };
-        var model = new RelationModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var parents = model.Objects<CascadeParent>().Key(x => x.Id);
         var labels = model.Objects<LabelEntity>().Key(x => x.Id);
         var relation = model.Relation(parents, labels).Where((left, right) => left.Children.Any(x => x.Code == right.Code));
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(parents, [parent]); seed.Add(labels, [label]); });
@@ -338,7 +338,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var child = new CascadeChild { Id = Guid.NewGuid(), Parent = parent };
         context.AddRange(parent, child);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var parents = model.Objects<CascadeParent>().Key(entity => entity.Id);
         var children = model.Objects<CascadeChild>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
@@ -361,7 +361,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var owner = new OwnedOwner { Id = Guid.NewGuid(), Settings = new OwnedSettings { Code = "A" } };
         context.Add(owner);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var owners = model.Objects<OwnedOwner>().Key(entity => entity.Id);
         var labels = model.Objects<LabelEntity>().Key(entity => entity.Id);
         var relation = model.Relation(owners, labels).Where((left, right) => left.Settings!.Code == right.Code);
@@ -440,7 +440,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var tag = new TagEntity { Id = Guid.NewGuid(), Name = "B" };
         context.AddRange(group, tag);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var groups = model.Objects<TagGroup>().Key(entity => entity.Id);
         var labels = model.Objects<LabelEntity>().Key(entity => entity.Id);
         var relation = model.Relation(groups, labels).Where((left, right) =>
@@ -462,7 +462,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(entity => entity.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationUnitOfWorkMappings().Map(objects);
@@ -484,7 +484,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
         context.Add(entity);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Compute(value => value.Code).Named("code");
         model.Invariant(objects).Using(code).Must((_, value) => value == "before")
@@ -520,7 +520,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
         var code = model.Derived(objects).Compute(entity => entity.Code).Named("code");
         var compiled = model.Build();
@@ -573,7 +573,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         context.SaveChanges();
         var failDispatch = true;
         var dispatchCount = 0;
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Compute(value => value.Code).Named("code");
         model.Invariant(objects).Using(code)
@@ -634,7 +634,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
         context.Add(entity);
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Compute(value => value.Code).Named("code");
         model.Invariant(objects).Using(code).Must((_, value) => value == "before")
@@ -670,7 +670,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         context.Add(entity);
         context.Outbox.Add(new OutboxRecord { Payload = "duplicate" });
         context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Key(value => value.Id);
         model.Derived(objects).Compute(value => value.Code);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -700,7 +700,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
         var gate = new ThrowingGeneratedGate { Throw = true };
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(value => value.Id);
         var relation = model.Relation(objects, objects).Where((left, right) => gate.Match(left, right))
             .AllowIncompleteDependencies();
@@ -733,7 +733,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var context = database.CreateContext();
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "valid" };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("stable-entities").Key(x => x.Id);
         var code = model.Derived(objects).Compute(x => x.Code).Named("stable-code");
         var repairs = 0;
@@ -765,7 +765,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
         context.Add(entity); context.SaveChanges();
-        var counter = new EvaluationCounter(); var model = new RelationModelBuilder();
+        var counter = new EvaluationCounter(); var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("valid-entities").Key(x => x.Id);
         var code = model.Derived(objects).Compute(x => x.Code);
         var invariant = model.Invariant(objects).Using(code).Must((_, value) => counter.IsValid(value))
@@ -792,7 +792,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     public void Generated_key_evaluated_plan_uses_transactional_identity(string code, bool violates)
     {
         using var database = new SqliteFixture(); using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Named("generated-guard").Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Code);
         var invariant = model.Invariant(objects).Using(value).Must((_, current) => current != "invalid-generated")
@@ -823,7 +823,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     public void Generated_key_valid_plan_materializes_before_database_and_runtime_commit()
     {
         using var database = new SqliteFixture(); using var context = database.CreateContext();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
         var length = model.Derived(objects).Compute(x => x.Code.Length);
         var runtime = model.Build().CreateRuntime();
@@ -865,7 +865,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 2, Mirror = 4 };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => value <= 10);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -883,7 +883,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     public void Consistent_save_rejects_store_generated_relations_key_before_database_write()
     {
         using var database = new SqliteFixture(); using var context = database.CreateContext();
-        var model = new RelationModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationEfCoreMappings().Map(objects);
         var entity = new GeneratedEntity { Code = "new" };
@@ -903,7 +903,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 2, Mirror = 4 };
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
@@ -926,7 +926,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var first = new ThrowingMirrorEntity { Id = Guid.NewGuid() };
         var second = new ThrowingMirrorEntity { Id = Guid.NewGuid() };
         context.AddRange(first, second); context.SaveChanges();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [first, second]));
@@ -951,7 +951,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         context.Add(entity); context.SaveChanges();
         var gate = new ThrowingInvariantGate();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => gate.Check(value))
             .AllowIncompleteDependencies();
@@ -975,7 +975,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
@@ -996,7 +996,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         model.Invariant(objects).Using(doubled).Must((_, value) => value <= 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -1015,7 +1015,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
         using var transaction = context.Database.BeginTransaction();
@@ -1033,7 +1033,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture(); using var context = database.CreateContext();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         context.Add(entity); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
         using var transaction = new System.Transactions.TransactionScope();
@@ -1053,7 +1053,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             seed.Add(new UniqueEntity { Id = Guid.NewGuid(), Code = "DUP" });
             seed.SaveChanges();
         }
-        var model = new RelationModelBuilder(); var objects = model.Objects<UniqueEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<UniqueEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var mappings = new RelationEfCoreMappings().Map(objects);
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime, mappings, new());
@@ -1074,7 +1074,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     public void Interceptor_rejects_store_generated_relations_key_before_sql()
     {
         using var database = new SqliteFixture();
-        var model = new RelationModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime();
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
             new RelationEfCoreMappings().Map(objects), new());
@@ -1094,7 +1094,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         using var database = new SqliteFixture();
         var gate = new ReentrantSaveGate();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var derived = model.Derived(objects).Compute(x => gate.Compute(x.Input)).AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
@@ -1120,7 +1120,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         {
             seed.Add(entity); await seed.SaveChangesAsync(); seed.Entry(entity).State = EntityState.Detached;
         }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var doubled = model.Derived(objects).Compute(x => x.Input * 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
@@ -1141,7 +1141,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
             new RelationEfCoreMappings().Map(objects), new());
@@ -1161,7 +1161,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
             new RelationEfCoreMappings().Map(objects), new());
@@ -1185,7 +1185,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             seed.AddRange(first, second); seed.SaveChanges();
             seed.Entry(first).State = EntityState.Detached; seed.Entry(second).State = EntityState.Detached;
         }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [first, second]));
         var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
             new RelationEfCoreMappings().Map(objects), new());
@@ -1209,7 +1209,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var saved = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         var independent = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         using (var seed = database.CreateContext()) { seed.Add(saved); seed.SaveChanges(); seed.Entry(saved).State = EntityState.Detached; }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [saved, independent]));
         var consistency = new RelationConsistencySaveChangesInterceptor(runtime,
             new RelationEfCoreMappings().Map(objects), new());
@@ -1235,7 +1235,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         context.Add(entity); context.SaveChanges();
         var repairs = new List<MirrorEntity>();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         model.Invariant(objects).Using(value).Must((_, current) => current <= 2).ScheduleRepairWith(repairs.Add);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
@@ -1255,7 +1255,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var untouched = new MirrorEntity { Id = Guid.NewGuid(), Input = -1 };
         var changed = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         context.AddRange(untouched, changed); context.SaveChanges();
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         var invariant = model.Invariant(objects).Using(value).Must((_, current) => current >= 0);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [untouched, changed]));
@@ -1275,7 +1275,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         using var database = new SqliteFixture();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
-        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Compute(x => x.Input);
         model.Invariant(objects).Using(value).Must((_, current) => current <= 1)
             .ScheduleRepairWith(_ => throw new DispatchFailure());
@@ -1298,7 +1298,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var source = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
         var item = new MaterializationItem { Id = Guid.NewGuid(), Value = 1 };
         context.AddRange(source, item); context.SaveChanges();
-        var model = new RelationModelBuilder(); var sources = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var sources = model.Objects<MirrorEntity>().Key(x => x.Id);
         var items = model.Objects<MaterializationItem>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((left, right) => left.Input == right.Value);
         var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
@@ -1320,7 +1320,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new ThrowingMirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 1 };
         context.Add(entity); context.SaveChanges();
         var writes = entity.MirrorWrites;
-        var model = new RelationModelBuilder(); var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
         var parity = model.Derived(objects).Compute(x => x.Input % 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;

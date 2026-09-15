@@ -5,7 +5,7 @@ namespace Raffinert.Consistency.Benchmarks;
 [MemoryDiagnoser]
 public class ProjectedPropagationBenchmarks
 {
-    private RelationRuntime _runtime = null!;
+    private ConsistencyRuntime _runtime = null!;
     private ObjectSet<Owner> _owners = null!;
     private Owner _changed = null!;
     private int _value;
@@ -19,7 +19,7 @@ public class ProjectedPropagationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         _owners = model.Objects<Owner>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
         var amount = model.Derived(_owners).Compute(value => value.Amount);

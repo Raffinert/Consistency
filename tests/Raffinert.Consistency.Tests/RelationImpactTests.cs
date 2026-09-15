@@ -6,7 +6,7 @@ public sealed class RelationImpactTests
     public void Mutation_batch_classifies_final_membership_impact_once()
     {
         var policy = new RecordingImpactPolicy();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -28,7 +28,7 @@ public sealed class RelationImpactTests
     public void Relation_impact_unifies_delta_semantic_and_access_roots()
     {
         var policy = new RecordingImpactPolicy();
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>

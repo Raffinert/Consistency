@@ -35,7 +35,7 @@ public class PropagationPlanBenchmarks
 
     private Scenario Create(bool conservative)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Entry>().Key(entry => entry.Id);
         var items = model.Objects<Entry>().Key(entry => entry.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -55,7 +55,7 @@ public class PropagationPlanBenchmarks
         return new Scenario(runtime, items, count, retainedSources[0], retainedItems[0]);
     }
 
-    private sealed class Scenario(RelationRuntime runtime, ObjectSet<Entry> items,
+    private sealed class Scenario(ConsistencyRuntime runtime, ObjectSet<Entry> items,
         Derived<Entry, int> count, Entry readSource, Entry changedItem)
     {
         public ChangeImpact Mutate(bool readAfterWrite)
@@ -109,7 +109,7 @@ public class SelectivePropagationPlanBenchmarks
 
     private SelectiveScenario Create(bool conservative)
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<SelectiveEntry>().Key(entry => entry.Id);
         var items = model.Objects<SelectiveEntry>().Key(entry => entry.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -134,7 +134,7 @@ public class SelectivePropagationPlanBenchmarks
 
     private static string Key(int value) => $"key-{value}";
 
-    private sealed class SelectiveScenario(RelationRuntime runtime, ObjectSet<SelectiveEntry> items,
+    private sealed class SelectiveScenario(ConsistencyRuntime runtime, ObjectSet<SelectiveEntry> items,
         Derived<SelectiveEntry, int> count, SelectiveEntry readSource, SelectiveEntry changedItem)
     {
         public ChangeImpact Mutate(bool readAfterWrite)

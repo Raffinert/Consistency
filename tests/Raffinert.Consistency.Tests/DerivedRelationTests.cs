@@ -5,7 +5,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Relation_membership_changes_default_to_dirty_and_recompute_lazily()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -47,7 +47,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Adding_and_removing_relation_items_dirty_cached_derived_state()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
@@ -129,7 +129,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Nested_join_key_change_dirties_sources_that_lose_and_gain_membership()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -159,7 +159,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Residual_predicate_change_dirties_only_source_that_loses_membership()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -187,7 +187,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Explicit_dependency_policy_can_make_residual_membership_change_invalid()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -224,7 +224,7 @@ public sealed partial class DerivedStateTests
     public void Reverse_plan_limits_right_mutations_to_candidate_lefts(bool forceScan)
     {
         const int unrelatedCount = 10_000;
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         if (forceScan)
             model.UseScanPlansForTesting();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
@@ -273,7 +273,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Reverse_hash_plan_supports_composite_keys()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<InvoiceLine>().Key(x => x.Id);
         var items = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
@@ -315,7 +315,7 @@ public sealed partial class DerivedStateTests
     [Fact]
     public void Reverse_hash_plan_preserves_string_comparer_semantics()
     {
-        var model = new RelationModelBuilder();
+        var model = new ConsistencyModelBuilder();
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
