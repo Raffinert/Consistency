@@ -208,6 +208,28 @@ public sealed partial class RelationRuntime
         return ((RelationRuntimeState<TLeft, TRight>)state).RelatedFromRight(right);
     }
 
+    internal bool HasMaterializedPair<TLeft, TRight>(Relation<TLeft, TRight> relation, TLeft left, TRight right)
+        where TLeft : class where TRight : class =>
+        ((RelationRuntimeState<TLeft, TRight>)_relations[relation.Definition]).IsRelated(left, right);
+
+    internal bool HasReverseMaterializedPair<TLeft, TRight>(
+        Relation<TLeft, TRight> relation,
+        TLeft left,
+        TRight right)
+        where TLeft : class where TRight : class =>
+        ((RelationRuntimeState<TLeft, TRight>)_relations[relation.Definition]).IsReverseRelated(left, right);
+
+    internal int CaptureRelationPatchEntryCount<TLeft, TRight>(
+        Relation<TLeft, TRight> relation,
+        IReadOnlyCollection<TLeft> lefts,
+        IReadOnlyCollection<TRight> rights)
+        where TLeft : class where TRight : class
+    {
+        var state = _relations[relation.Definition];
+        var patch = state.CaptureTouchedState(lefts.Cast<object>().ToArray(), rights.Cast<object>().ToArray());
+        return state.GetTouchedStateEntryCount(patch);
+    }
+
     public TValue Get<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
         where TSource : class
     {

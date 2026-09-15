@@ -19,7 +19,8 @@ internal interface IRelationRuntimeState
     void RestoreState(object snapshot);
     object CaptureTouchedState(
         IReadOnlyCollection<object> touchedLefts,
-        IReadOnlyCollection<object> touchedRights);
+        IReadOnlyCollection<object> touchedRights,
+        object? previousState = null);
     void RestoreTouchedState(object state);
     int GetTouchedStateEntryCount(object state);
     void ResetDiagnostics();
@@ -92,12 +93,21 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public object CaptureTouchedState(
         IReadOnlyCollection<object> touchedLefts,
-        IReadOnlyCollection<object> touchedRights)
+        IReadOnlyCollection<object> touchedRights,
+        object? previousState = null)
     {
         var lefts = touchedLefts.Cast<TLeft>()
             .ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
         var rights = touchedRights.Cast<TRight>()
             .ToHashSet(ReferenceEqualityComparer<TRight>.Instance);
+        var previous = previousState as TouchedState;
+        if (previous is not null)
+        {
+            lefts.UnionWith(previous.LeftKeys.Keys);
+            lefts.UnionWith(previous.RightsByLeft.Keys);
+            rights.UnionWith(previous.Keys.Keys);
+            rights.UnionWith(previous.LeftsByRight.Keys);
+        }
 
         foreach (var left in lefts.ToArray())
             if (_rightsByLeft.TryGetValue(left, out var related))
@@ -115,6 +125,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
                 lefts.UnionWith(related);
 
         var rightKeys = new HashSet<CompositeKey>();
+        if (previous is not null)
+            rightKeys.UnionWith(previous.Index.Keys);
         foreach (var right in rights)
         {
             if (_keys.TryGetValue(right, out var oldKey))
@@ -123,6 +135,8 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
                 rightKeys.Add(ReadRightKey(plan, right));
         }
         var leftKeys = new HashSet<CompositeKey>();
+        if (previous is not null)
+            leftKeys.UnionWith(previous.LeftIndex.Keys);
         foreach (var left in lefts)
         {
             if (_leftKeys.TryGetValue(left, out var oldKey))
@@ -248,6 +262,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public bool IsRelated(TLeft left, TRight right) =>
         _rightsByLeft.TryGetValue(left, out var rights) && rights.Contains(right);
+
+    public bool IsReverseRelated(TLeft left, TRight right) =>
+        _leftsByRight.TryGetValue(right, out var lefts) && lefts.Contains(left);
 
     public void EnableExactPropagation() => _hasExactPropagation = true;
 

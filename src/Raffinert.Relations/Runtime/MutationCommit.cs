@@ -45,7 +45,7 @@ public sealed partial class RelationRuntime
                 navigationRoots,
                 captureCausalEvidence);
             var postState = capturePostState
-                ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
+                ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots, snapshot)
                 : null;
             return new PreparedMutationExecution(
                 result,
@@ -71,7 +71,8 @@ public sealed partial class RelationRuntime
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
-        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
+        RuntimeStateSnapshot? scopeSource = null)
     {
         var lifecycleSets = lifecycleMutations.Select(mutation => mutation is ObjectAdded added
             ? added.Set
@@ -116,7 +117,10 @@ public sealed partial class RelationRuntime
                         touchedRights.Add(removed.Instance);
                         break;
                 }
-            relationStates.Add(relation, runtimeState.CaptureTouchedState(touchedLefts, touchedRights));
+            object? previousRelationState = null;
+            scopeSource?.Relations.TryGetValue(relation, out previousRelationState);
+            relationStates.Add(relation, runtimeState.CaptureTouchedState(
+                touchedLefts, touchedRights, previousRelationState));
         }
         return new RuntimeStateSnapshot(
         lifecycleSets.ToDictionary(
