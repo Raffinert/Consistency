@@ -1,1 +1,2 @@
 #nullable enable
+Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan?

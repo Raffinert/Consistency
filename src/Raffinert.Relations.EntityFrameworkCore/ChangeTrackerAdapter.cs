@@ -149,7 +149,8 @@ public sealed class RelationUnitOfWork
 
     /// <summary>
     /// Produces a non-binding diagnostic preview without committing or dispatching. A later normal commit
-    /// executes semantics again. Use <see cref="PlanDetailed"/> for durability-sensitive parity. Empty units
+    /// executes semantics again. Use
+    /// <see cref="PlanDetailed(RelationRuntime, RuntimeImpactDetailLevel)"/> for durability-sensitive parity. Empty units
     /// return <see langword="null"/>.
     /// </summary>
     public RuntimeApplyResult? PreviewDetailed(
@@ -166,16 +167,25 @@ public sealed class RelationUnitOfWork
     /// Creates a binding impact plan that can be persisted before database durability and later
     /// committed without rerunning semantic model code. Empty units return <see langword="null"/>.
     /// </summary>
+#pragma warning disable RS0027 // Preserve the shipped optional-parameter overload exactly.
     public PreparedImpactPlan? PlanDetailed(
         RelationRuntime runtime,
         RuntimeImpactDetailLevel detailLevel = RuntimeImpactDetailLevel.Summary)
+        => PlanDetailed(runtime, detailLevel, PlannedInvariantEvaluationMode.None);
+#pragma warning restore RS0027
+
+    public PreparedImpactPlan? PlanDetailed(
+        RelationRuntime runtime,
+        RuntimeImpactDetailLevel detailLevel,
+        PlannedInvariantEvaluationMode invariantEvaluationMode)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (!_isPrepared)
             throw new InvalidOperationException("This unit of work must be prepared before it is planned.");
         if (_plan is not null)
             throw new InvalidOperationException("This unit of work already has a binding impact plan.");
-        return _mutations is null ? null : _plan = runtime.PlanDetailed(_prepared!, detailLevel);
+        return _mutations is null ? null : _plan = runtime.PlanDetailed(
+            _prepared!, detailLevel, invariantEvaluationMode);
     }
 
     /// <summary>Dispatches post-commit policy callbacks.</summary>
