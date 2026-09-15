@@ -1,6 +1,6 @@
 # EF Core consistency
 
-`Raffinert.Relations.EntityFrameworkCore` hosts persistence policy around the core binding-plan protocol.
+`Raffinert.Consistency.EntityFrameworkCore` hosts persistence policy around the core binding-plan protocol.
 Core determines affected dependency consequences; the adapter decides which invariant states block SQL
 and which derived values are persisted as mirrors.
 
@@ -9,7 +9,7 @@ and which derived values are persisted as mirrors.
 Configure the exact object sets, enforced invariants, and persisted mirrors:
 
 ```csharp
-var mappings = new RelationEfCoreMappings()
+var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Enforce(availabilityInvariant)
     .Materialize(availableQuantity, x => x.AvailableQuantity);
@@ -77,4 +77,4 @@ After an EF command failure, deterministic mirror values may remain on the still
 Reload or discard that graph when the operation is abandoned. Planning rollback restores runtime-owned
 state only, not caller-owned domain changes.
 
-See the executable [SQLite consistency sample](../samples/Raffinert.Relations.EntityFrameworkCore.ConsistencySample/Program.cs).
+See the executable [SQLite consistency sample](../samples/Raffinert.Consistency.EntityFrameworkCore.Sample/Program.cs).

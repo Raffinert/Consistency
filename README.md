@@ -1,8 +1,8 @@
-# Raffinert.Relations
+# Raffinert.Consistency
 
 **Incremental consistency for .NET object models.**
 
-Raffinert.Relations lets you declare relationships, derived values, and invariants as expression trees.
+Raffinert.Consistency lets you declare relations, derived values, and invariants as expression trees.
 It analyzes those declarations to build the dependency graph, indexes, reverse navigation, invalidation
 rules, and incremental propagation needed to keep a model consistent as objects change.
 
@@ -19,7 +19,7 @@ flowchart TD
 you declare the relationships and computations once. The runtime determines **what is affected**, **how
 severe the impact is**, and **what work must happen next**.
 
-> You declare domain relationships. Raffinert.Relations derives the consistency machinery.
+> You declare domain relationships. Raffinert.Consistency derives the consistency machinery.
 
 The dependency-free core targets .NET 8 and .NET 10. The EF Core adapter targets .NET 10 / EF Core 10.
 The project is currently experimental and alpha-oriented.
@@ -35,7 +35,7 @@ Consistency logic in rich applications tends to spread:
 
 That works until the domain evolves and one of those paths is forgotten.
 
-Raffinert.Relations makes the dependency graph explicit and executable. The same expressions that define
+Raffinert.Consistency makes the dependency graph explicit and executable. The same expressions that define
 relationships and derived values are analyzed to derive indexes, reverse access paths, change impact, and
 propagation behavior.
 
@@ -67,7 +67,7 @@ The EF Core adapter can reject configured invariant violations before SQL and pe
 of affected derived values:
 
 ```csharp
-var mappings = new RelationEfCoreMappings()
+var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Materialize(availableQuantity, x => x.AvailableQuantity)
     .Enforce(availability);
@@ -78,9 +78,9 @@ await db.SaveChangesConsistentlyAsync(runtime, mappings, cancellationToken: canc
 This stable-key workflow plans first, saves once, then installs the exact runtime plan. It does not load
 missing graph data. See [EF Core consistency](docs/ef-core-consistency.md) for scope, transactions,
 generated keys, and recovery rules, or run the
-[`Raffinert.Relations.EntityFrameworkCore.ConsistencySample`](samples/Raffinert.Relations.EntityFrameworkCore.ConsistencySample).
+[`Raffinert.Consistency.EntityFrameworkCore.Sample`](samples/Raffinert.Consistency.EntityFrameworkCore.Sample).
 
-## What Raffinert.Relations is not
+## What Raffinert.Consistency is not
 
 It is not an ORM, event bus, or general-purpose workflow engine.
 
@@ -93,7 +93,7 @@ of change.**
 Relations are ordinary expression trees:
 
 ```csharp
-var model = new RelationModelBuilder();
+var model = new ConsistencyModelBuilder();
 
 var invoices = model.Objects<InvoiceLine>()
     .Key(x => x.Id);
@@ -115,7 +115,7 @@ runtime.Add(poLines, poLine);
 var related = runtime.Related(candidates, invoice);
 ```
 
-Raffinert.Relations analyzes the predicate and derives hash access paths where it can do so safely.
+Raffinert.Consistency analyzes the predicate and derives hash access paths where it can do so safely.
 Unsupported expressions retain the original compiled predicate and fall back to scanning rather than
 changing semantics.
 
@@ -205,7 +205,7 @@ The application does not need to manually orchestrate every edge in that graph.
 
 A dependency becoming stale is not always the same as becoming unsafe.
 
-Raffinert.Relations distinguishes those cases:
+Raffinert.Consistency distinguishes those cases:
 
 - **Dirty** — the cached value must be recomputed when freshness matters.
 - **Invalid** — the value must not be relied upon before recomputation or revalidation.
@@ -315,7 +315,7 @@ rebuild or reconcile the runtime from durable state rather than retrying the dat
 The EF Core adapter can translate change-tracker state into the same core mutation model.
 
 `SaveChangesAndApply` / `SaveChangesAndApplyAsync` provide the simple ordering case. More advanced
-transaction/outbox workflows can explicitly capture a `RelationUnitOfWork`, then use its prepare, plan,
+transaction/outbox workflows can explicitly capture a `ConsistencyUnitOfWork`, then use its prepare, plan,
 commit, and dispatch phases.
 
 Generated keys are supported, including workflows where final identities become available only after the
@@ -368,7 +368,7 @@ planning, bootstrap/projection, commit safety, and related runtime costs.
 - Collection navigation is explicit through add/remove/reset change records.
 - A prepared mutation is versioned and rejected if the runtime advances before commit.
 - Policy callbacks are dispatched only after runtime-owned state commits.
-- `RelationRuntime` is not thread-safe; callers must externally synchronize mutations and queries.
+- `ConsistencyRuntime` is not thread-safe; callers must externally synchronize mutations and queries.
 
 The detailed edge-case contracts live in the architecture documentation rather than this landing page.
 
@@ -383,6 +383,6 @@ The detailed edge-case contracts live in the architecture documentation rather t
 
 ## Project status
 
-Raffinert.Relations is experimental. The core behavior suite runs on .NET 8 and .NET 10; the EF Core
+Raffinert.Consistency is experimental. The core behavior suite runs on .NET 8 and .NET 10; the EF Core
 integration suite targets .NET 10. CI restores, builds, tests, formats, packs, and validates the public API
 and package metadata. Main-branch CI produces package artifacts but does not publish them automatically.

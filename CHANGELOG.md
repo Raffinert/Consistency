@@ -6,6 +6,8 @@ patch versions remain backward-compatible bug fixes where practical.
 
 ## 0.1.0-alpha.1
 
+- Renamed product/package/namespace from `Raffinert.Relations` to `Raffinert.Consistency` before first
+  publication/stable release. Binary relation concepts retain `Relation*` terminology.
 - Added strict, data-only `DurablePolicyWork` projection for durable repair and immediate-evaluation scheduling.
 - Corrected the binding transactional-outbox guidance, froze the initial shipped Public API baselines, and
   strengthened release-contract preparation without publishing packages.

@@ -16,7 +16,7 @@ Decision: retain range expressions as diagnostic residual metadata and do not ad
 
 A proposal must include all of the following:
 
-1. A reproducible domain-shaped benchmark under `benchmarks/Raffinert.Relations.Benchmarks`.
+1. A reproducible domain-shaped benchmark under `benchmarks/Raffinert.Consistency.Benchmarks`.
 2. Current optimized and forced-scan baselines at realistic and stress-scale cardinalities.
 3. Key-distribution/selectivity data, mutation-to-query ratio, allocation data, and materialization impact.
 4. A clear threshold where the current plan is operationally inadequate, not merely slower in isolation.
@@ -27,7 +27,7 @@ A proposal must include all of the following:
 Run the existing range benchmark with:
 
 ```powershell
-dotnet run -c Release --project benchmarks/Raffinert.Relations.Benchmarks -- `
+dotnet run -c Release --project benchmarks/Raffinert.Consistency.Benchmarks -- `
   --filter *RangePlanningBenchmarks* --job short
 ```
 

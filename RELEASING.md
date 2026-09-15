@@ -19,7 +19,7 @@ Package publication is manual for the alpha series.
 1. Set the same package version in both package projects and update `CHANGELOG.md`.
 2. Review public API approval changes and move the release surface to the shipped baselines. For the first
    release, verify the complete approved surface establishes a non-empty initial shipped baseline.
-3. Run `dotnet restore Raffinert.Relations.sln`.
+3. Run `dotnet restore Raffinert.Consistency.sln`.
 4. Run the Release build, tests, formatting verification, and pack commands used by CI.
 5. Inspect both `.nupkg` files and `.snupkg` symbol packages, including target frameworks, README,
    changelog, license, repository URL/commit metadata, and SourceLink information.

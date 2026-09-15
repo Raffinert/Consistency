@@ -1,6 +1,6 @@
 # Architecture
 
-Raffinert.Relations compiles expression-defined object relationships into a small runtime dependency
+Raffinert.Consistency compiles expression-defined object relationships into a small runtime dependency
 graph. The original expressions remain the semantic authority; access and computation plans are
 conservative optimizations around them.
 
@@ -36,7 +36,7 @@ validate + normalize
 
 Domain objects must already contain their new values. The runtime owns indexes and cached dependency
 state; it does not mutate or roll back the domain model. Preparation is side-effect-free. Commit rejects
-a prepared mutation if another commit advanced `RelationRuntime.Version`.
+a prepared mutation if another commit advanced `ConsistencyRuntime.Version`.
 
 ## Relation propagation and materialization
 
@@ -153,7 +153,7 @@ change. EF reference changes carry the actual tracked old principal when it is u
 when it is not; unavailable history is never represented as a real `null` old value.
 
 If a convenience save completes in the database but runtime synchronization fails, the adapter throws
-`RelationRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
+`ConsistencyRuntimeSynchronizationException` with the unchanged runtime version. This state requires runtime
 reconciliation/rebuild from authoritative data, not a blind database-command retry. A later policy callback
 failure is different: runtime state is already committed and dispatch resumes from the failed action.
 

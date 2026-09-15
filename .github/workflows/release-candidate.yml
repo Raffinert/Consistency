@@ -16,14 +16,15 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-      - run: dotnet restore Raffinert.Relations.sln
-      - run: dotnet build Raffinert.Relations.sln -c Release --no-restore
-      - run: dotnet test tests/Raffinert.Relations.Tests/Raffinert.Relations.Tests.csproj -c Release -f net8.0 --no-build
-      - run: dotnet test tests/Raffinert.Relations.Tests/Raffinert.Relations.Tests.csproj -c Release -f net10.0 --no-build
-      - run: dotnet test tests/Raffinert.Relations.EntityFrameworkCore.Tests/Raffinert.Relations.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
-      - run: dotnet run --project samples/Raffinert.Relations.PurchaseOrderSample/Raffinert.Relations.PurchaseOrderSample.csproj -c Release --no-build
-      - run: dotnet format Raffinert.Relations.sln --no-restore --verify-no-changes
-      - run: dotnet pack Raffinert.Relations.sln -c Release --no-build -o artifacts/packages
+      - run: dotnet restore Raffinert.Consistency.sln
+      - run: dotnet build Raffinert.Consistency.sln -c Release --no-restore
+      - run: dotnet test tests/Raffinert.Consistency.Tests/Raffinert.Consistency.Tests.csproj -c Release -f net8.0 --no-build
+      - run: dotnet test tests/Raffinert.Consistency.Tests/Raffinert.Consistency.Tests.csproj -c Release -f net10.0 --no-build
+      - run: dotnet test tests/Raffinert.Consistency.EntityFrameworkCore.Tests/Raffinert.Consistency.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
+      - run: dotnet run --project samples/Raffinert.Consistency.PurchaseOrderSample/Raffinert.Consistency.PurchaseOrderSample.csproj -c Release --no-build
+      - run: dotnet run --project samples/Raffinert.Consistency.EntityFrameworkCore.Sample/Raffinert.Consistency.EntityFrameworkCore.Sample.csproj -c Release --no-build
+      - run: dotnet format Raffinert.Consistency.sln --no-restore --verify-no-changes
+      - run: dotnet pack Raffinert.Consistency.sln -c Release --no-build -o artifacts/packages
       - name: Validate release version, API baselines, and package payloads
         shell: pwsh
         run: ./eng/VerifyReleaseCandidate.ps1 -PackageDirectory artifacts/packages -RequireEmptyUnshipped

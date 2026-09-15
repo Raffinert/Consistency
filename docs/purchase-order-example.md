@@ -1,6 +1,6 @@
 # Purchase order, goods receipt, and link-validity flow
 
-The compiling [purchase-order sample](../samples/Raffinert.Relations.PurchaseOrderSample/Program.cs)
+The compiling [purchase-order sample](../samples/Raffinert.Consistency.PurchaseOrderSample/Program.cs)
 models the complete business-value chain:
 
 ```text
@@ -30,7 +30,7 @@ Definitions and the source set are named, so `RuntimeApplyResult.GetDurablePolic
 repair requests to data-only identities when moved to an outbox or background queue. Run the executable proof with:
 
 ```powershell
-dotnet run --project samples/Raffinert.Relations.PurchaseOrderSample -c Release
+dotnet run --project samples/Raffinert.Consistency.PurchaseOrderSample -c Release
 ```
 
 For EF Core capture/save/commit/dispatch ordering, see the existing end-to-end adapter tests and

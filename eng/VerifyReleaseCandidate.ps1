@@ -18,12 +18,12 @@ if ([string]::IsNullOrWhiteSpace($expectedVersion)) {
 }
 
 $shippedFiles = @(
-    'src/Raffinert.Relations/PublicAPI.Shipped.txt',
-    'src/Raffinert.Relations.EntityFrameworkCore/PublicAPI.Shipped.txt'
+    'src/Raffinert.Consistency/PublicAPI.Shipped.txt',
+    'src/Raffinert.Consistency.EntityFrameworkCore/PublicAPI.Shipped.txt'
 )
 $unshippedFiles = @(
-    'src/Raffinert.Relations/PublicAPI.Unshipped.txt',
-    'src/Raffinert.Relations.EntityFrameworkCore/PublicAPI.Unshipped.txt'
+    'src/Raffinert.Consistency/PublicAPI.Unshipped.txt',
+    'src/Raffinert.Consistency.EntityFrameworkCore/PublicAPI.Unshipped.txt'
 )
 
 foreach ($relativePath in $shippedFiles) {
@@ -86,15 +86,15 @@ foreach ($package in $packages) {
     }
 }
 
-$coreId = 'Raffinert.Relations'
-$efId = 'Raffinert.Relations.EntityFrameworkCore'
+$coreId = 'Raffinert.Consistency'
+$efId = 'Raffinert.Consistency.EntityFrameworkCore'
 if (-not $inspected.ContainsKey($coreId) -or -not $inspected.ContainsKey($efId)) {
     throw 'Expected core and EntityFrameworkCore package IDs.'
 }
-foreach ($asset in @('lib/net8.0/Raffinert.Relations.dll', 'lib/net10.0/Raffinert.Relations.dll')) {
+foreach ($asset in @('lib/net8.0/Raffinert.Consistency.dll', 'lib/net10.0/Raffinert.Consistency.dll')) {
     if ($inspected[$coreId].Entries -notcontains $asset) { throw "$coreId has no $asset asset." }
 }
-$efAsset = 'lib/net10.0/Raffinert.Relations.EntityFrameworkCore.dll'
+$efAsset = 'lib/net10.0/Raffinert.Consistency.EntityFrameworkCore.dll'
 if ($inspected[$efId].Entries -notcontains $efAsset) { throw "$efId has no $efAsset asset." }
 
 $coreDependency = @($inspected[$efId].Metadata.dependencies.group.dependency |
