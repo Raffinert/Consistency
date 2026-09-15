@@ -21,7 +21,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.Entit
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.PurchaseOrderSample", "samples\Raffinert.Consistency.PurchaseOrderSample\Raffinert.Consistency.PurchaseOrderSample.csproj", "{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.OrderFulfillmentSample", "samples\Raffinert.Consistency.OrderFulfillmentSample\Raffinert.Consistency.OrderFulfillmentSample.csproj", "{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.EntityFrameworkCore.Sample", "samples\Raffinert.Consistency.EntityFrameworkCore.Sample\Raffinert.Consistency.EntityFrameworkCore.Sample.csproj", "{B779839E-33A9-4CB9-A12F-10459494C964}"
 EndProject

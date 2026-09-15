@@ -29,8 +29,8 @@ jobs:
         run: dotnet test tests/Raffinert.Consistency.Tests/Raffinert.Consistency.Tests.csproj -c Release -f net10.0 --no-build
       - name: Test EF Core adapter (.NET 10)
         run: dotnet test tests/Raffinert.Consistency.EntityFrameworkCore.Tests/Raffinert.Consistency.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
-      - name: Run procurement dogfood scenarios
-        run: dotnet run --project samples/Raffinert.Consistency.PurchaseOrderSample/Raffinert.Consistency.PurchaseOrderSample.csproj -c Release --no-build
+      - name: Run order fulfillment dogfood scenarios
+        run: dotnet run --project samples/Raffinert.Consistency.OrderFulfillmentSample/Raffinert.Consistency.OrderFulfillmentSample.csproj -c Release --no-build
       - name: Run EF Core consistency sample
         run: dotnet run --project samples/Raffinert.Consistency.EntityFrameworkCore.Sample/Raffinert.Consistency.EntityFrameworkCore.Sample.csproj -c Release --no-build
       - name: Verify formatting
