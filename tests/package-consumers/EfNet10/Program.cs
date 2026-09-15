@@ -5,13 +5,18 @@ using Raffinert.Relations.EntityFrameworkCore;
 
 var model = new RelationModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);
-var runtime = model.Build().CreateRuntime();
+var doubled = model.Derived(values).Compute(value => value.Amount * 2).Named("doubled");
+model.Invariant(values).Using(doubled).Must((_, amount) => amount <= 6)
+    .ScheduleRepairWith(_ => { }).Named("repair");
 await using var connection = new SqliteConnection("Data Source=:memory:");
 await connection.OpenAsync();
 await using var context = new ConsumerContext(connection);
 await context.Database.EnsureCreatedAsync();
-var value = new Value();
+var value = new Value { Amount = 3 };
 context.Add(value);
+await context.SaveChangesAsync();
+var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
+value.Amount = 4;
 var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
     context.ChangeTracker, new RelationUnitOfWorkMappings().Map(values));
 unit.Prepare(runtime);
@@ -23,13 +28,18 @@ await context.SaveChangesAsync();
 var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
 if (plan is null)
     return 1;
-context.Outbox.Add(new OutboxRow { Payload = $"origins:{plan.Result.MutationOrigins.Count}" });
+var durable = plan.Result.GetDurablePolicyWork().RepairRequests.Single();
+context.Outbox.Add(new OutboxRow
+{
+    Payload = $"{durable.DefinitionKey}:{durable.Source.KeyParts.Single().Value}:{durable.Reason}"
+});
 await context.SaveChangesAsync();
 
 await transaction.CommitAsync();
 unit.Commit(runtime);
 unit.Dispatch(runtime);
-return plan.IsCommitted && context.Outbox.Single().Payload == "origins:1" && runtime.Version == 1 ? 0 : 1;
+return plan.IsCommitted &&
+    context.Outbox.Single().Payload == $"repair:{value.Id:D}:Invalid" && runtime.Version == 1 ? 0 : 1;
 
 internal sealed class ConsumerContext(SqliteConnection connection) : DbContext
 {
@@ -42,6 +52,7 @@ internal sealed class ConsumerContext(SqliteConnection connection) : DbContext
 internal sealed class Value
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public int Amount { get; set; }
 }
 
 internal sealed class OutboxRow
