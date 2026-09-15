@@ -178,6 +178,13 @@ public sealed class RelationUnitOfWork
         RelationRuntime runtime,
         RuntimeImpactDetailLevel detailLevel,
         PlannedInvariantEvaluationMode invariantEvaluationMode)
+        => PlanDetailed(runtime, detailLevel, invariantEvaluationMode, PlannedDerivedEvaluationMode.None);
+
+    public PreparedImpactPlan? PlanDetailed(
+        RelationRuntime runtime,
+        RuntimeImpactDetailLevel detailLevel,
+        PlannedInvariantEvaluationMode invariantEvaluationMode,
+        PlannedDerivedEvaluationMode derivedEvaluationMode)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         if (!_isPrepared)
@@ -185,7 +192,7 @@ public sealed class RelationUnitOfWork
         if (_plan is not null)
             throw new InvalidOperationException("This unit of work already has a binding impact plan.");
         return _mutations is null ? null : _plan = runtime.PlanDetailed(
-            _prepared!, detailLevel, invariantEvaluationMode);
+            _prepared!, detailLevel, invariantEvaluationMode, derivedEvaluationMode);
     }
 
     /// <summary>Dispatches post-commit policy callbacks.</summary>
