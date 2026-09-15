@@ -51,6 +51,9 @@ public sealed class RelationEfCoreMappings
         foreach (var mapping in _materializations)
         {
             _ = runtime.GetDerivedId(mapping.Definition);
+            var usage = runtime.GetMemberUsage(mapping.Definition.SourceSet, mapping.Property);
+            if (usage != RelationRuntime.ModelMemberUsageKind.None)
+                throw new InvalidOperationException($"Materialized mirrors are sink-only and cannot feed the Relations graph ({usage}).");
             var entity = context.Model.FindEntityType(mapping.Definition.SourceSet.ObjectType)
                 ?? throw new InvalidOperationException("The materialized source type is not mapped by EF Core.");
             var property = entity.FindProperty(mapping.Property)
@@ -59,9 +62,6 @@ public sealed class RelationEfCoreMappings
                 throw new InvalidOperationException("A key property cannot be a materialized mirror.");
             if (property.ValueGenerated != ValueGenerated.Never)
                 throw new InvalidOperationException("A store-generated property cannot be a materialized mirror.");
-            var usage = runtime.GetMemberUsage(mapping.Definition.SourceSet, mapping.Property);
-            if (usage != RelationRuntime.ModelMemberUsageKind.None)
-                throw new InvalidOperationException($"Materialized mirrors are sink-only and cannot feed the Relations graph ({usage}).");
         }
         return ids;
     }

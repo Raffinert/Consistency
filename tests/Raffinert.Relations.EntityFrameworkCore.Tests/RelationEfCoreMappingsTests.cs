@@ -66,8 +66,61 @@ public sealed class RelationEfCoreMappingsTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
 
-        Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
+        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
             new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        Assert.Contains("DerivedDependency", error.Message);
+    }
+
+    [Fact]
+    public void Materialize_rejects_relation_predicate_member()
+    {
+        using var context = new MappingContext(); var entity = Seed(context);
+        var related = new RelatedEntity { Id = 1, Value = 0 }; context.Add(related); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var relatedObjects = model.Objects<RelatedEntity>().Key(x => x.Id);
+        model.Relation(objects, relatedObjects).Where((left, right) => left.Mirror == right.Value);
+        var value = model.Derived(objects).Compute(x => x.Input);
+        var runtime = model.Build().CreateRuntime(seed => { seed.Add(objects, [entity]); seed.Add(relatedObjects, [related]); });
+        entity.Input = 2;
+
+        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        Assert.Contains("RelationDependency", error.Message);
+    }
+
+    [Fact]
+    public void Materialize_rejects_invariant_dependency_member()
+    {
+        using var context = new MappingContext(); var entity = Seed(context);
+        var model = new RelationModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var value = model.Derived(objects).Compute(x => x.Input);
+        model.Invariant(objects).Using(value).Must((source, current) => source.Mirror <= current);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 2;
+
+        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        Assert.Contains("InvariantDependency", error.Message);
+    }
+
+    [Fact]
+    public void Materialize_rejects_projected_selector_member()
+    {
+        using var context = new MappingContext();
+        var target = new ProjectionTarget { Id = 1, Value = 1 };
+        var link = new ProjectionLink { Id = 1, Target = target };
+        context.Add(link); context.SaveChanges();
+        var model = new RelationModelBuilder(); var links = model.Objects<ProjectionLink>().Key(x => x.Id);
+        var targets = model.Objects<ProjectionTarget>().Key(x => x.Id);
+        var upstream = model.Derived(targets).Compute(x => x.Value);
+        model.Derived(links).Using(x => x.Target, upstream).Compute((_, value) => value);
+        var mirror = model.Derived(links).Compute(_ => target).AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime(seed => { seed.Add(links, [link]); seed.Add(targets, [target]); });
+        target.Value = 2;
+
+        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(links).Materialize(mirror, x => x.Target)));
+        Assert.Contains("ProjectedSelector", error.Message);
     }
 
     [Fact]
@@ -112,6 +165,8 @@ public sealed class RelationEfCoreMappingsTests
             model.Entity<MappingEntity>().HasAlternateKey(x => x.Alternate);
             model.Entity<MappingEntity>().Property(x => x.Generated).ValueGeneratedOnAdd();
             model.Entity<MappingEntity>().Ignore(x => x.Unmapped);
+            model.Entity<RelatedEntity>();
+            model.Entity<ProjectionLink>().HasOne(x => x.Target).WithMany();
         }
     }
 
@@ -124,5 +179,23 @@ public sealed class RelationEfCoreMappingsTests
         public int Mirror { get; set; }
         public int OtherMirror { get; set; }
         public int Unmapped { get; set; }
+    }
+
+    private sealed class RelatedEntity
+    {
+        public int Id { get; set; }
+        public int Value { get; set; }
+    }
+
+    private sealed class ProjectionLink
+    {
+        public int Id { get; set; }
+        public ProjectionTarget Target { get; set; } = null!;
+    }
+
+    private sealed class ProjectionTarget
+    {
+        public int Id { get; set; }
+        public int Value { get; set; }
     }
 }
