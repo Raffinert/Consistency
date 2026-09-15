@@ -1,22 +1,28 @@
 # First-alpha release-candidate verification
 
-Verification date: 2026-09-14  
-Verified implementation head before documentation: `fbc3fb0`
+Verification date: 2026-09-15  
+Verified implementation head before documentation: `de1f6ba6bfcb40fe3626354601d127f176414dd0`
 
 Local release-style verification completed successfully:
 
 - Release solution build: passed with zero warnings and errors.
-- Core tests on .NET 8: 210 passed.
-- Core tests on .NET 10: 210 passed.
-- EF Core and SQLite tests on .NET 10: 27 passed.
+- Core tests on .NET 8: 243 passed.
+- Core tests on .NET 10: 243 passed.
+- EF Core and SQLite tests on .NET 10: 29 passed.
 - `dotnet format --verify-no-changes`: passed (workspace loader emitted its existing informational warning).
 - Core and EF packages plus symbol packages: created successfully.
 - Fresh-cache packed consumers for CoreNet8, CoreNet10, and EfNet10: passed.
 - No package publication, release, or tag was performed.
 
-The manual GitHub Actions release-candidate workflow was not dispatched from this environment because the
-GitHub CLI (`gh`) is not installed. Its `workflow_dispatch` definition remains the authoritative remote RC gate and
-must be run before publication. This document does not claim that remote workflow has passed.
+The manual GitHub Actions release-candidate workflow completed successfully:
+
+- Run: [34937013974](https://github.com/Raffinert/Relations/actions/runs/34937013974)
+- Result: success (2026-09-15 06:27:30–06:32:12 UTC).
+- Verified head: `de1f6ba6bfcb40fe3626354601d127f176414dd0`.
+- Artifact: `release-candidate-packages` (artifact ID `10383273956`).
+- Remote restore, Release build, both core test targets, SQLite tests, formatting, package creation,
+  package-payload validation, clean package-consumer smoke tests, and artifact upload all passed.
+- The artifact was not published, and no release or tag was created.
 
 The current alpha contract distinguishes non-binding `PreviewDetailed` from binding `PlanDetailed`.
 Durability-sensitive integrations persist data from `PreparedImpactPlan.Result`, commit the database, then

@@ -1,6 +1,6 @@
 # Roadmaps
 
-- Active implementation plan: [Tasks 73–79 — weaker-model final alpha v3](../codex-plan-weaker-model-final-alpha-v3.md)
+- Completed weaker-model final alpha v3 plan: [Tasks 73–79](../codex-plan-weaker-model-final-alpha-v3.md)
 - Partially implemented mechanical alpha-finish wave with remaining acceptance gaps superseded by the active plan: [Tasks 67–72](../codex-plan-mechanical-alpha-finish.md)
 - Partially implemented final-alpha proof wave with remaining acceptance gaps superseded by later plans: [Tasks 61–66](../codex-plan-final-alpha-proof-causal-patches-and-rc.md)
 - Partially implemented alpha-proof/journaling wave with remaining acceptance gaps superseded by later plans: [Tasks 55–60](../codex-plan-alpha-proof-causal-journaling-and-outbox.md)
@@ -13,5 +13,5 @@
 - Architecture review: [post-safety-hardening review](../architecture-review-after-safety-hardening.md)
 - `archive/`: historical context only; these files are not current instructions.
 
-The active plan is the implementation source of truth. Preserve completed/implemented plans and the archive
-when researching why earlier design decisions were made; use `docs/architecture.md` for current runtime contracts.
+Preserve completed/implemented plans and the archive when researching why earlier design decisions were made;
+use `docs/architecture.md` for current runtime contracts.
