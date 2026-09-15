@@ -146,6 +146,23 @@ public sealed class EndToEndDomainTests
         Assert.Equal(2m, context.GoodsReceipts.AsNoTracking().Single().Quantity);
     }
 
+    [Fact]
+    public void Ef_unit_of_work_forwards_derived_evaluation_mode()
+    {
+        var scenario = BuildScenario([]); var line = new PurchaseLine { Id = Guid.NewGuid(), OrderNumber = "PO", ItemNumber = "A", OrderedQuantity = 5 };
+        var receipt = new GoodsReceipt { Id = Guid.NewGuid(), OrderNumber = "PO", ItemNumber = "A", Quantity = 2 };
+        using var context = new PurchasingContext(); context.AddRange(line, receipt); context.SaveChanges();
+        var runtime = scenario.Model.CreateRuntime(seed => { seed.Add(scenario.Lines, [line]); seed.Add(scenario.Receipts, [receipt]); });
+        receipt.Quantity = 3;
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
+            new RelationUnitOfWorkMappings().Map(scenario.Lines).Map(scenario.Receipts));
+        unit.Prepare(runtime);
+        var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Summary,
+            PlannedInvariantEvaluationMode.Affected, PlannedDerivedEvaluationMode.Affected)!;
+        Assert.Contains(plan.DerivedEvaluations, value => ReferenceEquals(value.Source, line) && Equals(value.Value, 3m));
+        Assert.NotEmpty(plan.InvariantEvaluations);
+    }
+
     private static Scenario BuildScenario(List<PurchaseLine> repairs)
     {
         var model = new RelationModelBuilder();
