@@ -32,7 +32,7 @@ internal sealed class LinkedGoodsReceipt
 {
     public Guid Id { get; init; } = Guid.NewGuid(); public Guid PurchaseOrderInvoiceLineId { get; init; }
     public required PurchaseOrderInvoiceLine PurchaseOrderInvoiceLine { get; init; }
-    public long GoodsReceiptId { get; init; }
+    public long GoodsReceiptId { get; set; }
     public decimal Quantity { get; set; }
     public bool IsDeleted { get; set; }
 }
