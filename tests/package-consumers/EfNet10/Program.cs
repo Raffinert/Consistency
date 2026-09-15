@@ -16,7 +16,7 @@ var value = new Value { Amount = 3 };
 context.Add(value);
 await context.SaveChangesAsync();
 var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
-value.Amount = 4;
+value.Amount = 2;
 var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
     context.ChangeTracker, new RelationUnitOfWorkMappings().Map(values));
 unit.Prepare(runtime);
@@ -25,21 +25,17 @@ await using var transaction = await context.Database.BeginTransactionAsync();
 await context.SaveChangesAsync();
 
 // PreviewDetailed is a non-binding diagnostic. PlanDetailed is the binding outbox contract.
-var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+    PlannedInvariantEvaluationMode.Affected);
 if (plan is null)
     return 1;
-var durable = plan.Result.GetDurablePolicyWork().RepairRequests.Single();
-context.Outbox.Add(new OutboxRow
-{
-    Payload = $"{durable.DefinitionKey}:{durable.Source.KeyParts.Single().Value}:{durable.Reason}"
-});
-await context.SaveChangesAsync();
+if (plan.HasInvariantViolations || plan.InvariantEvaluations.Single().State != InvariantEvaluationState.Valid)
+    return 1;
 
 await transaction.CommitAsync();
 unit.Commit(runtime);
 unit.Dispatch(runtime);
-return plan.IsCommitted &&
-    context.Outbox.Single().Payload == $"repair:{value.Id:D}:Invalid" && runtime.Version == 1 ? 0 : 1;
+return plan.IsCommitted && runtime.Version == 1 ? 0 : 1;
 
 internal sealed class ConsumerContext(SqliteConnection connection) : DbContext
 {

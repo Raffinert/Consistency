@@ -19,14 +19,10 @@ if (runtime.Get(projected, link) != 6) return 1;
 value.Amount = 4;
 var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
     values, value, item => item.Amount, 3, 4)));
-var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
-var durable = plan.Result.GetDurablePolicyWork().RepairRequests.Single();
-var result = runtime.Commit(plan);
-runtime.Dispatch(prepared);
-return runtime.Version == 1 && result.DetailLevel == RuntimeImpactDetailLevel.Causal &&
-    durable.DefinitionKey == "repair" && durable.Source.ObjectSetKey == "values" &&
-    durable.Source.KeyParts.Single().Value == value.Id.ToString("D") &&
-    durable.Reason == DependencySeverity.Invalid && runtime.Get(doubled, value) == 8 ? 0 : 1;
+var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal,
+    PlannedInvariantEvaluationMode.Affected);
+return plan.HasInvariantViolations && plan.InvariantEvaluations.Single().State == InvariantEvaluationState.Violated &&
+    runtime.Version == 0 ? 0 : 1;
 
 internal sealed class Value
 {

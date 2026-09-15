@@ -7,17 +7,15 @@ model.Invariant(values).Using(doubled).Must((_, amount) => amount <= 6)
     .ScheduleRepairWith(_ => { }).Named("repair");
 var value = new Value { Amount = 3 };
 var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
-value.Amount = 4;
+value.Amount = 2;
 var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
-    values, value, item => item.Amount, 3, 4)));
-var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
-var durable = plan.Result.GetDurablePolicyWork().RepairRequests.Single();
+    values, value, item => item.Amount, 3, 2)));
+var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal,
+    PlannedInvariantEvaluationMode.Affected);
 var result = runtime.Commit(plan);
 runtime.Dispatch(prepared);
-return runtime.Version == 1 && result.DetailLevel == RuntimeImpactDetailLevel.Causal &&
-    durable.DefinitionKey == "repair" && durable.Source.ObjectSetKey == "values" &&
-    durable.Source.KeyParts.Single().Value == value.Id.ToString("D") &&
-    durable.Reason == DependencySeverity.Invalid && runtime.Get(doubled, value) == 8 ? 0 : 1;
+return !plan.HasInvariantViolations && plan.InvariantEvaluations.Single().State == InvariantEvaluationState.Valid &&
+    runtime.Version == 1 && result.DetailLevel == RuntimeImpactDetailLevel.Causal && runtime.Get(doubled, value) == 4 ? 0 : 1;
 
 internal sealed class Value
 {
