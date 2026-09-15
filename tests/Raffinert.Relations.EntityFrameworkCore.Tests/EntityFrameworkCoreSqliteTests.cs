@@ -214,7 +214,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
-    public void Multiple_store_generated_additions_can_be_prepared_and_planned_after_save()
+    public void Two_generated_entities_and_two_outbox_rows_use_only_plan_result_durable_identities()
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
@@ -415,6 +415,108 @@ public sealed class EntityFrameworkCoreSqliteTests
 
         Assert.Equal(1, runtime.Version);
         Assert.Equal($"code:{entity.Id:D}", context.Outbox.Single().Payload);
+    }
+
+    [Fact]
+    public void Database_commit_succeeds_then_runtime_plan_install_failure_requires_runtime_rebuild()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
+        var code = model.Derived(objects).Compute(entity => entity.Code).Named("code");
+        var compiled = model.Build();
+        var runtime = compiled.CreateRuntime();
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var entity = new GeneratedEntity { Code = "durable" };
+        context.Add(entity);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            unit.Prepare(runtime);
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
+            var identity = plan.Result.MutationOrigins.Single().SourceIdentity?.DurableIdentity
+                ?? throw new InvalidOperationException("Outbox mutation source must have a durable identity.");
+            context.Outbox.Add(new OutboxRecord
+            {
+                Payload = $"added:{identity.KeyParts.Single().Value}"
+            });
+            context.SaveChanges();
+            transaction.Commit();
+        }
+
+        runtime.FailAfterNextForwardPatchApplyForTesting();
+        Assert.Throws<InvalidOperationException>(() => unit.Commit(runtime));
+
+        Assert.Equal(0, runtime.Version);
+        Assert.False(runtime.Remove(objects, entity));
+        using var verification = database.CreateContext();
+        var authoritative = verification.Set<GeneratedEntity>().AsNoTracking().Single();
+        Assert.Equal("durable", authoritative.Code);
+        Assert.Equal($"added:{authoritative.Id}", verification.Outbox.Single().Payload);
+
+        // A durable DB commit cannot be rolled back by runtime code. Recovery rebuilds or reconciles
+        // the runtime from the authoritative database/outbox before accepting more runtime work.
+        var rebuilt = compiled.CreateRuntime(seed => seed.Add(objects, [authoritative]));
+        Assert.Equal(0, rebuilt.Version);
+        Assert.Equal("durable", rebuilt.Get(code, authoritative));
+        Assert.True(rebuilt.Remove(objects, authoritative));
+    }
+
+    [Fact]
+    public void Dispatch_failure_after_database_and_runtime_commit_keeps_outbox_and_allows_dispatch_retry()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
+        context.Add(entity);
+        context.SaveChanges();
+        var failDispatch = true;
+        var dispatchCount = 0;
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
+        var code = model.Derived(objects).Compute(value => value.Code).Named("code");
+        model.Invariant(objects).Using(code)
+            .Must((_, value) => value == "before")
+            .ScheduleRepairWith(_ =>
+            {
+                dispatchCount++;
+                if (failDispatch)
+                    throw new DeliberateRuntimeFailure();
+            });
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        entity.Code = "after";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal)!;
+            context.Outbox.Add(new OutboxRecord { Payload = CreateOutboxPayload(plan.Result) });
+            context.SaveChanges();
+            transaction.Commit();
+        }
+        unit.Commit(runtime);
+
+        Assert.Throws<DeliberateRuntimeFailure>(() => unit.Dispatch(runtime));
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(1, dispatchCount);
+        using (var verification = database.CreateContext())
+        {
+            Assert.Equal("after", verification.Set<UniqueEntity>().Single().Code);
+            Assert.Equal($"code:{entity.Id:D}", verification.Outbox.Single().Payload);
+        }
+
+        failDispatch = false;
+        unit.Dispatch(runtime);
+
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(2, dispatchCount);
+        Assert.Single(context.Outbox);
     }
 
     private static string CreateOutboxPayload(RuntimeApplyResult result)
