@@ -52,8 +52,33 @@ public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException 
         : base($"Added entity '{entityType.Name}' uses store-generated Relations key '{propertyName}'; use the manual ConsistencyUnitOfWork workflow after the key is generated.") { }
 }
 
+public sealed class ConsistencyStoreGeneratedKeyNotReadyException : Exception
+{
+    internal ConsistencyStoreGeneratedKeyNotReadyException(Type entityType, string propertyName)
+        : base($"Added entity '{entityType.Name}' uses store-generated consistency key '{propertyName}' that is not final yet. " +
+            "Save inside the current database transaction to obtain final generated values before calling PrepareAndPlan().") { }
+}
+
 public static class ConsistencyDbContextExtensions
 {
+    public static ConsistencyPersistenceUnitOfWork CaptureConsistencyUnitOfWork(
+        this DbContext context,
+        ConsistencyRuntime runtime,
+        ConsistencyEfCoreMappings mappings,
+        ConsistencySaveOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(mappings);
+        context.ChangeTracker.DetectChanges();
+        var snapshot = ConsistencyPersistencePolicyEngine.CaptureAndValidate(
+            context, runtime, mappings, options ?? new());
+        var generatedKeys = ConsistencyGeneratedKeyGuard.CaptureCandidates(
+            context, mappings.UnitOfWorkMappings);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        return new ConsistencyPersistenceUnitOfWork(context, runtime, unit, snapshot, generatedKeys);
+    }
+
     public static int SaveChangesConsistently(this DbContext context, ConsistencyRuntime runtime,
         ConsistencyEfCoreMappings mappings, ConsistencySaveOptions? options = null)
     {
@@ -95,85 +120,10 @@ internal static class ConsistencyCoordinator
         if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
             throw new ConsistencyUnsupportedTransactionException();
         context.ChangeTracker.DetectChanges();
-        RejectStoreGeneratedRelationKeys(context, mappings.UnitOfWorkMappings);
-        var enforced = mappings.Validate(context, runtime);
-        var scopeGaps = mappings.GetScopeGaps(runtime, options.Scope, options.SaveBehavior);
-        if (scopeGaps.Count > 0) throw new IncompleteConsistencyScopeException(scopeGaps);
+        ConsistencyGeneratedKeyGuard.RejectForConvenienceSave(context, mappings.UnitOfWorkMappings);
+        var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
-        unit.Prepare(runtime);
-        var plan = unit.PlanDetailed(runtime, options.DetailLevel,
-            mappings.HasEnforced ? PlannedInvariantEvaluationMode.Affected : PlannedInvariantEvaluationMode.None,
-            options.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate && mappings.HasMaterializations
-                ? PlannedDerivedEvaluationMode.Affected : PlannedDerivedEvaluationMode.None);
-        if (plan is not null)
-        {
-            var violations = plan.InvariantEvaluations.Where(x => enforced.Contains(x.InvariantId) &&
-                x.State == InvariantEvaluationState.Violated).ToArray();
-            if (violations.Length > 0) throw new ConsistencyInvariantViolationException(violations);
-            if (options.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
-                ApplyMaterializations(context, runtime, mappings, plan);
-        }
-        context.ChangeTracker.DetectChanges();
+        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);
         return new PendingConsistencySave(unit, plan);
-    }
-
-    private static void RejectStoreGeneratedRelationKeys(DbContext context, ConsistencyUnitOfWorkMappings mappings)
-    {
-        foreach (var entry in context.ChangeTracker.Entries().Where(x => x.State == EntityState.Added))
-        {
-            var mapping = mappings.Resolve(entry);
-            if (mapping is null) continue;
-            foreach (var member in mapping.KeyMembers)
-            {
-                var property = entry.Metadata.FindProperty(member);
-                if (property is null) continue;
-                var propertyEntry = entry.Property(property.Name);
-                var value = propertyEntry.CurrentValue;
-                var defaultValue = property.ClrType.IsValueType ? Activator.CreateInstance(property.ClrType) : null;
-                if (propertyEntry.IsTemporary ||
-                    (property.ValueGenerated != Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never &&
-                     Equals(value, defaultValue)))
-                    throw new ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(entry.Metadata.ClrType, property.Name);
-            }
-        }
-    }
-
-    private static void ApplyMaterializations(DbContext context, ConsistencyRuntime runtime,
-        ConsistencyEfCoreMappings mappings, PreparedImpactPlan plan)
-    {
-        var applied = new Stack<(Microsoft.EntityFrameworkCore.ChangeTracking.PropertyEntry Entry,
-            System.Reflection.PropertyInfo Property, object Source, object? Value, bool Modified)>();
-        try
-        {
-            foreach (var mapping in mappings.Materializations)
-            {
-                var id = runtime.GetDerivedId(mapping.Definition);
-                foreach (var evaluation in plan.DerivedEvaluations.Where(x => x.DerivedId == id))
-                {
-                    if (evaluation.State != DerivedValueState.Fresh) continue;
-                    var entry = context.ChangeTracker.Entries().SingleOrDefault(x => ReferenceEquals(x.Entity, evaluation.Source));
-                    if (entry is null || entry.State == EntityState.Detached)
-                        throw new ConsistencyMaterializationSourceNotTrackedException();
-                    var property = entry.Property(mapping.Property.Name);
-                    var comparer = property.Metadata.GetValueComparer();
-                    if (comparer?.Equals(property.CurrentValue, evaluation.Value) ?? Equals(property.CurrentValue, evaluation.Value))
-                        continue;
-                    applied.Push((property, mapping.Property, evaluation.Source, property.CurrentValue, property.IsModified));
-                    mapping.Property.SetValue(evaluation.Source, evaluation.Value);
-                    property.IsModified = true;
-                }
-            }
-        }
-        catch (Exception error)
-        {
-            while (applied.TryPop(out var write))
-            {
-                write.Property.SetValue(write.Source, write.Value);
-                write.Entry.IsModified = write.Modified;
-            }
-            if (error is System.Reflection.TargetInvocationException { InnerException: { } inner })
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
-            throw;
-        }
     }
 }

@@ -30,6 +30,12 @@ override Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveChangesInterce
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyDbContextExtensions
 static Raffinert.Consistency.EntityFrameworkCore.ConsistencyDbContextExtensions.SaveChangesConsistently(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions? options = null) -> int
 static Raffinert.Consistency.EntityFrameworkCore.ConsistencyDbContextExtensions.SaveChangesConsistentlyAsync(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+static Raffinert.Consistency.EntityFrameworkCore.ConsistencyDbContextExtensions.CaptureConsistencyUnitOfWork(this Microsoft.EntityFrameworkCore.DbContext! context, Raffinert.Consistency.ConsistencyRuntime! runtime, Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions? options = null) -> Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork!
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork.CommitAfterDatabaseCommit() -> Raffinert.Consistency.ChangeImpact?
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork.Dispatch() -> void
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork.HasChanges.get -> bool
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyPersistenceUnitOfWork.PrepareAndPlan() -> Raffinert.Consistency.PreparedImpactPlan?
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.DetailLevel.get -> Raffinert.Consistency.RuntimeImpactDetailLevel
 Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions.DetailLevel.init -> void
@@ -47,6 +53,7 @@ Raffinert.Consistency.EntityFrameworkCore.ConsistencyInvariantViolationException
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyInvariantViolationException.Violations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.PlannedInvariantEvaluation!>!
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyMaterializationSourceNotTrackedException
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyStoreGeneratedKeyRequiresManualWorkflowException
+Raffinert.Consistency.EntityFrameworkCore.ConsistencyStoreGeneratedKeyNotReadyException
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyUnsupportedTransactionException
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings
 Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings.Enforce<TSource>(Raffinert.Consistency.Invariant<TSource!>! invariant) -> Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings!
