@@ -1,5 +1,6 @@
 # Roadmaps
 
+- Active implementation plan: [Tasks 100–108 — EF Core consistency guard and derived materialization](../codex-plan-ef-core-consistency-guard-and-materialization.md)
 - Completed pre-commit guard proof wave: [Tasks 94–99](../codex-plan-precommit-guard-proof-completion.md)
 - Completed pre-commit guard dogfood wave: [Tasks 87–93](../codex-plan-dogfood-precommit-guard-validation.md)
 - Completed post-alpha production integration plan: [Tasks 80–86 — durable policy work and release baseline](../codex-plan-post-alpha-production-integration-v1.md)
