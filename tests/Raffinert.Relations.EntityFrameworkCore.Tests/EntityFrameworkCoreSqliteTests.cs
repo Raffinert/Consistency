@@ -733,6 +733,26 @@ public sealed class EntityFrameworkCoreSqliteTests
         public bool IsValid(string value) { Calls++; return value.Length > 0; }
     }
 
+    [Fact]
+    public void Consistent_save_rejects_enforced_violation_and_materializes_valid_value()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 2, Mirror = 4 };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var invariant = model.Invariant(objects).Using(doubled).Must((_, value) => value <= 10);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror).Enforce(invariant);
+        entity.Input = 20;
+        Assert.Throws<RelationInvariantViolationException>(() => context.SaveChangesConsistently(runtime, mappings));
+        Assert.Equal(0, runtime.Version); Assert.Equal(4, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
+        entity.Input = 5;
+        context.SaveChangesConsistently(runtime, mappings);
+        Assert.Equal(1, runtime.Version); Assert.Equal(10, entity.Mirror);
+        Assert.Equal(10, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -761,6 +781,7 @@ public sealed class EntityFrameworkCoreSqliteTests
             model.Entity<GeneratedEntity>();
             model.Entity<ConcurrencyEntity>().Property(entity => entity.Version).IsConcurrencyToken();
             model.Entity<OutboxRecord>().HasIndex(entity => entity.Payload).IsUnique();
+            model.Entity<MirrorEntity>();
             model.Entity<CascadeChild>().HasOne(entity => entity.Parent).WithMany(entity => entity.Children)
                 .HasForeignKey(entity => entity.ParentId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<OwnedOwner>().OwnsOne(entity => entity.Settings);
@@ -807,6 +828,13 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         public long Id { get; set; }
         public string Payload { get; set; } = "";
+    }
+
+    private sealed class MirrorEntity
+    {
+        public Guid Id { get; init; }
+        public int Input { get; set; }
+        public int Mirror { get; set; }
     }
 
     private sealed class CascadeParent
