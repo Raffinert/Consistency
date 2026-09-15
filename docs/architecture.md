@@ -91,6 +91,12 @@ returns a binding `PreparedImpactPlan`. `plan.Result` is the exact detailed resu
 forward patch. A later `Commit(plan)` installs that patch without rerunning semantic model code. This is the
 required contract for same-database atomic outbox work whose rows depend on exact result parity.
 
+When `PlannedInvariantEvaluationMode.Affected` is requested, affected invariant predicates are evaluated
+while the reversible planned final state is installed. Their evaluation records and resulting cache state
+are captured in the same forward patch. `HasInvariantViolations` can gate external durability, and
+`Commit(plan)` installs the precomputed state without rerunning predicates. Discarding a plan restores only
+runtime-owned state; callers must rollback or reconcile mutated application objects and EF tracking state.
+
 For application-assigned keys, use the binding sequence:
 
 ```csharp

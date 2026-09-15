@@ -2,11 +2,15 @@
 
 The sample now represents four production guard semantics as named Raffinert relations and derived values: deleted invoice/active-POIL integrity, POIL/LGR quantity balance, POLGR quantity conservation, and composite `(purchase order line, goods receipt)` bookkeeping existence. Scenarios distinguish `Valid`, `Violation`, and `Unknown`, and coordinated changes use one `MutationSet`.
 
+These families are also Boolean invariants over their tri-state results. `Violation` blocks; `Valid` and `Unknown` do not. Binding plans requested with `PlannedInvariantEvaluationMode.Affected` evaluate affected invariant sources in the reversible planned final state, so application and EF integrations can reject a batch before persistence. The evaluations and cache state are bound into the plan, and `Commit(plan)` installs them without rerunning predicates.
+
+Discarding a plan restores Raffinert runtime state, but does not undo changes already made to application objects or an EF change tracker. The caller must rollback, reload, or reconcile that domain state before reusing it.
+
 ## Deliberate gaps
 
 The inspected `GhostMatchingDetectionService` proves two transition proxies: a POIL change requires a modified purchase-order line in no-GRN mode, and an LGR change requires a modified POLGR in GRN mode. The available source contains neither the quantity-adjustment implementation nor a final-state equation connecting POIL quantities to purchase-order-line bookkeeping fields. No synthetic `WasModified` or guessed quantity field was added.
 
-Those rules are therefore not presented as final-state invariants. If production has no stronger equation, Raffinert needs a mutation-batch invariant that can evaluate old/new aggregate deltas and coordinated writes. The same facility should preserve the production net-zero keys: purchase-order line for no-GRN changes and `(purchase-order line, goods receipt)` for GRN changes.
+Those rules are therefore not presented as final-state invariants. The no-GRN proxy nets non-zero POIL add/delete deltas by `PurchaseOrderLineId`, never `InvoiceLineId`. The GRN proxy nets non-zero LGR add/remove deltas by `(PurchaseOrderLineId, GoodsReceiptId)` and exempts zero-quantity LGRs. If production has no stronger equation, a future mutation-batch invariant would need normalized mutation provenance, grouped old/new deltas, and companion mutations. This roadmap deliberately does not add that generic DSL.
 
 ## Framework evidence
 
@@ -14,3 +18,4 @@ Those rules are therefore not presented as final-state invariants. If production
 - Incremental `Sum` and `Count` cover the aggregate rules.
 - Three-valued domain decisions can be declarative derived values, but `Invariant.Must` is Boolean. Treating `Unknown` as success would conflate "not evaluated" with "valid", so the runner reports it explicitly.
 - Runtime impact traces are useful for add/remove scenario evidence, while invariant truth is read from the post-mutation model.
+- Evaluated binding plans close the pre-persistence validation gap for final-state invariants without dispatching callbacks during planning.
