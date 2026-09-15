@@ -634,6 +634,105 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Empty(verification.Set<GeneratedEntity>());
     }
 
+    [Fact]
+    public void Sqlite_violating_evaluated_plan_is_rejected_before_database_durability()
+    {
+        using var database = new SqliteFixture();
+        using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "valid" };
+        context.Add(entity); context.SaveChanges();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Named("stable-entities").Key(x => x.Id);
+        var code = model.Derived(objects).Compute(x => x.Code).Named("stable-code");
+        var repairs = 0;
+        var invariant = model.Invariant(objects).Using(code).Must((_, value) => value != "invalid")
+            .Named("stable-code-invariant").ScheduleRepairWith(_ => repairs++);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        Assert.True(runtime.Evaluate(invariant, entity));
+        entity.Code = "invalid";
+        var mappings = new RelationUnitOfWorkMappings().Map(objects);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+        unit.Prepare(runtime);
+
+        var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+            PlannedInvariantEvaluationMode.Affected)!;
+
+        Assert.True(plan.HasInvariantViolations);
+        Assert.Equal(0, runtime.Version); Assert.Equal(0, repairs);
+        Assert.Equal(InvariantEvaluationState.Valid, runtime.GetState(invariant, entity));
+        using (var verification = database.CreateContext())
+            Assert.Equal("valid", verification.Set<UniqueEntity>().AsNoTracking().Single().Code);
+        Assert.Equal(EntityState.Modified, context.Entry(entity).State);
+        context.Entry(entity).Reload();
+        Assert.Equal("valid", entity.Code);
+    }
+
+    [Fact]
+    public void Sqlite_valid_evaluated_plan_persists_then_installs_exact_runtime_plan()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
+        context.Add(entity); context.SaveChanges();
+        var counter = new EvaluationCounter(); var model = new RelationModelBuilder();
+        var objects = model.Objects<UniqueEntity>().Named("valid-entities").Key(x => x.Id);
+        var code = model.Derived(objects).Compute(x => x.Code);
+        var invariant = model.Invariant(objects).Using(code).Must((_, value) => counter.IsValid(value))
+            .AllowIncompleteDependencies().Named("valid-code-invariant");
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        Assert.True(runtime.Evaluate(invariant, entity)); entity.Code = "after";
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
+            new RelationUnitOfWorkMappings().Map(objects));
+        unit.Prepare(runtime);
+        var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+            PlannedInvariantEvaluationMode.Affected)!;
+        var callsAfterPlan = counter.Calls;
+        Assert.False(plan.HasInvariantViolations); context.SaveChanges();
+        unit.Commit(runtime); unit.Dispatch(runtime);
+        Assert.Equal(callsAfterPlan, counter.Calls); Assert.Equal(1, runtime.Version);
+        Assert.Equal(InvariantEvaluationState.Valid, runtime.GetState(invariant, entity));
+        using var verification = database.CreateContext();
+        Assert.Equal("after", verification.Set<UniqueEntity>().AsNoTracking().Single().Code);
+    }
+
+    [Theory]
+    [InlineData("valid-generated", false)]
+    [InlineData("invalid-generated", true)]
+    public void Generated_key_evaluated_plan_uses_transactional_identity(string code, bool violates)
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Named("generated-guard").Key(x => x.Id);
+        var value = model.Derived(objects).Compute(x => x.Code);
+        var invariant = model.Invariant(objects).Using(value).Must((_, current) => current != "invalid-generated")
+            .Named("generated-guard-invariant");
+        var runtime = model.Build().CreateRuntime(); var entity = new GeneratedEntity { Code = code };
+        context.Add(entity);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
+            new RelationUnitOfWorkMappings().Map(objects));
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges(); Assert.True(entity.Id > 0); unit.Prepare(runtime);
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+                PlannedInvariantEvaluationMode.Affected)!;
+            Assert.Equal(violates, plan.HasInvariantViolations);
+            Assert.Equal(entity.Id, Assert.Single(plan.InvariantEvaluations).SourceIdentity!.SourceKey);
+            Assert.Equal(0, runtime.Version);
+            if (violates) transaction.Rollback(); else transaction.Commit();
+            if (!violates) { unit.Commit(runtime); unit.Dispatch(runtime); }
+        }
+        using var verification = database.CreateContext();
+        Assert.Equal(!violates, verification.Set<GeneratedEntity>().Any(x => x.Id == entity.Id));
+        Assert.Equal(violates ? 0 : 1, runtime.Version);
+        if (violates) Assert.False(runtime.Remove(objects, entity));
+        else Assert.True(runtime.GetState(invariant, entity) == InvariantEvaluationState.Valid);
+    }
+
+    private sealed class EvaluationCounter
+    {
+        public int Calls { get; private set; }
+        public bool IsValid(string value) { Calls++; return value.Length > 0; }
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
