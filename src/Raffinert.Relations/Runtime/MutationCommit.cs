@@ -268,6 +268,40 @@ public sealed partial class RelationRuntime
             prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots);
     }
 
+    internal void ValidatePlanInstallForBenchmark(PreparedImpactPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!ReferenceEquals(plan.Runtime, this))
+            throw new ArgumentException("The impact plan belongs to a different runtime.", nameof(plan));
+        if (plan.IsCommitted)
+            throw new InvalidOperationException("The impact plan has already been committed.");
+        ValidatePreparedMutation(plan.Prepared);
+        plan.Prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(plan.Prepared);
+    }
+
+    internal object CaptureInstallRollbackForBenchmark(PreparedMutation prepared) =>
+        CaptureInstallRollbackJournal(prepared);
+
+    internal void ApplyForwardPatchAndRestoreForBenchmark(PreparedImpactPlan plan, object rollbackJournal)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(rollbackJournal);
+        if (!ReferenceEquals(plan.Runtime, this))
+            throw new ArgumentException("The impact plan belongs to a different runtime.", nameof(plan));
+        if (rollbackJournal is not RuntimeRollbackJournal rollback)
+            throw new ArgumentException("The rollback journal belongs to an incompatible runtime harness.",
+                nameof(rollbackJournal));
+        try
+        {
+            ApplyForwardPatch((RuntimeForwardPatch)plan.ForwardPatch);
+        }
+        finally
+        {
+            RestoreRollbackJournal(rollback);
+        }
+    }
+
     internal int CaptureDependencyPatchEntryCount(PreparedMutation prepared)
     {
         var impact = new ResolvedChangeImpact();

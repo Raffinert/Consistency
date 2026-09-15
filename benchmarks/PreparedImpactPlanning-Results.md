@@ -27,6 +27,28 @@ The 10k/100k fixture has equal-sized relation and navigation populations and ful
 
 The prebuilt-plan timing uses one invocation per iteration and is consequently noisy (BenchmarkDotNet reports the iterations are below its recommended duration). Its allocation result is stable and is the relevant patch-scope signal.
 
+## Repeatable prepared-install components
+
+Measured 2026-09-15 after adding an internal harness that repeatedly exercises the production validation,
+install rollback-journal capture, forward-patch application, and rollback restoration paths. The fixture changes
+one source, keeps the touched relation/dependency bucket constant, and does not commit the plan, increment the
+runtime version, or dispatch callbacks.
+
+| Component | Population | Mean | Allocated |
+|---|---:|---:|---:|
+| Validate prepared plan/domain assumptions | 10k | 34.33 ns | 344 B |
+| Validate prepared plan/domain assumptions | 100k | 37.61 ns | 344 B |
+| Capture install rollback journal | 10k | 4.749 us | 23.45 KB |
+| Capture install rollback journal | 100k | 5.021 us | 23.29 KB |
+| Apply forward patch + restore rollback journal | 10k | 0.915 us | 2.64 KB |
+| Apply forward patch + restore rollback journal | 100k | 1.045 us | 2.64 KB |
+
+These repeatable components are approximately population-independent: the 100k means are 1.10x, 1.06x, and
+1.14x their 10k counterparts, and allocations do not grow. None approaches the 2x investigation threshold.
+The earlier 47us/136us comparison came from one-shot commits whose iteration setup rebuilt a complete runtime
+and plan; it is not a reliable signal of population-dependent installation work. No runtime optimization is
+justified by these measurements.
+
 ## Projected fan-out
 
 | Downstream population | Fan-out | Mean | Allocated |
@@ -40,6 +62,6 @@ The prebuilt-plan timing uses one invocation per iteration and is consequently n
 
 ## Interpretation
 
-One-source Preview and Plan allocations are identical when unrelated population grows from 10k to 100k; they do not approach 10x growth. Projected propagation scales with actual fan-out (1, 10, 100), while holding allocation essentially constant for a 10x increase in unrelated downstream population. This is the expected touched-patch behavior.
+One-source Preview and Plan allocations are identical when unrelated population grows from 10k to 100k; they do not approach 10x growth. Projected propagation scales with actual fan-out (1, 10, 100), while holding allocation essentially constant for a 10x increase in unrelated downstream population. Repeatable install-component measurements likewise remain approximately flat. This is the expected touched-patch behavior.
 
 Raw BenchmarkDotNet reports were generated under `artifacts/benchmarks-plan`, `artifacts/benchmarks-install`, and `artifacts/benchmarks-fanout`; those generated artifacts are intentionally not versioned.

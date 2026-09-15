@@ -172,3 +172,79 @@ public class PreparedPatchInstallBenchmarks
         public int Value { get; set; }
     }
 }
+
+[MemoryDiagnoser]
+public class PreparedPatchInstallComponentBenchmarks
+{
+    [Params(10_000, 100_000)]
+    public int Population { get; set; }
+
+    private RelationRuntime _runtime = null!;
+    private PreparedImpactPlan _plan = null!;
+    private object _rollbackJournal = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        (_runtime, _plan) = CreatePlan(Population);
+        _rollbackJournal = _runtime.CaptureInstallRollbackForBenchmark(_plan.Prepared);
+    }
+
+    [Benchmark(Baseline = true)]
+    public void ValidatePreparedPlan() => _runtime.ValidatePlanInstallForBenchmark(_plan);
+
+    [Benchmark]
+    public object CaptureInstallRollbackJournal() =>
+        _runtime.CaptureInstallRollbackForBenchmark(_plan.Prepared);
+
+    [Benchmark]
+    public void ApplyForwardPatchAndRestoreRollbackJournal() =>
+        _runtime.ApplyForwardPatchAndRestoreForBenchmark(_plan, _rollbackJournal);
+
+    private static (RelationRuntime Runtime, PreparedImpactPlan Plan) CreatePlan(int population)
+    {
+        var model = new RelationModelBuilder();
+        var sources = model.Objects<ComponentSource>().Key(source => source.Id);
+        var items = model.Objects<ComponentItem>().Key(item => item.Id);
+        var relation = model.Relation(sources, items)
+            .Where((source, item) => source.Code == item.Code);
+        var value = model.Derived(sources).Compute(source => source.Value);
+        var count = model.Derived(sources).Using(relation).Incrementally()
+            .Compute((_, matches) => matches.Count);
+        var sourcePopulation = Enumerable.Range(0, population).Select(index => new ComponentSource
+        {
+            Code = index == 0 ? "A" : $"U-{index}"
+        }).ToArray();
+        var itemPopulation = Enumerable.Range(0, population).Select(index => new ComponentItem
+        {
+            Code = index == 0 ? "A" : $"U-{index}"
+        }).ToArray();
+        var source = sourcePopulation[0];
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(sources, sourcePopulation);
+            seed.Add(items, itemPopulation);
+        });
+        _ = runtime.Get(value, source);
+        _ = runtime.Get(count, source);
+        source.Value = 1;
+        source.Code = "B";
+        var prepared = runtime.Prepare(MutationSet.Create(
+            Change.Property(sources, source, candidate => candidate.Value, 0, 1),
+            Change.Property(sources, source, candidate => candidate.Code, "A", "B")));
+        return (runtime, runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal));
+    }
+
+    private sealed class ComponentSource
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public int Value { get; set; }
+        public string Code { get; set; } = "";
+    }
+
+    private sealed class ComponentItem
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public string Code { get; set; } = "";
+    }
+}

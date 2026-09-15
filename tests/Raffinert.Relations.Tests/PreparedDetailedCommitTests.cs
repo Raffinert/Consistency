@@ -159,6 +159,34 @@ public sealed class PreparedDetailedCommitTests
     }
 
     [Fact]
+    public void Prepared_install_benchmark_helpers_restore_runtime_and_commit_markers()
+    {
+        var scenario = CreateScenario([]);
+        Assert.True(scenario.Runtime.Evaluate(scenario.Invariant, scenario.Source));
+        scenario.Source.Value = 2;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
+            scenario.Set, scenario.Source, source => source.Value, 1, 2)));
+        var plan = scenario.Runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+        var diagnostics = scenario.Runtime.Diagnostics;
+        var version = scenario.Runtime.Version;
+        var derivedState = scenario.Runtime.GetState(scenario.Value, scenario.Source);
+        var invariantState = scenario.Runtime.GetState(scenario.Invariant, scenario.Source);
+        var rollback = scenario.Runtime.CaptureInstallRollbackForBenchmark(prepared);
+
+        scenario.Runtime.ValidatePlanInstallForBenchmark(plan);
+        scenario.Runtime.ApplyForwardPatchAndRestoreForBenchmark(plan, rollback);
+        scenario.Runtime.ApplyForwardPatchAndRestoreForBenchmark(plan, rollback);
+
+        Assert.Equal(version, scenario.Runtime.Version);
+        Assert.False(plan.IsCommitted);
+        Assert.False(prepared.IsCommitted);
+        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, scenario.Source));
+        Assert.Equal(derivedState, scenario.Runtime.GetState(scenario.Value, scenario.Source));
+        Assert.Equal(invariantState, scenario.Runtime.GetState(scenario.Invariant, scenario.Source));
+        Assert.Equal(diagnostics, scenario.Runtime.Diagnostics);
+    }
+
+    [Fact]
     public void Binding_plan_retains_only_a_touched_forward_patch()
     {
         var model = new RelationModelBuilder();
@@ -294,13 +322,13 @@ public sealed class PreparedDetailedCommitTests
         var model = new RelationModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set).Compute(source => source.Value);
-        model.Invariant(set).Using(value).Must((_, current) => current <= 1)
+        var invariant = model.Invariant(set).Using(value).Must((_, current) => current <= 1)
             .ScheduleRepairWith(source => callbacks.Add(source.Value));
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Value = 1 };
         runtime.Add(set, source);
         Assert.Equal(1, runtime.Get(value, source));
-        return new Scenario(runtime, set, source, value);
+        return new Scenario(runtime, set, source, value, invariant);
     }
 
     private static void AssertEquivalent(RuntimeApplyResult expected, RuntimeApplyResult actual)
@@ -310,7 +338,8 @@ public sealed class PreparedDetailedCommitTests
         RelationRuntime Runtime,
         ObjectSet<Source> Set,
         Source Source,
-        Derived<Source, int> Value);
+        Derived<Source, int> Value,
+        Invariant<Source> Invariant);
 
     private sealed class Source
     {
