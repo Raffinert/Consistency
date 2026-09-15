@@ -81,12 +81,41 @@ the same core mutation protocol. The convenience save methods prepare before `Sa
 success, and dispatch last. For an externally controlled database transaction, use the captured unit of
 work manually and commit runtime state only after the actual database transaction commits.
 
-For a same-database transactional outbox, call `Prepare` before opening/saving the transaction, call
-`PreviewDetailed` after business `SaveChanges` (so generated values and relationship fixup are present),
-write the returned impact plan as outbox rows, and commit the database transaction. Only then call runtime
-`Commit` and `Dispatch`. `PlanDetailed` uses the same reversible execution engine as commit, captures a
-binding forward patch, and restores runtime-owned state. Committing that plan installs the exact planned
-result without semantic reexecution. It is post-domain-mutation planning, not a hypothetical what-if overlay.
+`PreviewDetailed` predicts against the already-mutated, prepared domain state, restores runtime-owned state,
+and returns only a `RuntimeApplyResult`. It is diagnostic and non-binding: a later normal commit may execute
+semantic code again. Do not use it when durable external work requires exact parity with the later runtime
+installation.
+
+`PlanDetailed` executes semantic classification and propagation once, restores runtime-owned state, and
+returns a binding `PreparedImpactPlan`. `plan.Result` is the exact detailed result associated with its retained
+forward patch. A later `Commit(plan)` installs that patch without rerunning semantic model code. This is the
+required contract for same-database atomic outbox work whose rows depend on exact result parity.
+
+For application-assigned keys, use the binding sequence:
+
+```csharp
+var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
+unit.Prepare(runtime);
+
+await using var transaction = await context.Database.BeginTransactionAsync();
+await context.SaveChangesAsync();
+
+var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+PersistDurablePolicyWork(context, plan?.Result);
+await context.SaveChangesAsync();
+
+await transaction.CommitAsync();
+unit.Commit(runtime);
+unit.Dispatch(runtime);
+```
+
+For store-generated keys, capture the unit before the first `SaveChanges`, begin the database transaction,
+and perform the first save so final keys and relationship fixup are available. Only then call `Prepare(runtime)`
+and `PlanDetailed(runtime)`, persist durable work from `plan.Result`, perform the second save, and commit the
+database transaction. Finally call `Commit(runtime)` (which installs the retained plan) and `Dispatch`. Do not
+prepare while store-generated identities are still temporary or default.
+
+Planning is post-domain-mutation prediction, not a hypothetical what-if overlay.
 Lifecycle object-set entries and projection sources are captured as touched-state journals, so a small plan
 does not clone those complete registries. Relation, navigation, and dependency rollback scopes remain
 selected from the affected execution graph and preserve exception atomicity.

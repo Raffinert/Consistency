@@ -63,9 +63,12 @@ runtime.Commit(prepared);
 runtime.Dispatch(prepared);
 ```
 
-Use `CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal)` in that sequence when the committed
-impact must be written to an outbox before callbacks are dispatched. The EF Core unit of work exposes
-the same manual prepared-commit operation.
+Use `CommitDetailed(prepared, RuntimeImpactDetailLevel.Causal)` in that sequence when the database is
+already durable, or when external work does not need to share the business database transaction, and the
+committed impact must be observed before callbacks are dispatched. This is not the same-database atomic-outbox
+pattern. For outbox rows that must commit atomically with business data and exactly match later runtime
+installation, use the binding `PlanDetailed` workflow described below. The EF Core unit of work exposes the
+same manual prepared-plan operation.
 
 Existing authoritative objects can initialize a fresh runtime without pretending startup is a business
 mutation. Bootstrap keeps `Version == 0`, emits no policy work, and leaves derived values lazy:
