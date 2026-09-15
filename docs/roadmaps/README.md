@@ -1,6 +1,8 @@
 # Roadmaps
 
-- **Active:** authoritative data-scope safety for enforced invariants and materialized derived values: [Tasks 130–136](../codex-plan-authoritative-scope-safety.md)
+- Completed authoritative data-scope safety for enforced invariants and materialized derived values with
+  local and remote release proof at `009da18f01ab2e0eb4495d705628ea4708ab60fd`:
+  [Tasks 130–136](../codex-plan-authoritative-scope-safety.md)
 - Completed neutral order-fulfillment sample/test/documentation terminology migration with local and remote
   release proof: [Tasks 123–129](../codex-plan-neutral-order-fulfillment-domain.md)
 - Completed product/package/namespace rename with local and remote release proof: [Tasks 116–122 — `Raffinert.Consistency` rename v2](../codex-plan-rename-to-raffinert-consistency-v2.md)

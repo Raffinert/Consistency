@@ -52,3 +52,23 @@ validated before artifact upload.
 
 The workflow retained read-only repository permissions. No package was published, and no tag or GitHub release
 was created.
+
+## Authoritative consistency scope safety gate
+
+Verification date: 2026-09-15
+
+Verified implementation head before closeout documentation: `009da18f01ab2e0eb4495d705628ea4708ab60fd`
+
+- CI run: [35002380559](https://github.com/Raffinert/Consistency/actions/runs/35002380559) — success.
+- Release-candidate run: [35002982418](https://github.com/Raffinert/Consistency/actions/runs/35002982418) — success
+  (2026-09-15 17:42:53–17:47:47 UTC).
+- Artifact: `release-candidate-packages` (artifact ID `10410702219`).
+- Core tests: 294 passed on .NET 8 and 294 passed on .NET 10.
+- EF Core and SQLite tests: 86 passed on .NET 10.
+- Both samples, formatting verification, package/API validation, fresh package consumers, and artifact upload
+  passed.
+
+This run verifies that cross-object EF enforcement and materialization fail before SQL without an explicit
+authoritative `ConsistencyScope`, while source-local policies remain scope-free. SQLite proofs cover both
+false-valid aggregate prevention and partial-mirror prevention. No package was published, and no tag or
+GitHub release was created.

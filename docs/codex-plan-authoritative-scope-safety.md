@@ -1,6 +1,10 @@
 # Codex implementation plan — authoritative consistency scope safety
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED**
+
+Completed on 2026-09-15. Implementation head `009da18f01ab2e0eb4495d705628ea4708ab60fd`
+passed CI run [35002380559](https://github.com/Raffinert/Consistency/actions/runs/35002380559)
+and release-candidate run [35002982418](https://github.com/Raffinert/Consistency/actions/runs/35002982418).
 
 Baseline commit: `170eb615e3df6021257f3ffb81ce90a06682c30e`
 
