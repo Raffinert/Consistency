@@ -122,6 +122,14 @@ public sealed partial class RelationRuntime
             relationStates.Add(relation, runtimeState.CaptureTouchedState(
                 touchedLefts, touchedRights, previousRelationState));
         }
+        var touchedNavigationRoots = navigationRoots.Concat(lifecycleMutations.Select(mutation => mutation switch
+        {
+            ObjectAdded added => (added.Set, added.Instance),
+            ObjectRemoved removed => (removed.Set, removed.Instance),
+            _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+        })).ToArray();
+        var touchedNavigationOwners = changes.Where(change => _navigation.IsIndexedNavigation(change.Member))
+            .Select(change => (change.Member, change.Instance)).ToArray();
         return new RuntimeStateSnapshot(
         lifecycleSets.ToDictionary(
             set => set,
@@ -132,7 +140,8 @@ public sealed partial class RelationRuntime
                 _ => null
             }).OfType<object>())),
         relationStates,
-        navigationChanged ? _navigation.CaptureState() : null,
+        navigationChanged ? _navigation.CaptureTouchedState(
+            touchedNavigationRoots, touchedNavigationOwners, scopeSource?.Navigation) : null,
         projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
         _dependencyGraph.CaptureState(affectedRelations, changes),
         LastRelationImpacts,
@@ -150,7 +159,7 @@ public sealed partial class RelationRuntime
         foreach (var pair in snapshot.Relations)
             _relations[pair.Key].RestoreTouchedState(pair.Value);
         if (snapshot.Navigation is not null)
-            _navigation.RestoreState(snapshot.Navigation);
+            _navigation.RestoreTouchedState(snapshot.Navigation);
         if (snapshot.Projections is not null)
             _projections.RestoreState(snapshot.Projections);
         _dependencyGraph.RestoreState(snapshot.Dependencies);

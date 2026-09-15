@@ -13,6 +13,9 @@ internal interface INavigationIndex
     IReadOnlyCollection<object> GetTargets(object owner);
     object CaptureState();
     void RestoreState(object snapshot);
+    object CaptureOwnersState(IEnumerable<object> owners);
+    void RestoreOwnersState(object state);
+    int GetOwnersStateEntryCount(object state);
 }
 
 internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
@@ -79,6 +82,50 @@ internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
         Replace(_reverse, state.Reverse);
     }
 
+    public object CaptureOwnersState(IEnumerable<object> owners) => owners
+        .Distinct(ReferenceEqualityComparer.Instance)
+        .ToDictionary(
+            owner => owner,
+            owner => _forward.TryGetValue(owner, out var entry)
+                ? new OwnerState(true, entry.Target, entry.ReferenceCount)
+                : new OwnerState(false, null, 0),
+            ReferenceEqualityComparer.Instance);
+
+    public void RestoreOwnersState(object snapshot)
+    {
+        var states = (IReadOnlyDictionary<object, OwnerState>)snapshot;
+        foreach (var pair in states)
+        {
+            RemoveOwnerExactly(pair.Key);
+            if (!pair.Value.Exists)
+                continue;
+            _forward.Add(pair.Key, new ForwardEntry(pair.Value.Target)
+            {
+                ReferenceCount = pair.Value.ReferenceCount
+            });
+            if (pair.Value.Target is not null)
+            {
+                if (!_reverse.TryGetValue(pair.Value.Target, out var owners))
+                    _reverse.Add(pair.Value.Target,
+                        owners = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                owners.Add(pair.Key);
+            }
+        }
+    }
+
+    public int GetOwnersStateEntryCount(object state) =>
+        ((IReadOnlyDictionary<object, OwnerState>)state).Count;
+
+    private void RemoveOwnerExactly(object owner)
+    {
+        if (!_forward.Remove(owner, out var entry) || entry.Target is null ||
+            !_reverse.TryGetValue(entry.Target, out var owners))
+            return;
+        owners.Remove(owner);
+        if (owners.Count == 0)
+            _reverse.Remove(entry.Target);
+    }
+
     private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
         where TKey : notnull
     {
@@ -90,6 +137,8 @@ internal sealed class NavigationIndex(MemberInfo member) : INavigationIndex
     private sealed record State(
         Dictionary<object, ForwardEntry> Forward,
         Dictionary<object, HashSet<object>> Reverse);
+
+    private sealed record OwnerState(bool Exists, object? Target, int ReferenceCount);
 
     private sealed class ForwardEntry(object? target)
     {
@@ -164,6 +213,56 @@ internal sealed class CollectionNavigationIndex(MemberInfo member) : INavigation
         Replace(_reverse, state.Reverse);
     }
 
+    public object CaptureOwnersState(IEnumerable<object> owners) => owners
+        .Distinct(ReferenceEqualityComparer.Instance)
+        .ToDictionary(
+            owner => owner,
+            owner => _forward.TryGetValue(owner, out var entry)
+                ? new OwnerState(
+                    true,
+                    entry.Items.ToHashSet(ReferenceEqualityComparer.Instance),
+                    entry.ReferenceCount)
+                : new OwnerState(false, [], 0),
+            ReferenceEqualityComparer.Instance);
+
+    public void RestoreOwnersState(object snapshot)
+    {
+        var states = (IReadOnlyDictionary<object, OwnerState>)snapshot;
+        foreach (var pair in states)
+        {
+            RemoveOwnerExactly(pair.Key);
+            if (!pair.Value.Exists)
+                continue;
+            var items = pair.Value.Items.ToHashSet(ReferenceEqualityComparer.Instance);
+            _forward.Add(pair.Key, new ForwardEntry(items) { ReferenceCount = pair.Value.ReferenceCount });
+            foreach (var item in items)
+            {
+                if (!_reverse.TryGetValue(item, out var owners))
+                    _reverse.Add(item, owners = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                owners.Add(pair.Key);
+            }
+        }
+    }
+
+    public int GetOwnersStateEntryCount(object state)
+    {
+        var states = (IReadOnlyDictionary<object, OwnerState>)state;
+        return states.Count + states.Values.Where(value => value.Exists).Sum(value => value.Items.Count);
+    }
+
+    private void RemoveOwnerExactly(object owner)
+    {
+        if (!_forward.Remove(owner, out var entry))
+            return;
+        foreach (var item in entry.Items)
+        {
+            var owners = _reverse[item];
+            owners.Remove(owner);
+            if (owners.Count == 0)
+                _reverse.Remove(item);
+        }
+    }
+
     private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
         where TKey : notnull
     {
@@ -175,6 +274,8 @@ internal sealed class CollectionNavigationIndex(MemberInfo member) : INavigation
     private sealed record State(
         Dictionary<object, ForwardEntry> Forward,
         Dictionary<object, HashSet<object>> Reverse);
+
+    private sealed record OwnerState(bool Exists, HashSet<object> Items, int ReferenceCount);
 
     private IEnumerable<object> ReadItems(object owner)
     {
@@ -306,6 +407,74 @@ internal sealed class NavigationIndexRegistry
         AddRoot(set, root);
     }
 
+    public object CaptureTouchedState(
+        IEnumerable<(IObjectSetDefinition Set, object Root)> touchedRoots,
+        IEnumerable<(MemberInfo Member, object Owner)> touchedOwners,
+        object? previousState = null)
+    {
+        var roots = new List<(IObjectSetDefinition Set, object Root)>();
+        AddRoots(touchedRoots);
+        var previous = previousState as TouchedState;
+        if (previous is not null)
+            AddRoots(previous.Roots.Select(root => (root.Set, root.Root)));
+
+        var rootStates = roots.Select(value =>
+        {
+            var exists = _registrations[value.Set].TryGetValue(value.Root, out var memberships);
+            return new RootState(value.Set, value.Root, exists, memberships?.ToArray() ?? []);
+        }).ToArray();
+        var owners = new Dictionary<INavigationIndex, HashSet<object>>();
+        foreach (var membership in rootStates.SelectMany(root => root.Memberships))
+            AddOwner(membership.Index, membership.Owner);
+        foreach (var (member, owner) in touchedOwners)
+            if (_indexes.TryGetValue(member, out var index))
+                AddOwner(index, owner);
+        if (previous is not null)
+            foreach (var index in previous.Indexes)
+                foreach (var owner in index.Owners)
+                    AddOwner(index.Index, owner);
+        return new TouchedState(
+            rootStates,
+            owners.Select(pair => new IndexState(
+                pair.Key, pair.Value.ToArray(), pair.Key.CaptureOwnersState(pair.Value))).ToArray());
+
+        void AddRoots(IEnumerable<(IObjectSetDefinition Set, object Root)> candidates)
+        {
+            foreach (var candidate in candidates)
+                if (!roots.Any(existing => ReferenceEquals(existing.Set, candidate.Set) &&
+                        ReferenceEquals(existing.Root, candidate.Root)))
+                    roots.Add(candidate);
+        }
+
+        void AddOwner(INavigationIndex index, object owner)
+        {
+            if (!owners.TryGetValue(index, out var values))
+                owners.Add(index, values = new HashSet<object>(ReferenceEqualityComparer.Instance));
+            values.Add(owner);
+        }
+    }
+
+    public void RestoreTouchedState(object snapshot)
+    {
+        var state = (TouchedState)snapshot;
+        foreach (var index in state.Indexes)
+            index.Index.RestoreOwnersState(index.State);
+        foreach (var root in state.Roots)
+        {
+            if (root.Exists)
+                _registrations[root.Set][root.Root] = root.Memberships;
+            else
+                _registrations[root.Set].Remove(root.Root);
+        }
+    }
+
+    public int GetTouchedStateEntryCount(object snapshot)
+    {
+        var state = (TouchedState)snapshot;
+        return state.Roots.Count + state.Roots.Sum(root => root.Memberships.Count) +
+            state.Indexes.Sum(index => index.Index.GetOwnersStateEntryCount(index.State));
+    }
+
     public object CaptureState() => new State(
         _indexes.ToDictionary(pair => pair.Key, pair => pair.Value.CaptureState()),
         _registrations.ToDictionary(
@@ -397,6 +566,16 @@ internal sealed class NavigationIndexRegistry
         MemberReader.Read(member, instance);
 
     private sealed record NavigationMembership(INavigationIndex Index, object Owner);
+
+    private sealed record RootState(
+        IObjectSetDefinition Set,
+        object Root,
+        bool Exists,
+        IReadOnlyList<NavigationMembership> Memberships);
+
+    private sealed record IndexState(INavigationIndex Index, IReadOnlyList<object> Owners, object State);
+
+    private sealed record TouchedState(IReadOnlyList<RootState> Roots, IReadOnlyList<IndexState> Indexes);
 
     private sealed record State(
         IReadOnlyDictionary<MemberInfo, object> Indexes,
