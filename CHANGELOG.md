@@ -38,7 +38,7 @@ patch versions remain backward-compatible bug fixes where practical.
 - Separated relation query access from exact or selectively routed conservative propagation.
 - Added typed value-sensitive source-member severity for asymmetric domain correctness rules.
 - Added opt-in committed-impact causality with exact/conservative precision and trace rendering.
-- Added a compiling purchase-order/goods-receipt/link-validity vertical slice.
+- Added a compiling order-fulfillment/allocation-validity vertical slice.
 - Added packed-package consumer smoke tests for .NET 8, .NET 10, and the EF Core adapter.
 - Added transaction-safe detailed prepared commits in core and the EF unit of work.
 - Added zero-version runtime bootstrap from authoritative object sets.
@@ -46,6 +46,6 @@ patch versions remain backward-compatible bug fixes where practical.
 - Preserved normalized collection provenance and causal local severity, precision, and reaction escalation.
 - Enforced non-null, exact-object-set integrity for projected targets across bootstrap and lifecycle batches.
 - Replaced projected all-source scans and dynamic invocation with maintained reverse ownership indexes.
-- Added two-upstream projected composition and removed incomplete tracking from the procurement sample.
+- Added two-upstream projected composition and removed incomplete tracking from the order-fulfillment sample.
 
 This alpha is not yet published automatically. Its public API is tracked by checked-in approval files.

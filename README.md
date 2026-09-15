@@ -95,24 +95,24 @@ Relations are ordinary expression trees:
 ```csharp
 var model = new ConsistencyModelBuilder();
 
-var invoices = model.Objects<InvoiceLine>()
+var requests = model.Objects<RequestLine>()
     .Key(x => x.Id);
 
-var poLines = model.Objects<PurchaseOrderLine>()
+var orderLines = model.Objects<OrderLine>()
     .Key(x => x.Id);
 
-var candidates = model.Relation(invoices, poLines)
-    .Where((invoice, poLine) =>
-        invoice.PurchaseOrderNumber == poLine.PurchaseOrderNumber &&
-        invoice.ItemNumber == poLine.ItemNumber);
+var candidates = model.Relation(requests, orderLines)
+    .Where((request, line) =>
+        request.OrderNumber == line.OrderNumber &&
+        request.ItemNumber == line.ItemNumber);
 
 var compiled = model.Build();
 var runtime = compiled.CreateRuntime();
 
-runtime.Add(invoices, invoice);
-runtime.Add(poLines, poLine);
+runtime.Add(requests, request);
+runtime.Add(orderLines, orderLine);
 
-var related = runtime.Related(candidates, invoice);
+var related = runtime.Related(candidates, request);
 ```
 
 Raffinert.Consistency analyzes the predicate and derives hash access paths where it can do so safely.
@@ -124,16 +124,16 @@ changing semantics.
 Domain objects remain ordinary objects. Mutate them normally, then report what changed:
 
 ```csharp
-var oldItemNumber = invoice.ItemNumber;
-invoice.ItemNumber = "ITEM-2";
+var oldItemNumber = request.ItemNumber;
+request.ItemNumber = "ITEM-2";
 
 runtime.Apply(
     Change.Property(
-        invoices,
-        invoice,
+        requests,
+        request,
         x => x.ItemNumber,
         oldItemNumber,
-        invoice.ItemNumber));
+        request.ItemNumber));
 ```
 
 `Change.Property` observes a mutation that has already happened; it does not mutate the object itself.
@@ -143,10 +143,10 @@ A domain operation can report lifecycle, property, and collection changes togeth
 
 ```csharp
 runtime.Apply(MutationSet.Create(
-    Change.Add(poLines, addedLine),
-    Change.Property(invoices, invoice, x => x.ItemNumber, oldItem, invoice.ItemNumber),
+    Change.Add(orderLines, addedLine),
+    Change.Property(requests, request, x => x.ItemNumber, oldItem, request.ItemNumber),
     Change.CollectionReset(order, x => x.Lines),
-    Change.Remove(poLines, removedLine)));
+    Change.Remove(orderLines, removedLine)));
 ```
 
 The complete mutation set is validated before runtime-maintained state is committed.
@@ -155,14 +155,14 @@ The complete mutation set is validated before runtime-maintained state is commit
 
 Relations become more useful when they feed derived state.
 
-For example, a purchase-order line can derive its received quantity from matching goods receipts:
+For example, an order line can derive its fulfilled quantity from matching fulfillments:
 
 ```csharp
-var receivedQuantity = model.Derived(poLines)
-    .Using(receipts)
+var fulfilledQuantity = model.Derived(orderLines)
+    .Using(fulfillments)
     .Incrementally()
     .Compute((line, matches) =>
-        matches.Sum(receipt => receipt.Quantity));
+        matches.Sum(fulfillment => fulfillment.Quantity));
 ```
 
 Recognized exact aggregates can update already-fresh cache entries directly from relation/item deltas.
@@ -171,32 +171,32 @@ Unrecognized expressions retain the original compiled computation as the semanti
 Derived values can depend on other derived values and form a compiled dependency DAG:
 
 ```csharp
-var availableQuantity = model.Derived(poLines)
-    .Using(receivedQuantity)
-    .Compute((line, received) =>
-        line.OrderedQuantity - received);
+var remainingQuantity = model.Derived(orderLines)
+    .Using(fulfilledQuantity)
+    .Compute((line, fulfilled) =>
+        line.OrderedQuantity - fulfilled);
 ```
 
 They can also consume upstream values through tracked object references:
 
 ```csharp
-var linkValidity = model.Derived(invoiceLinks)
-    .Using(link => link.PurchaseOrderLine, availableQuantity, unitRate)
-    .Compute((link, available, rate) =>
-        link.ReservedQuantity <= available &&
-        link.CapturedRate == rate);
+var allocationValidity = model.Derived(allocations)
+    .Using(allocation => allocation.OrderLine, remainingQuantity, unitRate)
+    .Compute((allocation, remaining, rate) =>
+        allocation.ReservedQuantity <= remaining &&
+        allocation.CapturedRate == rate);
 ```
 
 A change can therefore propagate through a graph such as:
 
 ```mermaid
 flowchart LR
-    GR[Goods receipt change] --> RQ[ReceivedQuantity]
-    RQ --> AQ[AvailableQuantity]
-    UR[UnitRate] --> LV[LinkValidity]
-    AQ --> LV
-    LV --> INV[Invariant / repair decision]
-    INV --> RM[Repair or rematch]
+    F[Fulfillment change] --> FQ[FulfilledQuantity]
+    FQ --> RQ[RemainingQuantity]
+    UR[UnitRate] --> AV[AllocationValidity]
+    RQ --> AV
+    AV --> INV[Invariant / repair decision]
+    INV --> R[Schedule repair]
 ```
 
 The application does not need to manually orchestrate every edge in that graph.
@@ -213,14 +213,14 @@ Raffinert.Consistency distinguishes those cases:
 A relation-backed derived value can classify different kinds of impact independently:
 
 ```csharp
-var received = model.Derived(poLines)
-    .Using(receipts)
+var fulfilled = model.Derived(orderLines)
+    .Using(fulfillments)
     .Impact(policy => policy
         .MembershipAdded(DependencySeverity.Dirty)
         .MembershipRemoved(DependencySeverity.Invalid)
         .ItemChanged(DependencySeverity.Invalid))
     .Compute((line, matches) =>
-        matches.Sum(receipt => receipt.Quantity));
+        matches.Sum(fulfillment => fulfillment.Quantity));
 ```
 
 Typed source-member policies can also classify value transitions—for example, a quantity decrease can be
@@ -235,8 +235,8 @@ This lets a domain model express patterns such as:
 
 ```mermaid
 flowchart LR
-    Q[PO quantity decreased] --> A[AvailableQuantity invalid]
-    A --> L[Existing link may be invalid]
+    Q[Order quantity decreased] --> A[RemainingQuantity invalid]
+    A --> L[Existing allocation may be invalid]
     L --> R[Schedule repair]
 ```
 
@@ -375,7 +375,7 @@ The detailed edge-case contracts live in the architecture documentation rather t
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)
-- [End-to-end purchase order and goods receipt example](docs/purchase-order-example.md)
+- [End-to-end order fulfillment and allocation example](docs/order-fulfillment-example.md)
 - [Current implementation roadmap](docs/roadmaps/README.md)
 - [Measured-workload optimizer policy](docs/optimizer-policy.md)
 - [Release and versioning process](RELEASING.md)
