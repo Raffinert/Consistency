@@ -33,8 +33,9 @@ public sealed partial class RelationRuntime
         foreach (var change in prepared.Changes)
             plannedImpact.MergeFrom(_impactResolver.Resolve(change));
         var navigationRoots = _dependencyGraph.ResolveNavigationRoots(plannedImpact, prepared.Changes);
-        var snapshot = _rollbackSnapshotsEnabled || requireSnapshot
-            ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
+        var rollbackJournal = _rollbackSnapshotsEnabled || requireSnapshot
+            ? CaptureRollbackJournal(
+                prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
             : null;
         try
         {
@@ -44,18 +45,23 @@ public sealed partial class RelationRuntime
                 plannedImpact,
                 navigationRoots,
                 captureCausalEvidence);
-            var postState = capturePostState
-                ? CaptureState(prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots, snapshot)
+            var forwardPatch = capturePostState
+                ? CaptureForwardPatch(
+                    prepared.LifecycleMutations,
+                    prepared.Changes,
+                    plannedImpact,
+                    navigationRoots,
+                    rollbackJournal!)
                 : null;
             return new PreparedMutationExecution(
                 result,
-                snapshot is null ? null : new RuntimeRollbackJournal(snapshot),
-                postState is null ? null : new RuntimeForwardPatch(postState));
+                rollbackJournal,
+                forwardPatch);
         }
         catch
         {
-            if (snapshot is not null)
-                RestoreState(snapshot);
+            if (rollbackJournal is not null)
+                RestoreRollbackJournal(rollbackJournal);
             throw;
         }
     }
@@ -67,12 +73,45 @@ public sealed partial class RelationRuntime
         return this;
     }
 
-    private RuntimeStateSnapshot CaptureState(
+    private RuntimeRollbackJournal CaptureRollbackJournal(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes,
+        ResolvedChangeImpact impact,
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
+    {
+        var parts = CapturePatchParts(lifecycleMutations, changes, impact, navigationRoots, null);
+        return new RuntimeRollbackJournal(
+            parts.Sets,
+            parts.Relations,
+            parts.Navigation,
+            parts.Projections,
+            parts.Dependencies,
+            parts.Scalars);
+    }
+
+    private RuntimeForwardPatch CaptureForwardPatch(
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
         IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
-        RuntimeStateSnapshot? scopeSource = null)
+        RuntimeRollbackJournal scopeSource)
+    {
+        var parts = CapturePatchParts(lifecycleMutations, changes, impact, navigationRoots, scopeSource);
+        return new RuntimeForwardPatch(
+            parts.Sets,
+            parts.Relations,
+            parts.Navigation,
+            parts.Projections,
+            parts.Dependencies,
+            parts.Scalars);
+    }
+
+    private RuntimePatchParts CapturePatchParts(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<PropertyChange> changes,
+        ResolvedChangeImpact impact,
+        IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
+        IRuntimePatchScope? scopeSource)
     {
         var lifecycleSets = lifecycleMutations.Select(mutation => mutation is ObjectAdded added
             ? added.Set
@@ -130,7 +169,7 @@ public sealed partial class RelationRuntime
         })).ToArray();
         var touchedNavigationOwners = changes.Where(change => _navigation.IsIndexedNavigation(change.Member))
             .Select(change => (change.Member, change.Instance)).ToArray();
-        return new RuntimeStateSnapshot(
+        return new RuntimePatchParts(
         lifecycleSets.ToDictionary(
             set => set,
             set => _sets[set].CaptureEntriesState(lifecycleMutations.Select(mutation => mutation switch
@@ -144,39 +183,57 @@ public sealed partial class RelationRuntime
             touchedNavigationRoots, touchedNavigationOwners, scopeSource?.Navigation) : null,
         projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
         _dependencyGraph.CaptureState(impact, lifecycleMutations, changes, scopeSource?.Dependencies),
-        LastRelationImpacts,
-        _reindexedRoots,
-        _affectedSources,
-        _relationPairsAdded,
-        _relationPairsRemoved,
-        _policyRequestsEmitted);
+        new RuntimeScalarState(
+            LastRelationImpacts,
+            _reindexedRoots,
+            _affectedSources,
+            _relationPairsAdded,
+            _relationPairsRemoved,
+            _policyRequestsEmitted));
     }
 
-    private void RestoreState(RuntimeStateSnapshot snapshot)
+    private void RestoreRollbackJournal(RuntimeRollbackJournal journal) => ApplyPatch(journal);
+
+    private void ApplyForwardPatch(RuntimeForwardPatch patch) => ApplyPatch(patch);
+
+    private void ApplyPatch(IRuntimePatchScope patch)
     {
-        foreach (var pair in snapshot.Sets)
+        foreach (var pair in patch.Sets)
             _sets[pair.Key].RestoreEntriesState(pair.Value);
-        foreach (var pair in snapshot.Relations)
+        foreach (var pair in patch.Relations)
             _relations[pair.Key].RestoreTouchedState(pair.Value);
-        if (snapshot.Navigation is not null)
-            _navigation.RestoreTouchedState(snapshot.Navigation);
-        if (snapshot.Projections is not null)
-            _projections.RestoreState(snapshot.Projections);
-        _dependencyGraph.RestoreState(snapshot.Dependencies);
-        LastRelationImpacts = snapshot.LastRelationImpacts;
-        _reindexedRoots = snapshot.ReindexedRoots;
-        _affectedSources = snapshot.AffectedSources;
-        _relationPairsAdded = snapshot.RelationPairsAdded;
-        _relationPairsRemoved = snapshot.RelationPairsRemoved;
-        _policyRequestsEmitted = snapshot.PolicyRequestsEmitted;
+        if (patch.Navigation is not null)
+            _navigation.RestoreTouchedState(patch.Navigation);
+        if (patch.Projections is not null)
+            _projections.RestoreState(patch.Projections);
+        _dependencyGraph.RestoreState(patch.Dependencies);
+        LastRelationImpacts = patch.Scalars.LastRelationImpacts;
+        _reindexedRoots = patch.Scalars.ReindexedRoots;
+        _affectedSources = patch.Scalars.AffectedSources;
+        _relationPairsAdded = patch.Scalars.RelationPairsAdded;
+        _relationPairsRemoved = patch.Scalars.RelationPairsRemoved;
+        _policyRequestsEmitted = patch.Scalars.PolicyRequestsEmitted;
     }
 
-    private sealed record RuntimeStateSnapshot(
+    private interface IRuntimePatchScope
+    {
+        IReadOnlyDictionary<IObjectSetDefinition, object> Sets { get; }
+        IReadOnlyDictionary<IRelationDefinition, object> Relations { get; }
+        object? Navigation { get; }
+        object? Projections { get; }
+        object Dependencies { get; }
+        RuntimeScalarState Scalars { get; }
+    }
+
+    private sealed record RuntimePatchParts(
         IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
         IReadOnlyDictionary<IRelationDefinition, object> Relations,
         object? Navigation,
         object? Projections,
         object Dependencies,
+        RuntimeScalarState Scalars);
+
+    private sealed record RuntimeScalarState(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts,
         long ReindexedRoots,
         long AffectedSources,
@@ -184,14 +241,30 @@ public sealed partial class RelationRuntime
         long RelationPairsRemoved,
         long PolicyRequestsEmitted);
 
+    private sealed record RuntimeRollbackJournal(
+        IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
+        IReadOnlyDictionary<IRelationDefinition, object> Relations,
+        object? Navigation,
+        object? Projections,
+        object Dependencies,
+        RuntimeScalarState Scalars) : IRuntimePatchScope;
+
+    private sealed record RuntimeForwardPatch(
+        IReadOnlyDictionary<IObjectSetDefinition, object> Sets,
+        IReadOnlyDictionary<IRelationDefinition, object> Relations,
+        object? Navigation,
+        object? Projections,
+        object Dependencies,
+        RuntimeScalarState Scalars) : IRuntimePatchScope;
+
     private RuntimeRollbackJournal CaptureInstallRollbackJournal(PreparedMutation prepared)
     {
         var impact = new ResolvedChangeImpact();
         foreach (var change in prepared.Changes)
             impact.MergeFrom(_impactResolver.Resolve(change));
         var navigationRoots = _dependencyGraph.ResolveNavigationRoots(impact, prepared.Changes);
-        return new RuntimeRollbackJournal(CaptureState(
-            prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots));
+        return CaptureRollbackJournal(
+            prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots);
     }
 
     internal int CaptureDependencyPatchEntryCount(PreparedMutation prepared)
@@ -283,11 +356,8 @@ public sealed partial class RelationRuntime
 
     private sealed record PreparedMutationExecution(
         RuntimeCommitResult Result,
-        RuntimeRollbackJournal? Snapshot,
-        RuntimeForwardPatch? PostState);
-
-    private sealed record RuntimeRollbackJournal(RuntimeStateSnapshot State);
-    private sealed record RuntimeForwardPatch(RuntimeStateSnapshot State);
+        RuntimeRollbackJournal? RollbackJournal,
+        RuntimeForwardPatch? ForwardPatch);
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {

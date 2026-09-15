@@ -417,7 +417,7 @@ public sealed partial class RelationRuntime
         }
         finally
         {
-            RestoreState(execution.Snapshot!.State);
+            RestoreRollbackJournal(execution.RollbackJournal!);
         }
     }
 
@@ -447,11 +447,11 @@ public sealed partial class RelationRuntime
             var result = CreateDetailedResult(prepared, execution.Result, detailLevel, origins);
             return new PreparedImpactPlan(
                 this, prepared, prepared.BaseVersion, detailLevel, result,
-                execution.PostState!, execution.Result.PolicyActions);
+                execution.ForwardPatch!, execution.Result.PolicyActions);
         }
         finally
         {
-            RestoreState(execution.Snapshot!.State);
+            RestoreRollbackJournal(execution.RollbackJournal!);
         }
     }
 
@@ -469,7 +469,7 @@ public sealed partial class RelationRuntime
         var installRollback = CaptureInstallRollbackJournal(plan.Prepared);
         try
         {
-            RestoreState(((RuntimeForwardPatch)plan.ForwardPatch).State);
+            ApplyForwardPatch((RuntimeForwardPatch)plan.ForwardPatch);
             _version++;
             plan.Prepared.MarkCommitted(plan.PolicyActions);
             plan.MarkCommitted();
@@ -477,7 +477,7 @@ public sealed partial class RelationRuntime
         }
         catch
         {
-            RestoreState(installRollback.State);
+            RestoreRollbackJournal(installRollback);
             throw;
         }
     }
