@@ -17,6 +17,11 @@ internal interface IRelationRuntimeState
     long PredicateEvaluationCount { get; }
     object CaptureState();
     void RestoreState(object snapshot);
+    object CaptureTouchedState(
+        IReadOnlyCollection<object> touchedLefts,
+        IReadOnlyCollection<object> touchedRights);
+    void RestoreTouchedState(object state);
+    int GetTouchedStateEntryCount(object state);
     void ResetDiagnostics();
     void EnableExactPropagation();
     RelationDelta AddLeft(object instance);
@@ -84,6 +89,159 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         Replace(_leftsByRight, state.LeftsByRight);
         _predicateEvaluationCount = state.PredicateEvaluationCount;
     }
+
+    public object CaptureTouchedState(
+        IReadOnlyCollection<object> touchedLefts,
+        IReadOnlyCollection<object> touchedRights)
+    {
+        var lefts = touchedLefts.Cast<TLeft>()
+            .ToHashSet(ReferenceEqualityComparer<TLeft>.Instance);
+        var rights = touchedRights.Cast<TRight>()
+            .ToHashSet(ReferenceEqualityComparer<TRight>.Instance);
+
+        foreach (var left in lefts.ToArray())
+            if (_rightsByLeft.TryGetValue(left, out var related))
+                rights.UnionWith(related);
+        foreach (var right in rights.ToArray())
+            if (_leftsByRight.TryGetValue(right, out var related))
+                lefts.UnionWith(related);
+
+        ExpandPotentialCounterparts(lefts, rights);
+        foreach (var left in lefts.ToArray())
+            if (_rightsByLeft.TryGetValue(left, out var related))
+                rights.UnionWith(related);
+        foreach (var right in rights.ToArray())
+            if (_leftsByRight.TryGetValue(right, out var related))
+                lefts.UnionWith(related);
+
+        var rightKeys = new HashSet<CompositeKey>();
+        foreach (var right in rights)
+        {
+            if (_keys.TryGetValue(right, out var oldKey))
+                rightKeys.Add(oldKey);
+            if (_definition.AccessPlan is HashJoinAccessPlan plan)
+                rightKeys.Add(ReadRightKey(plan, right));
+        }
+        var leftKeys = new HashSet<CompositeKey>();
+        foreach (var left in lefts)
+        {
+            if (_leftKeys.TryGetValue(left, out var oldKey))
+                leftKeys.Add(oldKey);
+            if (_definition.ReverseAccessPlan is HashJoinAccessPlan plan)
+                leftKeys.Add(ReadLeftKey(plan, left));
+        }
+
+        return new TouchedState(
+            rightKeys.ToDictionary(key => key,
+                key => CaptureSet(_index, key, ReferenceEqualityComparer<TRight>.Instance)),
+            rights.ToDictionary(right => right, right => Capture(_keys, right),
+                ReferenceEqualityComparer<TRight>.Instance),
+            leftKeys.ToDictionary(key => key,
+                key => CaptureSet(_leftIndex, key, ReferenceEqualityComparer<TLeft>.Instance)),
+            lefts.ToDictionary(left => left, left => Capture(_leftKeys, left),
+                ReferenceEqualityComparer<TLeft>.Instance),
+            lefts.ToDictionary(left => left,
+                left => CaptureSet(_rightsByLeft, left, ReferenceEqualityComparer<TRight>.Instance),
+                ReferenceEqualityComparer<TLeft>.Instance),
+            rights.ToDictionary(right => right,
+                right => CaptureSet(_leftsByRight, right, ReferenceEqualityComparer<TLeft>.Instance),
+                ReferenceEqualityComparer<TRight>.Instance),
+            _predicateEvaluationCount);
+    }
+
+    public void RestoreTouchedState(object snapshot)
+    {
+        var state = (TouchedState)snapshot;
+        RestoreEntries(_index, state.Index, ReferenceEqualityComparer<TRight>.Instance);
+        RestoreEntries(_keys, state.Keys);
+        RestoreEntries(_leftIndex, state.LeftIndex, ReferenceEqualityComparer<TLeft>.Instance);
+        RestoreEntries(_leftKeys, state.LeftKeys);
+        RestoreEntries(_rightsByLeft, state.RightsByLeft, ReferenceEqualityComparer<TRight>.Instance);
+        RestoreEntries(_leftsByRight, state.LeftsByRight, ReferenceEqualityComparer<TLeft>.Instance);
+        _predicateEvaluationCount = state.PredicateEvaluationCount;
+    }
+
+    public int GetTouchedStateEntryCount(object snapshot)
+    {
+        var state = (TouchedState)snapshot;
+        return Count(state.Index) + state.Keys.Count + Count(state.LeftIndex) + state.LeftKeys.Count +
+            Count(state.RightsByLeft) + Count(state.LeftsByRight);
+    }
+
+    private void ExpandPotentialCounterparts(HashSet<TLeft> lefts, HashSet<TRight> rights)
+    {
+        if (_definition.AccessPlan is HashJoinAccessPlan access)
+        {
+            foreach (var left in lefts.ToArray())
+            {
+                var keys = new HashSet<CompositeKey> { ReadLeftKey(access, left) };
+                if (_leftKeys.TryGetValue(left, out var oldKey))
+                    keys.Add(oldKey);
+                foreach (var key in keys)
+                    if (_index.TryGetValue(key, out var bucket))
+                        rights.UnionWith(bucket);
+            }
+        }
+        else if (lefts.Count > 0)
+            rights.UnionWith(_rightObjects.Instances.Cast<TRight>());
+
+        if (_definition.ReverseAccessPlan is HashJoinAccessPlan reverse)
+        {
+            foreach (var right in rights.ToArray())
+            {
+                var keys = new HashSet<CompositeKey> { ReadRightKey(reverse, right) };
+                if (_keys.TryGetValue(right, out var oldKey))
+                    keys.Add(oldKey);
+                foreach (var key in keys)
+                    if (_leftIndex.TryGetValue(key, out var bucket))
+                        lefts.UnionWith(bucket);
+            }
+        }
+        else if (rights.Count > 0 && _hasExactPropagation)
+            lefts.UnionWith(_leftObjects.Instances.Cast<TLeft>());
+    }
+
+    private static Entry<TValue> Capture<TKey, TValue>(Dictionary<TKey, TValue> values, TKey key)
+        where TKey : notnull => values.TryGetValue(key, out var value)
+        ? new Entry<TValue>(true, value)
+        : new Entry<TValue>(false, default);
+
+    private static Entry<HashSet<TValue>> CaptureSet<TKey, TValue>(
+        Dictionary<TKey, HashSet<TValue>> values,
+        TKey key,
+        IEqualityComparer<TValue> comparer)
+        where TKey : notnull where TValue : class => values.TryGetValue(key, out var value)
+        ? new Entry<HashSet<TValue>>(true, value.ToHashSet(comparer))
+        : new Entry<HashSet<TValue>>(false, null);
+
+    private static void RestoreEntries<TKey, TValue>(
+        Dictionary<TKey, TValue> target,
+        IReadOnlyDictionary<TKey, Entry<TValue>> entries)
+        where TKey : notnull
+    {
+        foreach (var pair in entries)
+            if (pair.Value.Exists)
+                target[pair.Key] = pair.Value.Value!;
+            else
+                target.Remove(pair.Key);
+    }
+
+    private static void RestoreEntries<TKey, TValue>(
+        Dictionary<TKey, HashSet<TValue>> target,
+        IReadOnlyDictionary<TKey, Entry<HashSet<TValue>>> entries,
+        IEqualityComparer<TValue> comparer)
+        where TKey : notnull where TValue : class
+    {
+        foreach (var pair in entries)
+            if (pair.Value.Exists)
+                target[pair.Key] = pair.Value.Value!.ToHashSet(comparer);
+            else
+                target.Remove(pair.Key);
+    }
+
+    private static int Count<TKey, TValue>(IReadOnlyDictionary<TKey, Entry<HashSet<TValue>>> entries)
+        where TKey : notnull => entries.Count + entries.Values.Where(value => value.Exists)
+        .Sum(value => value.Value!.Count);
 
     public int RelatedCount(TLeft left) =>
         _rightsByLeft.TryGetValue(left, out var rights) ? rights.Count : 0;
@@ -405,6 +563,17 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         Dictionary<TLeft, CompositeKey> LeftKeys,
         Dictionary<TLeft, HashSet<TRight>> RightsByLeft,
         Dictionary<TRight, HashSet<TLeft>> LeftsByRight,
+        long PredicateEvaluationCount);
+
+    private sealed record Entry<TValue>(bool Exists, TValue? Value);
+
+    private sealed record TouchedState(
+        IReadOnlyDictionary<CompositeKey, Entry<HashSet<TRight>>> Index,
+        IReadOnlyDictionary<TRight, Entry<CompositeKey>> Keys,
+        IReadOnlyDictionary<CompositeKey, Entry<HashSet<TLeft>>> LeftIndex,
+        IReadOnlyDictionary<TLeft, Entry<CompositeKey>> LeftKeys,
+        IReadOnlyDictionary<TLeft, Entry<HashSet<TRight>>> RightsByLeft,
+        IReadOnlyDictionary<TRight, Entry<HashSet<TLeft>>> LeftsByRight,
         long PredicateEvaluationCount);
 
 }

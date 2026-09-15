@@ -88,6 +88,36 @@ public sealed partial class RelationRuntime
                 _ => false
             }) || changes.Any(change => change.Set is not null &&
                 _projections.IsSelectorChange(change.Set, change.Member));
+        var relationStates = new Dictionary<IRelationDefinition, object>();
+        foreach (var relation in affectedRelations)
+        {
+            var runtimeState = _relations[relation];
+            var touchedLefts = impact.GetAffectedRoots(relation, relation.LeftSet).ToHashSet(
+                ReferenceEqualityComparer.Instance);
+            var touchedRights = impact.GetAffectedRoots(relation, relation.RightSet).ToHashSet(
+                ReferenceEqualityComparer.Instance);
+            if (impact.ReindexLeftRoots.TryGetValue(runtimeState, out var reindexedLefts))
+                touchedLefts.UnionWith(reindexedLefts);
+            if (impact.ReindexRoots.TryGetValue(runtimeState, out var reindexedRights))
+                touchedRights.UnionWith(reindexedRights);
+            foreach (var mutation in lifecycleMutations)
+                switch (mutation)
+                {
+                    case ObjectAdded added when ReferenceEquals(added.Set, relation.LeftSet):
+                        touchedLefts.Add(added.Instance);
+                        break;
+                    case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.LeftSet):
+                        touchedLefts.Add(removed.Instance);
+                        break;
+                    case ObjectAdded added when ReferenceEquals(added.Set, relation.RightSet):
+                        touchedRights.Add(added.Instance);
+                        break;
+                    case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.RightSet):
+                        touchedRights.Add(removed.Instance);
+                        break;
+                }
+            relationStates.Add(relation, runtimeState.CaptureTouchedState(touchedLefts, touchedRights));
+        }
         return new RuntimeStateSnapshot(
         lifecycleSets.ToDictionary(
             set => set,
@@ -97,7 +127,7 @@ public sealed partial class RelationRuntime
                 ObjectRemoved removed when ReferenceEquals(removed.Set, set) => removed.Instance,
                 _ => null
             }).OfType<object>())),
-        affectedRelations.ToDictionary(relation => relation, relation => _relations[relation].CaptureState()),
+        relationStates,
         navigationChanged ? _navigation.CaptureState() : null,
         projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
         _dependencyGraph.CaptureState(affectedRelations, changes),
@@ -114,7 +144,7 @@ public sealed partial class RelationRuntime
         foreach (var pair in snapshot.Sets)
             _sets[pair.Key].RestoreEntriesState(pair.Value);
         foreach (var pair in snapshot.Relations)
-            _relations[pair.Key].RestoreState(pair.Value);
+            _relations[pair.Key].RestoreTouchedState(pair.Value);
         if (snapshot.Navigation is not null)
             _navigation.RestoreState(snapshot.Navigation);
         if (snapshot.Projections is not null)
