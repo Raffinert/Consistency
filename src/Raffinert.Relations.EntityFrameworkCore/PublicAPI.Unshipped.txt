@@ -1,3 +1,8 @@
 #nullable enable
+Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings
+Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Enforce<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Map<TEntity>(Raffinert.Relations.ObjectSet<TEntity!>! set, System.Func<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<TEntity!>!, bool>? selector = null) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Materialize<TSource, TValue>(Raffinert.Relations.Derived<TSource!, TValue>! derived, System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! property) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
+Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.RelationEfCoreMappings() -> void
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode, Raffinert.Relations.PlannedDerivedEvaluationMode derivedEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan?
 Raffinert.Relations.EntityFrameworkCore.RelationUnitOfWork.PlanDetailed(Raffinert.Relations.RelationRuntime! runtime, Raffinert.Relations.RuntimeImpactDetailLevel detailLevel, Raffinert.Relations.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Relations.PreparedImpactPlan?
