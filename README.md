@@ -69,14 +69,25 @@ of affected derived values:
 ```csharp
 var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
+    .Map(fulfillments)
     .Materialize(availableQuantity, x => x.AvailableQuantity)
     .Enforce(availability);
 
-await db.SaveChangesConsistentlyAsync(runtime, mappings, cancellationToken: cancellationToken);
+var scope = new ConsistencyScope()
+    .Complete(lines)
+    .Complete(fulfillments);
+
+await db.SaveChangesConsistentlyAsync(
+    runtime,
+    mappings,
+    new ConsistencySaveOptions { Scope = scope },
+    cancellationToken);
 ```
 
-This stable-key workflow plans first, saves once, then installs the exact runtime plan. It does not load
-missing graph data. See [EF Core consistency](docs/ef-core-consistency.md) for scope, transactions,
+This stable-key workflow validates authoritative scope, plans first, saves once, then installs the exact
+runtime plan. `Map(...)` translates tracked changes; only `ConsistencyScope.Complete(...)` asserts that a
+runtime set has complete coverage. Raffinert does not load missing graph data. See
+[EF Core consistency](docs/ef-core-consistency.md) for scope, transactions,
 generated keys, and recovery rules, or run the
 [`Raffinert.Consistency.EntityFrameworkCore.Sample`](samples/Raffinert.Consistency.EntityFrameworkCore.Sample).
 

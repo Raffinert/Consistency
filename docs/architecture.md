@@ -21,6 +21,26 @@ conservative optimizations around them.
 Hash and scan access plans only change candidate lookup. The compiled predicate always filters the
 candidate set, and dependency severity is configured independently of the access plan.
 
+## Dependency completeness vs data-scope completeness
+
+Dependency completeness asks whether expression analysis discovered every member and external input that
+can affect semantics. It controls whether cached consumers are safe and whether an explicit
+`AllowIncompleteDependencies()` opt-in is required. Data-scope completeness instead asks whether a runtime
+contains every object needed to make an authoritative cross-object claim. Solving either problem does not
+solve the other.
+
+Core derives data-scope requirements from compiled topology. A source-only derived value requires no
+complete object set. A relation-backed value requires both relation source and target sets. Same-source
+composition inherits the transitive union of upstream requirements. Projected composition inherits those
+requirements and adds its consumer set because reverse projection must find every consumer. Invariants
+take the deterministic, de-duplicated union of their upstream requirements.
+
+The host supplies proof with `ConsistencyScope.Complete(set)`. The proof is an assertion; Core and the EF
+adapter do not inspect a database to verify it. The EF adapter gates only configured persistence policies:
+enforced invariants in both save modes and materialized derived values in `RecalculateAndValidate` mode.
+It rejects missing coverage before planning, mirror writes, and SQL. Whole-set completeness is intentionally
+coarse in this version. Partition- and key-scoped completeness are not implemented.
+
 ## Runtime mutation pipeline
 
 `MutationSet` combines object lifecycle, property, and collection signals from one domain operation:
@@ -82,11 +102,12 @@ old owned/reference targets. The adapter's `Enforce` and `Materialize` mappings 
 the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a Relations key,
 relation, derived value, invariant, or projected selector.
 
-The convenience save methods and interceptor prepare before `SaveChanges`, commit after success, and
+The convenience save methods and interceptor validate authoritative data scope and prepare before `SaveChanges`, commit after success, and
 dispatch last. They reject ambient/external transactions and store-generated Relations identities. Those
 cases require the explicit transaction and captured-unit workflow, with runtime commit only after database
-commit. The adapter never auto-loads missing graph state; correctness is bounded by the authoritative
-runtime scope supplied by the application. Full operational details are in
+commit. The adapter never auto-loads missing graph state. Cross-object enforcement and materialization
+require the host to seed complete runtime coverage and declare it with `ConsistencyScope`; `Map(...)` alone
+is change translation, not coverage proof. Full operational details are in
 [EF Core consistency](ef-core-consistency.md).
 
 `PreviewDetailed` predicts against the already-mutated, prepared domain state, restores runtime-owned state,
