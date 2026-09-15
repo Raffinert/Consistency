@@ -1022,6 +1022,50 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.False(database.CreateContext().Set<MirrorEntity>().Any());
     }
 
+    [Fact]
+    public async Task Interceptor_async_save_materializes_and_commits_after_database_success()
+    {
+        using var database = new SqliteFixture();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        using (var seed = database.CreateContext())
+        {
+            seed.Add(entity); await seed.SaveChangesAsync(); seed.Entry(entity).State = EntityState.Detached;
+        }
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror), new());
+        await using var context = database.CreateContext(interceptor);
+        context.Attach(entity); entity.Input = 4;
+
+        await context.SaveChangesAsync();
+
+        Assert.Equal(8, entity.Mirror);
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(8, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
+    }
+
+    [Fact]
+    public void Interceptor_rejects_explicit_transaction_before_sql()
+    {
+        using var database = new SqliteFixture();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 2 };
+        using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
+            new RelationEfCoreMappings().Map(objects), new());
+        using var context = database.CreateContext(interceptor);
+        context.Attach(entity); entity.Input = 3;
+        using var transaction = context.Database.BeginTransaction();
+
+        Assert.Throws<RelationUnsupportedTransactionException>(() => context.SaveChanges());
+
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(1, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
