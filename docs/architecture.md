@@ -101,7 +101,8 @@ await using var transaction = await context.Database.BeginTransactionAsync();
 await context.SaveChangesAsync();
 
 var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-PersistDurablePolicyWork(context, plan?.Result);
+if (plan is not null)
+    PersistDurablePolicyWork(context, plan.Result.GetDurablePolicyWork());
 await context.SaveChangesAsync();
 
 await transaction.CommitAsync();
@@ -116,6 +117,10 @@ database transaction. Finally call `Commit(runtime)` (which installs the retaine
 prepare while store-generated identities are still temporary or default.
 
 Planning is post-domain-mutation prediction, not a hypothetical what-if overlay.
+`RuntimeApplyResult` remains rich in-process impact and causal diagnostic data. `GetDurablePolicyWork()`
+strictly projects its policy requests to data-only definition keys, durable source identities, and repair
+reasons for outbox or queue scheduling. It rejects the entire batch if any request is not durable. This API
+does not declare the complete causal result to be a stable wire format.
 Lifecycle object-set entries and projection sources are captured as touched-state journals, so a small plan
 does not clone those complete registries. Relation, navigation, and dependency rollback scopes remain
 selected from the affected execution graph and preserve exception atomicity.

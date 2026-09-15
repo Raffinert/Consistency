@@ -125,15 +125,20 @@ policy work as data before any application callback runs:
 ```csharp
 RuntimeApplication application = runtime.ApplyDetailed(mutations);
 RuntimeApplyResult result = application.Result;
+DurablePolicyWork durableWork = result.GetDurablePolicyWork();
 
-foreach (var request in result.RepairRequests)
+foreach (var request in durableWork.RepairRequests)
 {
-    DurablePolicyRequestIdentity durable = request.GetDurableIdentity();
-    outbox.Add(durable.DefinitionKey, durable.Source, request.Reason);
+    outbox.Add(request.DefinitionKey, request.Source, request.Reason);
 }
 
 application.Dispatch.Invoke(); // optional configured in-process callbacks
 ```
+
+`RuntimeApplyResult` is rich in-process diagnostic and impact data. `DurablePolicyWork` is its strict,
+data-only projection for durable repair and immediate-evaluation scheduling; projection fails if any policy
+request lacks a named invariant, named object set, or canonically supported source key. The full causal result
+is not declared a stable wire format by this API.
 
 Detailed apply defaults to summary data. Opt into deterministic direct-cause records only when an
 explanation is needed:
@@ -306,7 +311,8 @@ unit.Prepare(runtime);
 await using var transaction = await context.Database.BeginTransactionAsync();
 await context.SaveChangesAsync();
 var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
-PersistDurableRepairOutboxRows(context, plan?.Result);
+if (plan is not null)
+    PersistDurablePolicyWork(context, plan.Result.GetDurablePolicyWork());
 await context.SaveChangesAsync();
 await transaction.CommitAsync();
 unit.Commit(runtime);

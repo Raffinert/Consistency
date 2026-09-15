@@ -26,8 +26,8 @@ link-validity-invariant -> Invalid
   because upstream link-validity [Exact]
 ```
 
-Definitions and the source set are named, so repair requests can use `GetDurableIdentity()` when moved
-to an outbox or background queue. Run the executable proof with:
+Definitions and the source set are named, so `RuntimeApplyResult.GetDurablePolicyWork()` can strictly project
+repair requests to data-only identities when moved to an outbox or background queue. Run the executable proof with:
 
 ```powershell
 dotnet run --project samples/Raffinert.Relations.PurchaseOrderSample -c Release
