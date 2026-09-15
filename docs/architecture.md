@@ -99,13 +99,13 @@ only through explicit post-commit dispatch.
 The EF adapter translates tracked entity lifecycle, scalar/reference changes, and collection resets into
 the same core mutation protocol. Relationship evidence is captured before EF change detection can discard
 old owned/reference targets. The adapter's `Enforce` and `Materialize` mappings are persistence policy;
-the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a Relations key,
+the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a consistency key,
 relation, derived value, invariant, or projected selector.
 
 The convenience save methods and interceptor validate authoritative data scope and prepare before `SaveChanges`, commit after success, and
-dispatch last. They reject ambient/external transactions and store-generated Relations identities. Those
-cases require the explicit transaction and captured-unit workflow, with runtime commit only after database
-commit. The adapter never auto-loads missing graph state. Cross-object enforcement and materialization
+dispatch last. They reject ambient/external transactions and store-generated consistency identities. Those
+cases require an application-owned transaction and policy-aware persistence unit, with runtime commit only
+after database commit. The adapter never auto-loads missing graph state. Cross-object enforcement and materialization
 require the host to seed complete runtime coverage and declare it with `ConsistencyScope`; `Map(...)` alone
 is change translation, not coverage proof. Full operational details are in
 [EF Core consistency](ef-core-consistency.md).
@@ -133,30 +133,36 @@ should use `SourceIdentity` data. The caller decides whether a violation blocks 
 responsible for transaction management. Domain-level `Unknown` behavior is modeled by the Boolean invariant
 (for example, mapping Unknown to non-blocking); the planning API itself does not define tri-state semantics.
 
-For application-assigned keys, use the binding sequence:
+For authoritative EF persistence, use the policy-aware binding sequence:
 
 ```csharp
-var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
-unit.Prepare(runtime);
+var work = context.CaptureConsistencyUnitOfWork(runtime, mappings,
+    new ConsistencySaveOptions { Scope = scope });
 
 await using var transaction = await context.Database.BeginTransactionAsync();
+
+// For store-generated keys, save once here to finalize keys and relationship fixup.
 await context.SaveChangesAsync();
 
-var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal);
+var plan = work.PrepareAndPlan();
 if (plan is not null)
     PersistDurablePolicyWork(context, plan.Result.GetDurablePolicyWork());
 await context.SaveChangesAsync();
 
 await transaction.CommitAsync();
-unit.Commit(runtime);
-unit.Dispatch(runtime);
+work.CommitAfterDatabaseCommit();
+work.Dispatch();
 ```
 
-For store-generated keys, capture the unit before the first `SaveChanges`, begin the database transaction,
-and perform the first save so final keys and relationship fixup are available. Only then call `Prepare(runtime)`
-and `PlanDetailed(runtime)`, persist durable work from `plan.Result`, perform the second save, and commit the
-database transaction. Finally call `Commit(runtime)` (which installs the retained plan) and `Dispatch`. Do not
-prepare while store-generated identities are still temporary or default.
+Capture validates the immutable persistence-policy snapshot, including scope, before SQL. For store-generated
+keys, capture before the first `SaveChanges`, then perform that save inside the transaction so final keys and
+relationship fixup are available before `PrepareAndPlan`. For stable application keys, planning may precede
+the first and only save. The application owns database durability; the consistency work item installs its
+retained runtime plan only through `CommitAfterDatabaseCommit`, followed by `Dispatch`.
+
+`ConsistencyUnitOfWork` and `ChangeTrackerAdapter.CaptureUnitOfWork` remain available as low-level runtime
+binding primitives. They intentionally do not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or
+`ConsistencyScope`; use `CaptureConsistencyUnitOfWork` for authoritative EF persistence.
 
 Planning is post-domain-mutation prediction, not a hypothetical what-if overlay.
 `RuntimeApplyResult` remains rich in-process impact and causal diagnostic data. `GetDurablePolicyWork()`
@@ -167,10 +173,7 @@ Lifecycle object-set entries and projection sources are captured as touched-stat
 does not clone those complete registries. Relation, navigation, and dependency rollback scopes remain
 selected from the affected execution graph and preserve exception atomicity.
 
-That ordering assumes stable application-assigned object-set keys. With store-generated keys, capture the
-unit before saving, run the first `SaveChanges` inside the transaction, and only then prepare and plan so
-final generated keys and relationship fixup become the binding identities. Registered runtime keys never
-change. EF reference changes carry the actual tracked old principal when it is unambiguous and fail capture
+Registered runtime keys never change. EF reference changes carry the actual tracked old principal when it is unambiguous and fail capture
 when it is not; unavailable history is never represented as a real `null` old value.
 
 If a convenience save completes in the database but runtime synchronization fails, the adapter throws

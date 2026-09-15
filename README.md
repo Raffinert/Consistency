@@ -91,6 +91,11 @@ runtime set has complete coverage. Raffinert does not load missing graph data. S
 generated keys, and recovery rules, or run the
 [`Raffinert.Consistency.EntityFrameworkCore.Sample`](samples/Raffinert.Consistency.EntityFrameworkCore.Sample).
 
+For application-owned transactions, generated keys, or an outbox, capture a policy-aware work item before
+the first save, call `PrepareAndPlan()` when keys are final, persist the returned plan data, commit the
+database transaction, then call `CommitAfterDatabaseCommit()` and `Dispatch()`. This path applies the same
+scope, enforcement, and materialization policy as convenience saves.
+
 ## What Raffinert.Consistency is not
 
 It is not an ORM, event bus, or general-purpose workflow engine.

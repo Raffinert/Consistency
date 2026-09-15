@@ -83,7 +83,7 @@ is intentionally coarse in this version; key- or partition-scoped completeness i
 
 ## Materialization contract
 
-A materialized target is a persisted mirror, never an input to the Relations graph. Configuration rejects
+A materialized target is a persisted mirror, never an input to the consistency graph. Configuration rejects
 keys, generated properties, relation/derived/invariant dependencies, and projected-selector members.
 The source must be the same object instance tracked by the saving `DbContext`. Writes use EF value comparison
 and skip equal values. If a mirror setter fails before SQL, earlier adapter-owned mirror writes are restored;
@@ -92,24 +92,44 @@ caller-owned POCO mutations are not rolled back.
 ## Transactions and generated keys
 
 Convenience saves and the interceptor reject ambient or externally controlled transactions. They also
-reject an added entity when its Relations identity is store-generated. Use the manual workflow:
+reject an added entity when its consistency identity is store-generated. Use the policy-aware manual workflow:
 
-```text
-capture relationship evidence if needed
--> begin database transaction
--> first SaveChanges (obtain final keys and relationship fixup)
--> prepare and PlanDetailed with affected evaluations
--> if enforced violation: rollback and discard/reload the DbContext
--> otherwise write mirrors/outbox, DetectChanges, and SaveChanges again if needed
--> commit database transaction
--> Commit(plan)
--> Dispatch
+```csharp
+var scope = new ConsistencyScope()
+    .Complete(orderLines)
+    .Complete(allocations);
+
+var work = db.CaptureConsistencyUnitOfWork(
+    runtime,
+    mappings,
+    new ConsistencySaveOptions { Scope = scope });
+
+await using var transaction = await db.Database.BeginTransactionAsync();
+
+// Required when generated values must become final before planning.
+await db.SaveChangesAsync();
+
+var plan = work.PrepareAndPlan();
+if (plan is not null)
+    PersistDurablePolicyWork(db, plan.Result.GetDurablePolicyWork());
+
+await db.SaveChangesAsync();
+await transaction.CommitAsync();
+
+work.CommitAfterDatabaseCommit();
+work.Dispatch();
 ```
 
-The automatic scope gate belongs to the convenience-save/interceptor coordinator and therefore does not
-wrap this low-level workflow. Before treating a manual `PlanDetailed` result as an authoritative
-cross-object persistence decision, the application must independently establish the same complete runtime
-coverage. `PlanDetailed` itself remains an EF-agnostic runtime primitive and does not query a database.
+Capture validates mappings and scope and preserves relationship evidence before the first save.
+`PrepareAndPlan` applies the same enforcement and materialization policy as convenience saves but never
+executes SQL. For pending additions, `Complete(set)` asserts completeness of the planned final boundary:
+current runtime coverage plus lifecycle changes captured by this work item. A stable application-key flow
+can prepare before its first SQL command and may require only one database save.
+
+The application owns transaction commit and rollback. After a planning or persistence failure, roll back
+and discard/reload the context. Call `CommitAfterDatabaseCommit` only after durability, then dispatch.
+The low-level `ChangeTrackerAdapter.CaptureUnitOfWork` and `ConsistencyUnitOfWork.PlanDetailed` remain
+policy-agnostic runtime primitives; they do not apply `Enforce`, `Materialize`, or `ConsistencyScope`.
 
 A database rollback does not restore EF's in-memory generated keys or tracking snapshots. Discard the
 context, or clear and reload authoritative state; do not guess-reset keys and reuse the prepared plan.
@@ -118,7 +138,9 @@ context, or clear and reload authoritative state; do not guess-reset keys and re
 
 | Failure point | Database | Runtime | Required action |
 |---|---|---|---|
-| Planning, invariant, or mirror write | Not called | Unchanged | Correct mutations/configuration and retry |
+| Scope failure at capture | Not called | Unchanged | Seed/maintain coverage and provide `ConsistencyScope` |
+| Generated key not final at manual plan | Uncommitted/rollbackable | Unchanged | Save for final keys, or discard a faulted work item |
+| Planning, invariant, or mirror write | Not durable | Unchanged | Roll back and discard/reload as appropriate |
 | EF command | Failed/rolled back by EF | Unchanged | Reload/discard tracked state as appropriate |
 | Runtime install after DB success | Durable | Pre-commit; synchronization exception | Reconcile/rebuild runtime; do not retry SQL blindly |
 | Dispatch after DB/runtime commit | Durable | Committed | Retry resumable policy dispatch |

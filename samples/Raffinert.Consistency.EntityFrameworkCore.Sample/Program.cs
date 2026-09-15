@@ -45,9 +45,42 @@ context.SaveChangesConsistently(runtime, mappings);
 var persisted = context.Set<OrderLine>().AsNoTracking().Single();
 Console.WriteLine($"Persisted RemainingQuantity={persisted.RemainingQuantity}; runtime version={runtime.Version}.");
 
+var generatedBuilder = new ConsistencyModelBuilder();
+var generatedOrders = generatedBuilder.Objects<GeneratedOrder>().Key(x => x.Id);
+var doubledAmount = generatedBuilder.Derived(generatedOrders).Compute(x => x.Amount * 2);
+var generatedRuntime = generatedBuilder.Build().CreateRuntime();
+var generatedMappings = new ConsistencyEfCoreMappings()
+    .Map(generatedOrders)
+    .Materialize(doubledAmount, x => x.AmountMirror);
+var generated = new GeneratedOrder { Amount = 7 };
+context.Add(generated);
+var work = context.CaptureConsistencyUnitOfWork(generatedRuntime, generatedMappings);
+
+using (var transaction = context.Database.BeginTransaction())
+{
+    context.SaveChanges(); // Finalize the generated consistency key.
+    _ = work.PrepareAndPlan();
+    context.SaveChanges(); // Persist the calculated mirror.
+    transaction.Commit();
+}
+work.CommitAfterDatabaseCommit();
+work.Dispatch();
+Console.WriteLine($"Manual generated-key workflow persisted mirror={generated.AmountMirror}.");
+
 internal sealed class OrdersContext(DbContextOptions<OrdersContext> options) : DbContext(options)
 {
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<OrderLine>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<OrderLine>();
+        modelBuilder.Entity<GeneratedOrder>().Property(x => x.Id).ValueGeneratedOnAdd();
+    }
+}
+
+internal sealed class GeneratedOrder
+{
+    public int Id { get; set; }
+    public int Amount { get; set; }
+    public int AmountMirror { get; set; }
 }
 
 internal sealed class OrderLine
