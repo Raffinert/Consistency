@@ -753,6 +753,46 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(10, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
     }
 
+    [Fact]
+    public void Consistent_save_rejects_store_generated_relations_key_before_database_write()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var model = new RelationModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationEfCoreMappings().Map(objects);
+        var entity = new GeneratedEntity { Code = "new" };
+        context.Add(entity);
+
+        Assert.Throws<RelationStoreGeneratedKeyRequiresManualWorkflowException>(
+            () => context.SaveChangesConsistently(runtime, mappings));
+
+        Assert.Equal(0, entity.Id);
+        Assert.Equal(0, runtime.Version);
+        Assert.False(database.CreateContext().Set<GeneratedEntity>().Any());
+    }
+
+    [Fact]
+    public void Consistency_interceptor_materializes_and_commits_runtime_after_database_success()
+    {
+        using var database = new SqliteFixture();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 2, Mirror = 4 };
+        using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var doubled = model.Derived(objects).Compute(x => x.Input * 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var mappings = new RelationEfCoreMappings().Map(objects).Materialize(doubled, x => x.Mirror);
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime, mappings, new());
+        using var context = database.CreateContext(interceptor);
+        context.Attach(entity);
+        entity.Input = 5;
+
+        context.SaveChanges();
+
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(10, entity.Mirror);
+        Assert.Equal(10, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Mirror);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -764,16 +804,22 @@ public sealed class EntityFrameworkCoreSqliteTests
             context.Database.EnsureCreated();
         }
 
-        public SqliteContext CreateContext() => new(_connection);
+        public SqliteContext CreateContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) =>
+            new(_connection, interceptors);
         public void Dispose() => _connection.Dispose();
     }
 
-    private sealed class SqliteContext(SqliteConnection connection) : DbContext
+    private sealed class SqliteContext(SqliteConnection connection,
+        Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) : DbContext
     {
         public DbSet<ConcurrencyEntity> ConcurrencyEntities => Set<ConcurrencyEntity>();
         public DbSet<OutboxRecord> Outbox => Set<OutboxRecord>();
 
-        protected override void OnConfiguring(DbContextOptionsBuilder options) => options.UseSqlite(connection);
+        protected override void OnConfiguring(DbContextOptionsBuilder options)
+        {
+            options.UseSqlite(connection);
+            if (interceptors.Length > 0) options.AddInterceptors(interceptors);
+        }
 
         protected override void OnModelCreating(ModelBuilder model)
         {

@@ -46,6 +46,7 @@ public sealed class RelationUnitOfWorkMappings
 
     internal interface IEntitySetMapping
     {
+        IReadOnlySet<MemberInfo> KeyMembers { get; }
         bool Matches(EntityEntry entry);
         ObjectAdded Add(object entity);
         ObjectRemoved Remove(object entity);
@@ -56,6 +57,8 @@ public sealed class RelationUnitOfWorkMappings
         ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector) : IEntitySetMapping where TEntity : class
     {
+        public IReadOnlySet<MemberInfo> KeyMembers => set.Definition.KeyMembers;
+
         public bool Matches(EntityEntry entry) =>
             entry.Entity is TEntity entity &&
             (selector is null || selector(entry.Context.Entry(entity)));

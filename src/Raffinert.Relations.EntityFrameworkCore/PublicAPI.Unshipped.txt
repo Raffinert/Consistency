@@ -22,6 +22,7 @@ Raffinert.Relations.EntityFrameworkCore.RelationEfCoreSaveBehavior.Validate = 0 
 Raffinert.Relations.EntityFrameworkCore.RelationInvariantViolationException
 Raffinert.Relations.EntityFrameworkCore.RelationInvariantViolationException.Violations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Relations.PlannedInvariantEvaluation!>!
 Raffinert.Relations.EntityFrameworkCore.RelationMaterializationSourceNotTrackedException
+Raffinert.Relations.EntityFrameworkCore.RelationStoreGeneratedKeyRequiresManualWorkflowException
 Raffinert.Relations.EntityFrameworkCore.RelationUnsupportedTransactionException
 Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings
 Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings.Enforce<TSource>(Raffinert.Relations.Invariant<TSource!>! invariant) -> Raffinert.Relations.EntityFrameworkCore.RelationEfCoreMappings!
