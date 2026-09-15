@@ -106,7 +106,13 @@ internal static class ConsistencyCoordinator
             foreach (var member in mapping.KeyMembers)
             {
                 var property = entry.Metadata.FindProperty(member);
-                if (property is not null && property.ValueGenerated != Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never)
+                if (property is null) continue;
+                var propertyEntry = entry.Property(property.Name);
+                var value = propertyEntry.CurrentValue;
+                var defaultValue = property.ClrType.IsValueType ? Activator.CreateInstance(property.ClrType) : null;
+                if (propertyEntry.IsTemporary ||
+                    (property.ValueGenerated != Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never &&
+                     Equals(value, defaultValue)))
                     throw new RelationStoreGeneratedKeyRequiresManualWorkflowException(entry.Metadata.ClrType, property.Name);
             }
         }

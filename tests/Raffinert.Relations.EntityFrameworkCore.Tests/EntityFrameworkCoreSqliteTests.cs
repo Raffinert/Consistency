@@ -955,6 +955,73 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(0, runtime.Version);
     }
 
+    [Fact]
+    public void Interceptor_database_failure_clears_pending_state_for_next_save()
+    {
+        using var database = new SqliteFixture();
+        using (var seed = database.CreateContext())
+        {
+            seed.Add(new UniqueEntity { Id = Guid.NewGuid(), Code = "DUP" });
+            seed.SaveChanges();
+        }
+        var model = new RelationModelBuilder(); var objects = model.Objects<UniqueEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new RelationEfCoreMappings().Map(objects);
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime, mappings, new());
+        using var context = database.CreateContext(interceptor);
+        var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "DUP" };
+        context.Add(entity);
+
+        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+        Assert.Equal(0, runtime.Version);
+        entity.Code = "OK";
+        context.SaveChanges();
+
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(2, database.CreateContext().Set<UniqueEntity>().Count());
+    }
+
+    [Fact]
+    public void Interceptor_rejects_store_generated_relations_key_before_sql()
+    {
+        using var database = new SqliteFixture();
+        var model = new RelationModelBuilder(); var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime();
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
+            new RelationEfCoreMappings().Map(objects), new());
+        using var context = database.CreateContext(interceptor);
+        var entity = new GeneratedEntity { Code = "new" };
+        context.Add(entity);
+
+        Assert.Throws<RelationStoreGeneratedKeyRequiresManualWorkflowException>(() => context.SaveChanges());
+
+        Assert.Equal(0, entity.Id);
+        Assert.Equal(0, runtime.Version);
+        Assert.False(database.CreateContext().Set<GeneratedEntity>().Any());
+    }
+
+    [Fact]
+    public void Interceptor_rejects_reentrant_save_during_consistency_planning()
+    {
+        using var database = new SqliteFixture();
+        var gate = new ReentrantSaveGate();
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var derived = model.Derived(objects).Compute(x => gate.Compute(x.Input)).AllowIncompleteDependencies();
+        var runtime = model.Build().CreateRuntime();
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(derived, x => x.Mirror), new());
+        using var context = database.CreateContext(interceptor);
+        gate.Context = context;
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
+        context.Add(entity);
+
+        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
+
+        Assert.Contains("already pending", error.Message);
+        Assert.Equal(0, runtime.Version);
+        Assert.False(database.CreateContext().Set<MirrorEntity>().Any());
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -1066,6 +1133,16 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         public bool Throw { get; set; }
         public bool Check(int value) => Throw ? throw new InvalidOperationException("Invariant failure.") : value >= 0;
+    }
+
+    private sealed class ReentrantSaveGate
+    {
+        public DbContext Context { get; set; } = null!;
+        public int Compute(int value)
+        {
+            Context.SaveChanges();
+            return value * 2;
+        }
     }
 
     private sealed class CascadeParent

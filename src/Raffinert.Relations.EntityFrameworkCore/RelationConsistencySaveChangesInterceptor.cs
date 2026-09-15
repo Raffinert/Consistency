@@ -10,6 +10,7 @@ public sealed class RelationConsistencySaveChangesInterceptor(
     RelationEfCoreConsistencyOptions options) : SaveChangesInterceptor
 {
     private readonly ConditionalWeakTable<DbContext, PendingConsistencySave> _pending = new();
+    private readonly ConditionalWeakTable<DbContext, object> _preparing = new();
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -44,8 +45,17 @@ public sealed class RelationConsistencySaveChangesInterceptor(
     private void Prepare(DbContext? context)
     {
         if (context is null) return;
-        if (_pending.TryGetValue(context, out _)) throw new InvalidOperationException("A consistency save is already pending for this DbContext.");
-        _pending.Add(context, ConsistencyCoordinator.Prepare(context, runtime, mappings, options));
+        if (_pending.TryGetValue(context, out _) || _preparing.TryGetValue(context, out _))
+            throw new InvalidOperationException("A consistency save is already pending for this DbContext.");
+        _preparing.Add(context, new object());
+        try
+        {
+            _pending.Add(context, ConsistencyCoordinator.Prepare(context, runtime, mappings, options));
+        }
+        finally
+        {
+            _preparing.Remove(context);
+        }
     }
 
     private void Complete(DbContext? context)
