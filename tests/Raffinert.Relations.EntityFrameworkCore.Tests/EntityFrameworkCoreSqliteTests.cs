@@ -415,6 +415,23 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
+    public void Owned_optional_reference_null_to_instance_is_captured()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var owner = new OwnedOwner { Id = Guid.NewGuid(), Settings = null };
+        context.Add(owner); context.SaveChanges();
+        var settings = new OwnedSettings { Code = "A" };
+        owner.Settings = settings;
+
+        var changes = Assert.IsType<ChangeSet>(ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
+
+        var change = Assert.Single(changes.Changes, x =>
+            ReferenceEquals(x.Instance, owner) && x.Member.Name == nameof(OwnedOwner.Settings));
+        Assert.Null(change.OldValue);
+        Assert.Same(settings, change.NewValue);
+    }
+
+    [Fact]
     public void Many_to_many_skip_navigation_change_emits_collection_reset()
     {
         using var database = new SqliteFixture();
@@ -800,6 +817,40 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(violates ? 0 : 1, runtime.Version);
         if (violates) Assert.False(runtime.Remove(objects, entity));
         else Assert.True(runtime.GetState(invariant, entity) == InvariantEvaluationState.Valid);
+    }
+
+    [Fact]
+    public void Generated_key_valid_plan_materializes_before_database_and_runtime_commit()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var model = new RelationModelBuilder();
+        var objects = model.Objects<GeneratedEntity>().Key(x => x.Id);
+        var length = model.Derived(objects).Compute(x => x.Code.Length);
+        var runtime = model.Build().CreateRuntime();
+        var entity = new GeneratedEntity { Code = "generated" };
+        context.Add(entity);
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker,
+            new RelationUnitOfWorkMappings().Map(objects));
+
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            context.SaveChanges();
+            Assert.True(entity.Id > 0);
+            unit.Prepare(runtime);
+            var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
+                PlannedInvariantEvaluationMode.None, PlannedDerivedEvaluationMode.Affected)!;
+            var evaluation = Assert.Single(plan.DerivedEvaluations);
+            Assert.Equal(entity.Id, evaluation.SourceIdentity!.SourceKey);
+            entity.Mirror = Assert.IsType<int>(evaluation.Value);
+            context.ChangeTracker.DetectChanges();
+            context.SaveChanges();
+            transaction.Commit();
+            unit.Commit(runtime); unit.Dispatch(runtime);
+        }
+
+        var persisted = database.CreateContext().Set<GeneratedEntity>().AsNoTracking().Single();
+        Assert.Equal(entity.Code.Length, persisted.Mirror);
+        Assert.Equal(1, runtime.Version);
     }
 
     private sealed class EvaluationCounter
@@ -1219,6 +1270,28 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
+    public void Interceptor_dispatch_failure_occurs_after_database_and_runtime_commit()
+    {
+        using var database = new SqliteFixture();
+        var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
+        using (var seed = database.CreateContext()) { seed.Add(entity); seed.SaveChanges(); seed.Entry(entity).State = EntityState.Detached; }
+        var model = new RelationModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var value = model.Derived(objects).Compute(x => x.Input);
+        model.Invariant(objects).Using(value).Must((_, current) => current <= 1)
+            .ScheduleRepairWith(_ => throw new DispatchFailure());
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var interceptor = new RelationConsistencySaveChangesInterceptor(runtime,
+            new RelationEfCoreMappings().Map(objects), new());
+        using var context = database.CreateContext(interceptor);
+        context.Attach(entity); entity.Input = 2;
+
+        Assert.Throws<DispatchFailure>(() => context.SaveChanges());
+
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(2, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
+    }
+
+    [Fact]
     public void Materialization_source_must_be_same_instance_tracked_by_saving_context()
     {
         using var database = new SqliteFixture(); using var context = database.CreateContext();
@@ -1332,6 +1405,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     {
         public int Id { get; set; }
         public string Code { get; set; } = "";
+        public int Mirror { get; set; }
     }
 
     private sealed class ConcurrencyEntity
@@ -1407,6 +1481,8 @@ public sealed class EntityFrameworkCoreSqliteTests
             return result;
         }
     }
+
+    private sealed class DispatchFailure : Exception;
 
     private sealed class CascadeParent
     {
