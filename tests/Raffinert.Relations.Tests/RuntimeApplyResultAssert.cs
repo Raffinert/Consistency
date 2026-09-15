@@ -58,7 +58,9 @@ internal static class RuntimeApplyResultAssert
 
     private static string Ref(object? value) => value is null
         ? "null"
-        : $"{value.GetType().FullName}@{RuntimeHelpers.GetHashCode(value)}";
+        : value.GetType().GetProperty("Id")?.GetValue(value) is { } id
+            ? $"{value.GetType().FullName}#{id}"
+            : $"{value.GetType().FullName}@{RuntimeHelpers.GetHashCode(value)}";
 
     private static string Join(IEnumerable<string> values) => string.Join(',', values.OrderBy(value => value, StringComparer.Ordinal));
 }
