@@ -23,17 +23,9 @@ jobs:
       - run: dotnet test tests/Raffinert.Relations.EntityFrameworkCore.Tests/Raffinert.Relations.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
       - run: dotnet format Raffinert.Relations.sln --no-restore --verify-no-changes
       - run: dotnet pack Raffinert.Relations.sln -c Release --no-build -o artifacts/packages
-      - name: Validate package payloads
+      - name: Validate release version, API baselines, and package payloads
         shell: pwsh
-        run: |
-          $packages = Get-ChildItem artifacts/packages/*.nupkg | Where-Object { $_.Name -notlike '*.snupkg' }
-          if ($packages.Count -ne 2) { throw "Expected two NuGet packages." }
-          if ((Get-ChildItem artifacts/packages/*.snupkg).Count -ne 2) { throw "Expected two symbol packages." }
-          foreach ($package in $packages) {
-            $entries = [IO.Compression.ZipFile]::OpenRead($package.FullName).Entries.FullName
-            if (-not ($entries -match '^README.md$')) { throw "$($package.Name) has no README." }
-            if (-not ($entries -match '^CHANGELOG.md$')) { throw "$($package.Name) has no changelog." }
-          }
+        run: ./eng/VerifyReleaseCandidate.ps1 -PackageDirectory artifacts/packages -RequireEmptyUnshipped
       - name: Smoke test packed packages
         run: |
           PACKAGE_SOURCE="$GITHUB_WORKSPACE/artifacts/packages"
@@ -41,6 +33,7 @@ jobs:
             dotnet restore "tests/package-consumers/$project" --source https://api.nuget.org/v3/index.json --source "$PACKAGE_SOURCE"
             dotnet run --project "tests/package-consumers/$project" -c Release --no-restore
           done
+      # Alpha publication remains an intentional manual action; this workflow only uploads verification artifacts.
       - uses: actions/upload-artifact@v4
         with:
           name: release-candidate-packages
