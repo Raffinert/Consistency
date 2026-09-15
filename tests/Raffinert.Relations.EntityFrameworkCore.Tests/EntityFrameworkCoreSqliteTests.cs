@@ -1066,6 +1066,48 @@ public sealed class EntityFrameworkCoreSqliteTests
         Assert.Equal(1, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
     }
 
+    [Fact]
+    public void Materialization_source_must_be_same_instance_tracked_by_saving_context()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var source = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
+        var item = new MaterializationItem { Id = Guid.NewGuid(), Value = 1 };
+        context.AddRange(source, item); context.SaveChanges();
+        var model = new RelationModelBuilder(); var sources = model.Objects<MirrorEntity>().Key(x => x.Id);
+        var items = model.Objects<MaterializationItem>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((left, right) => left.Input == right.Value);
+        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        var runtime = model.Build().CreateRuntime(seed => { seed.Add(sources, [source]); seed.Add(items, [item]); });
+        context.Entry(source).State = EntityState.Detached;
+        item.Value = 2;
+
+        Assert.Throws<RelationMaterializationSourceNotTrackedException>(() => context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(sources).Map(items).Materialize(count, x => x.Mirror)));
+
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(1, database.CreateContext().Set<MaterializationItem>().AsNoTracking().Single().Value);
+    }
+
+    [Fact]
+    public void Equal_materialized_value_skips_clr_setter()
+    {
+        using var database = new SqliteFixture(); using var context = database.CreateContext();
+        var entity = new ThrowingMirrorEntity { Id = Guid.NewGuid(), Input = 1, Mirror = 1 };
+        context.Add(entity); context.SaveChanges();
+        var writes = entity.MirrorWrites;
+        var model = new RelationModelBuilder(); var objects = model.Objects<ThrowingMirrorEntity>().Key(x => x.Id);
+        var parity = model.Derived(objects).Compute(x => x.Input % 2);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        entity.Input = 3;
+
+        context.SaveChangesConsistently(runtime,
+            new RelationEfCoreMappings().Map(objects).Materialize(parity, x => x.Mirror));
+
+        Assert.Equal(writes, entity.MirrorWrites);
+        Assert.Equal(1, entity.Mirror);
+        Assert.Equal(1, runtime.Version);
+    }
+
     private sealed class SqliteFixture : IDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -1102,6 +1144,8 @@ public sealed class EntityFrameworkCoreSqliteTests
             model.Entity<OutboxRecord>().HasIndex(entity => entity.Payload).IsUnique();
             model.Entity<MirrorEntity>();
             model.Entity<ThrowingMirrorEntity>().Ignore(x => x.ThrowOnFour);
+            model.Entity<ThrowingMirrorEntity>().Ignore(x => x.MirrorWrites);
+            model.Entity<MaterializationItem>();
             model.Entity<CascadeChild>().HasOne(entity => entity.Parent).WithMany(entity => entity.Children)
                 .HasForeignKey(entity => entity.ParentId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<OwnedOwner>().OwnsOne(entity => entity.Settings);
@@ -1164,13 +1208,24 @@ public sealed class EntityFrameworkCoreSqliteTests
         public Guid Id { get; init; }
         public int Input { get; set; }
         public bool ThrowOnFour { get; set; }
+        public int MirrorWrites { get; private set; }
         public int Mirror
         {
             get => _mirror;
-            set => _mirror = ThrowOnFour && value == 4
-                ? throw new InvalidOperationException("Mirror setter failure.")
-                : value;
+            set
+            {
+                MirrorWrites++;
+                _mirror = ThrowOnFour && value == 4
+                    ? throw new InvalidOperationException("Mirror setter failure.")
+                    : value;
+            }
         }
+    }
+
+    private sealed class MaterializationItem
+    {
+        public Guid Id { get; init; }
+        public int Value { get; set; }
     }
 
     private sealed class ThrowingInvariantGate
