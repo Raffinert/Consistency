@@ -41,6 +41,7 @@ public sealed class DerivedBuilder<TSource> where TSource : class
 {
     private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
+    private readonly List<TrackedExpressionDependency> _declaredDependencies = [];
     private DerivedImpactPolicy _impactPolicy = new(
         DependencySeverity.Dirty,
         DependencySeverity.Dirty,
@@ -53,6 +54,18 @@ public sealed class DerivedBuilder<TSource> where TSource : class
     {
         _model = model;
         _source = source;
+    }
+
+    /// <summary>
+    /// Declares a source member path that determines this derived value when the computation contains opaque code.
+    /// Declared paths augment inferred dependencies and are trusted as part of the computation's completeness contract.
+    /// </summary>
+    public DerivedBuilder<TSource> DependsOn<TDependency>(
+        Expression<Func<TSource, TDependency>> dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        _declaredDependencies.Add(ExpressionDependencyAnalyzer.AnalyzeDeclaredSourceDependency(dependency));
+        return this;
     }
 
     /// <summary>Configures semantic severity for direct source-member changes.</summary>
@@ -137,7 +150,8 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _source.Definition,
             computation,
             computation.Compile(),
-            _impactPolicy);
+            _impactPolicy,
+            _declaredDependencies);
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
     }

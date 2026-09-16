@@ -194,6 +194,13 @@ trigger side effects, raw SQL, bulk or execute-update/delete operations, other p
 database changes require exact application-supplied mutations or a runtime rebuild/reseed/reconciliation.
 
 Planning is post-domain-mutation prediction, not a hypothetical what-if overlay.
+
+For a source-derived computation that calls reusable opaque business logic, `DependsOn(x => x.Member)` declares
+the hidden source paths that determine the result. These declarations augment normal expression inference and
+flow through the existing routing, navigation-coverage, diagnostics, and EF semantic-usage metadata. The model
+author must declare every hidden semantic dependency; Raffinert does not inspect the opaque method body.
+`DependsOn` cannot legitimize mutable external state, while `AllowIncompleteDependencies` remains a distinct
+opt-in to potentially incomplete tracking and weaker cached-freshness guarantees.
 `RuntimeApplyResult` remains rich in-process impact and causal diagnostic data. `GetDurablePolicyWork()`
 strictly projects its policy requests to data-only definition keys, durable source identities, and repair
 reasons for outbox or queue scheduling. It rejects the entire batch if any request is not durable. This API

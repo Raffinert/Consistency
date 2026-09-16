@@ -87,7 +87,8 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
     Expression<Func<TSource, TValue>> computationExpression,
     Func<TSource, TValue> computation,
-    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    DerivedImpactPolicy impactPolicy,
+    IReadOnlyList<TrackedExpressionDependency> declaredDependencies) : IDerivedDefinition
     where TSource : class
 {
     public string? DefinitionKey { get; set; }
@@ -95,7 +96,7 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
     public IReadOnlyList<DerivedInput> Inputs { get; } = [];
     public LambdaExpression ComputationExpression => computationExpression;
     public ExpressionDependencyAnalysis Analysis { get; } =
-        ExpressionDependencyAnalyzer.AnalyzeDerived(computationExpression);
+        ExpressionDependencyAnalyzer.AnalyzeSourceDerived(computationExpression, declaredDependencies);
     public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public string ComputationPlanName => "SourceFullRecompute";
     public bool RequiresExactPropagation => false;

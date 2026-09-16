@@ -84,6 +84,35 @@ internal static class ExpressionDependencyAnalyzer
             [expression.Parameters[0]] = ExpressionParameterRole.DerivedSource
         });
 
+    public static TrackedExpressionDependency AnalyzeDeclaredSourceDependency(LambdaExpression expression)
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        if (expression.Parameters.Count != 1 ||
+            !MemberPath.TryCreate(expression.Body, expression.Parameters[0], out var path) ||
+            path.Members.Any(DependencyPathNavigation.IsCollection))
+            throw new ArgumentException(
+                "A declared derived dependency must be a single non-collection member path rooted in the derived source.",
+                nameof(expression));
+        return new TrackedExpressionDependency(
+            ExpressionParameterRole.DerivedSource,
+            new DependencyPath(0, path.RootType, path.Members));
+    }
+
+    public static ExpressionDependencyAnalysis AnalyzeSourceDerived(
+        LambdaExpression expression,
+        IReadOnlyList<TrackedExpressionDependency> declaredDependencies)
+    {
+        var inferred = AnalyzeSourceDerived(expression);
+        return new ExpressionDependencyAnalysis(
+            inferred.Dependencies.Concat(declaredDependencies)
+                .Distinct(TrackedDependencyComparer.Instance).ToArray(),
+            declaredDependencies.Count == 0
+                ? inferred.Flags
+                : inferred.Flags & ~DependencyAnalysisFlags.ContainsOpaqueCode,
+            inferred.HasRelationMembershipDependency,
+            inferred.LinqSemantics);
+    }
+
     public static ExpressionDependencyAnalysis AnalyzeComposedDerived(LambdaExpression expression)
     {
         var parameters = new Dictionary<ParameterExpression, ExpressionParameterRole>

@@ -258,6 +258,32 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         Assert.Equal(8, runtime.Get(computed, line));
     }
 
+    [Fact]
+    public void Explicit_declared_dependency_flows_to_generated_value_guard()
+    {
+        using var database = new TestDatabase();
+        using var context = database.CreateContext();
+        var product = new GeneratedProduct { Input = 3 };
+        var line = new GeneratedLine { Product = product };
+        context.Add(line);
+        context.SaveChanges();
+        var model = new ConsistencyModelBuilder();
+        var lines = model.Objects<GeneratedLine>().Key(x => x.Id);
+        var computed = model.Derived(lines)
+            .DependsOn(x => x.Product.DatabaseComputed)
+            .Compute(x => ReadGenerated(x.Product));
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
+        product.Input = 4;
+
+        var error = Assert.Throws<ConsistencyStoreGeneratedValueRequiresManualWorkflowException>(() =>
+            context.SaveChangesConsistently(runtime,
+                new ConsistencyEfCoreMappings().Map(lines).Materialize(computed, x => x.Mirror),
+                Complete(lines)));
+
+        Assert.Equal(nameof(GeneratedProduct.DatabaseComputed), error.PropertyName);
+        Assert.Equal(3, database.CreateContext().Set<GeneratedProduct>().AsNoTracking().Single().Input);
+    }
+
     private static void RunUnmappedDependencyPath(PathKind kind)
     {
         using var database = new TestDatabase();
@@ -338,6 +364,8 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         context.SaveChanges();
         return record;
     }
+
+    private static int ReadGenerated(GeneratedProduct product) => product.DatabaseComputed;
 
     private static ConsistencySaveOptions Complete<T>(ObjectSet<T> set) where T : class =>
         new() { Scope = new ConsistencyScope().Complete(set) };

@@ -1,12 +1,12 @@
 # Codex implementation plan — anemic-model dependency-maintenance dogfooding example
 
-Status: **BLOCKED — CURRENT PUBLIC API CANNOT EXPRESS THE REQUIRED COMPLETE DEPENDENCIES**
+Status: **READY TO RESUME — BLOCKER RESOLVED BY TASKS 174–181**
 
 Baseline commit: `616ba28dc820475d08ed59b771b79b8608a7e7aa`
 
 Tasks: **167–173**
 
-## Implementation blocker discovered 2026-09-16
+## Implementation blocker discovered 2026-09-16 — resolved
 
 The required declaration:
 
@@ -24,10 +24,9 @@ which explicitly accepts weaker cached-freshness guarantees. That cannot satisfy
 proof that source/target changes reliably discover every affected association and keep selective routing
 fresh after retargeting.
 
-No Core or EF product source was changed. The incomplete sample draft and solution wiring were removed. To
-resume this roadmap, a separate product roadmap must first provide a public, analyzable way to combine an
-explicit pure calculator with complete declared dependency paths (or another complete-dependency expression
-shape that preserves the frozen calculator separation).
+Tasks 174–181 added the narrow `DerivedBuilder<TSource>.DependsOn(...)` contract. The dogfooding declaration can
+now retain its separate calculator and complete freshness by declaring both nested input paths. No fake endpoint
+object sets and no `AllowIncompleteDependencies()` opt-in are required.
 
 ## Goal
 
@@ -290,6 +289,8 @@ Declare the derived value from ordinary navigation paths:
 
 ```csharp
 var unitRate = builder.Derived(associations)
+    .DependsOn(a => a.SourceItem.UnitValue)
+    .DependsOn(a => a.TargetItem.UnitValue)
     .Compute(association => UnitRateCalculator.Calculate(
         association.SourceItem.UnitValue,
         association.TargetItem.UnitValue))

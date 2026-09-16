@@ -361,6 +361,21 @@ See the architecture and example documentation for the exact transaction boundar
 
 ## Exact vs conservative propagation
 
+Reusable calculation methods can hide source dependencies from expression analysis. For source-derived values,
+declare every hidden member path explicitly:
+
+```csharp
+var score = model.Derived(items)
+    .DependsOn(x => x.InputA)
+    .DependsOn(x => x.Config.Value)
+    .Compute(x => ExistingCalculator.Calculate(x.InputA, x.Config.Value));
+```
+
+Ordinary analyzable expressions need no declarations. `DependsOn` augments inferred dependencies, including
+nested reverse-navigation routing and scope requirements; it is a model-author assertion that all hidden source
+dependencies are declared. It does not make mutable external/static state safe. `AllowIncompleteDependencies`
+remains the explicit weaker-freshness escape hatch.
+
 Correctness and storage strategy are separate concerns.
 
 Exact propagation can retain matching relation pairs and invalidate only exact affected sources.

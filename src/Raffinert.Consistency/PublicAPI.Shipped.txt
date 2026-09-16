@@ -125,6 +125,7 @@ Raffinert.Consistency.Derived<TSource, TValue>.DefinitionKey.get -> string?
 Raffinert.Consistency.Derived<TSource, TValue>.Named(string! definitionKey) -> Raffinert.Consistency.Derived<TSource!, TValue>!
 Raffinert.Consistency.DerivedBuilder<TSource>
 Raffinert.Consistency.DerivedBuilder<TSource>.Compute<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
 Raffinert.Consistency.DerivedBuilder<TSource>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
 Raffinert.Consistency.DerivedBuilder<TSource>.Using<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
 Raffinert.Consistency.DerivedBuilder<TSource>.Using<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
