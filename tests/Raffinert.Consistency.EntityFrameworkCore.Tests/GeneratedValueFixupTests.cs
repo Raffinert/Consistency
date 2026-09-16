@@ -27,6 +27,9 @@ public sealed class GeneratedValueFixupTests
         _ = work.CommitAfterDatabaseCommit(); work.Dispatch();
 
         Assert.Equal(replacement.Id, child.ParentId);
+        Assert.Equal(1, replacement.ChildCountMirror);
+        Assert.Equal(1, database.CreateContext().Set<Parent>().AsNoTracking()
+            .Single(parent => parent.Id == replacement.Id).ChildCountMirror);
         Assert.Empty(setup.Runtime.Related(setup.Relation, original));
         Assert.Equal([child], setup.Runtime.Related(setup.Relation, replacement));
         Assert.Equal(1, setup.Runtime.Version);
@@ -180,7 +183,8 @@ public sealed class GeneratedValueFixupTests
         {
             seed.Add(parents, [parent]); seed.Add(children, [child]);
         });
-        var mappings = new ConsistencyEfCoreMappings().Map(parents).Map(children).Enforce(invariant);
+        var mappings = new ConsistencyEfCoreMappings().Map(parents).Map(children)
+            .Enforce(invariant).Materialize(count, parent => parent.ChildCountMirror);
         return new RelationSetup(parents, children, relation, runtime, mappings);
     }
 
@@ -228,7 +232,7 @@ public sealed class GeneratedValueFixupTests
         }
     }
 
-    private sealed class Parent { public int Id { get; set; } }
+    private sealed class Parent { public int Id { get; set; } public int ChildCountMirror { get; set; } }
     private sealed class Child { public int Id { get; set; } public int ParentId { get; set; } public Parent Parent { get; set; } = null!; public int Quantity { get; set; } }
     private sealed class SequencedRecord { public Guid BusinessId { get; set; } public int DatabaseSequence { get; set; } public int Mirror { get; set; } }
     private sealed class UnusedGeneratedRecord { public Guid BusinessId { get; set; } public int DatabaseSequence { get; set; } public int Value { get; set; } public int Mirror { get; set; } }
