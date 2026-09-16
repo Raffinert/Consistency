@@ -170,7 +170,7 @@ Remote CI and release-candidate workflows were intentionally not queried or wait
 
 Verification date: 2026-09-16
 
-Verified implementation head: `TO_BE_RECORDED`
+Verified implementation head: `8da58b4`
 
 - The new `Raffinert.Consistency.DependencyMaintenanceSample` built and passed all self-verifying SQLite scenarios.
 - The sample proves shared-source fan-out, selective target invalidation, retargeted routing, nullable-source and

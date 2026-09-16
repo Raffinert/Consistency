@@ -1,7 +1,7 @@
 # Roadmaps
 
 - Completed domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model with local
-  proof at `TO_BE_RECORDED` (remote pipelines intentionally not checked):
+  proof at `8da58b4` (remote pipelines intentionally not checked):
   [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
 - Completed explicit source-member dependency declarations for opaque source-derived computations with local release proof at
   `9a5fc06ab8344635552e11946c3631fbc9cb62b2` (remote pipelines intentionally not checked):

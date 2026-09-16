@@ -736,7 +736,7 @@ Only after both remote gates are green:
 6. update `docs/release-candidate-verification.md` with a short dogfooding-example verification entry;
 7. replace the active-roadmap line in `docs/roadmaps/README.md` with a completed entry.
 
-Local closeout (2026-09-16, implementation head `TO_BE_RECORDED`):
+Local closeout (2026-09-16, implementation head `8da58b4`):
 
 - The dependency-maintenance sample built and ran successfully against SQLite in-memory.
 - The solution build, formatting verification, core tests, EF/SQLite tests, and both existing executable samples
