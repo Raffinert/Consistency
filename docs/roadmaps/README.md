@@ -1,5 +1,6 @@
 # Roadmaps
 
+- **Active implementation plan:** close remaining EF persistence holes for store-generated semantic values on UPDATE and policy-aware capture of unmapped nested dependency targets: [Tasks 152–158](../codex-plan-generated-update-values-and-unmapped-dependency-capture.md)
 - Completed generated-value/fixup safety and object-set-scoped persistence member metadata with local and
   remote release proof at `7140d712fe6fcb2c314ba8364ef29fe5a21b23e6`:
   [Tasks 145–151](../codex-plan-generated-value-fixup-and-set-scoped-policy-safety.md)
