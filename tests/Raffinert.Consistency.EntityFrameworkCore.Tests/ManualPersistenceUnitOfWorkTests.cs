@@ -31,7 +31,7 @@ public sealed class ManualPersistenceUnitOfWorkTests
         var work = context.CaptureConsistencyUnitOfWork(
             setup.Runtime, setup.Mappings, Complete(setup.Parents, setup.Items));
 
-        Assert.Throws<ConsistencyStoreGeneratedKeyNotReadyException>(() => work.PrepareAndPlan());
+        Assert.Throws<ConsistencyStoreGeneratedValueNotReadyException>(() => work.PrepareAndPlan());
         Assert.Throws<InvalidOperationException>(() => work.CommitAfterDatabaseCommit());
         Assert.Equal(0, setup.Runtime.Version);
         Assert.Equal(0, parent.Mirror);
