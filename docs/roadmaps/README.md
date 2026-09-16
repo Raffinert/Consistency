@@ -1,6 +1,5 @@
 # Roadmaps
 
-- **Active implementation plan:** add explicit EF scope preparation that runs host-owned authoritative queries, bootstraps only a pristine runtime, and returns the exact required `ConsistencyScope` without adding hidden loading to save paths: [Tasks 182–189](../codex-plan-ef-scope-preparation-and-host-owned-loading.md)
 - Completed domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model with local
   proof at `8da58b4` (remote pipelines intentionally not checked):
   [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
