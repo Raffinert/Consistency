@@ -338,6 +338,8 @@ public static class ChangeTrackerAdapter
         ConsistencyRuntime runtime,
         ConsistencyUnitOfWorkMappings mappings)
     {
+        context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings);
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
@@ -360,6 +362,8 @@ public static class ChangeTrackerAdapter
         ConsistencyUnitOfWorkMappings mappings,
         CancellationToken cancellationToken = default)
     {
+        context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings);
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);

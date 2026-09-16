@@ -72,6 +72,22 @@ public sealed partial class ConsistencyRuntime
         return usage;
     }
 
+    internal bool HasNestedSemanticUsageForClrType(Type clrType)
+    {
+        ArgumentNullException.ThrowIfNull(clrType);
+        static bool Overlaps(Type target, MemberInfo member) => member.DeclaringType is { } declaring &&
+            (declaring.IsAssignableFrom(target) || target.IsAssignableFrom(declaring));
+        return _relations.Keys.Any(relation => relation.Analysis.DependencyPaths.Any(path =>
+                   path.Segments.Skip(1).Any(segment => Overlaps(clrType, segment.Member)))) ||
+               _derivedStates.Keys.Any(definition => definition.Analysis.Dependencies.Any(dependency =>
+                   dependency.Path.Segments.Skip(1).Any(segment => Overlaps(clrType, segment.Member)))) ||
+               _invariants.Keys.Any(invariant => invariant.Analysis.Dependencies.Any(dependency =>
+                   dependency.Path.Segments.Skip(1).Any(segment => Overlaps(clrType, segment.Member)))) ||
+               _derivedStates.Keys.Any(definition => definition.Inputs
+                   .OfType<ProjectedUpstreamDerivedInput>().Any(input =>
+                       input.SelectorPath.Segments.Skip(1).Any(segment => Overlaps(clrType, segment.Member))));
+    }
+
     private static IObjectSetDefinition? ResolveDependencyRootSet(
         IDerivedDefinition definition,
         ExpressionParameterRole role) => role switch

@@ -124,6 +124,7 @@ public static class ConsistencyDbContextExtensions
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mappings);
         context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         var snapshot = ConsistencyPersistencePolicyEngine.CaptureAndValidate(
             context, runtime, mappings, options ?? new());
         var generatedValues = ConsistencyGeneratedValueGuard.CaptureCandidates(
@@ -175,6 +176,7 @@ internal static class ConsistencyCoordinator
         if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
             throw new ConsistencyUnsupportedTransactionException();
         context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
             context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
