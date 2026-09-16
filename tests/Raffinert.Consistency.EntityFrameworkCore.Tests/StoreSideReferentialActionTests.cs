@@ -1,6 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Raffinert.Consistency.EntityFrameworkCore;
+using System.Data.Common;
 
 namespace Raffinert.Consistency.Tests;
 
@@ -323,6 +325,34 @@ public sealed class StoreSideReferentialActionTests
         Assert.True(runtime.Remove(parents, parent));
     }
 
+    [Fact]
+    public void Rejected_store_action_executes_no_database_command()
+    {
+        using var database = new ReferentialDatabase();
+        int parentId;
+        using (var seed = database.CreateContext())
+        {
+            var child = new CascadeChild { Parent = new CascadeParent() };
+            seed.Add(child);
+            seed.SaveChanges();
+            parentId = child.ParentId;
+        }
+        var commands = new CommandCounter();
+        using var context = database.CreateContext(commands);
+        var parent = context.Set<CascadeParent>().Single(x => x.Id == parentId);
+        var model = new ConsistencyModelBuilder();
+        var children = model.Objects<CascadeChild>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime();
+        context.Remove(parent);
+        commands.Reset();
+
+        Assert.Throws<ConsistencyStoreSideReferentialActionNotSupportedException>(() =>
+            context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(children)));
+
+        Assert.Equal(0, commands.Count);
+        Assert.Equal(0, runtime.Version);
+    }
+
     private static ConsistencySaveOptions Complete<T>(ObjectSet<T> set) where T : class =>
         new() { Scope = new ConsistencyScope().Complete(set) };
 
@@ -384,6 +414,30 @@ public sealed class StoreSideReferentialActionTests
     private sealed class ClientNullChild { public int Id { get; set; } public int? ParentId { get; set; } public ClientNullParent? Parent { get; set; } }
     private sealed class OwnedRoot { public int Id { get; set; } public OwnedValue Value { get; set; } = null!; }
     [Owned] private sealed class OwnedValue { public string Note { get; set; } = ""; }
+
+    private sealed class CommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+        public void Reset() => Count = 0;
+        public override InterceptionResult<int> NonQueryExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+        {
+            Count++;
+            return result;
+        }
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Count++;
+            return result;
+        }
+        public override InterceptionResult<object> ScalarExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
+        {
+            Count++;
+            return result;
+        }
+    }
 
     public enum SavePath { Extension, ExtensionAsync, Interceptor, LowLevel, LowLevelAsync, ManualCapture }
 }
