@@ -337,6 +337,7 @@ public static class ChangeTrackerAdapter
         ConsistencyRuntime runtime,
         ConsistencyUnitOfWorkMappings mappings)
     {
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings);
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
         var result = context.SaveChanges();
@@ -358,6 +359,7 @@ public static class ChangeTrackerAdapter
         ConsistencyUnitOfWorkMappings mappings,
         CancellationToken cancellationToken = default)
     {
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings);
         var unitOfWork = CaptureUnitOfWork(context.ChangeTracker, mappings);
         unitOfWork.Prepare(runtime);
         var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -545,11 +547,23 @@ internal sealed class CapturedEfMutationSnapshot(
 {
     public bool HasChanges => additions.Count + properties.Count + navigationChanges.Count + removals.Count > 0;
 
-    public ConsistencyUnitOfWork FinalizeForPlanning(DbContext context)
+    public ConsistencyUnitOfWork FinalizeForPlanning(
+        DbContext context,
+        IReadOnlyList<GeneratedValueCandidate> generatedValues)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(generatedValues);
+        var generatedUpdates = generatedValues
+            .Select(candidate => (Candidate: candidate, Mutation: candidate.FinalizeUpdate(context)))
+            .Where(result => result.Mutation is not null)
+            .ToArray();
         var mutations = additions
-            .Concat(properties.Select(property => property.FinalizeForPlanning(context)))
+            .Concat(properties
+                .Where(property => !generatedUpdates.Any(generated =>
+                    ReferenceEquals(generated.Candidate.Entry.EntityEntry.Entity, property.Entry.Entity) &&
+                    generated.Candidate.Property == property.Property))
+                .Select(property => property.FinalizeForPlanning(context)))
+            .Concat(generatedUpdates.Select(result => (RuntimeMutation)result.Mutation!))
             .Concat(navigationChanges)
             .Concat(removals)
             .ToArray();

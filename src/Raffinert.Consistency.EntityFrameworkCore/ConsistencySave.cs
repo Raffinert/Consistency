@@ -87,6 +87,20 @@ public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
     public string PropertyName { get; }
 }
 
+public sealed class ConsistencyStoreGeneratedIdentityUpdateNotSupportedException : Exception
+{
+    /// <summary>Identifies an existing consistency identity that EF may replace during UPDATE.</summary>
+    internal ConsistencyStoreGeneratedIdentityUpdateNotSupportedException(Type entityType, string propertyName)
+        : base($"Store-generated UPDATE of consistency identity '{entityType.Name}.{propertyName}' is not supported.")
+    {
+        EntityType = entityType;
+        PropertyName = propertyName;
+    }
+
+    public Type EntityType { get; }
+    public string PropertyName { get; }
+}
+
 public static class ConsistencyDbContextExtensions
 {
     /// <summary>

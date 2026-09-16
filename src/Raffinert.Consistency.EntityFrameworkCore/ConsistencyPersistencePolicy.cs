@@ -135,39 +135,79 @@ internal static class ConsistencyGeneratedValueGuard
         ConsistencyUnitOfWorkMappings mappings)
     {
         var candidates = new List<GeneratedValueCandidate>();
-        foreach (var entry in context.ChangeTracker.Entries().Where(x => x.State == EntityState.Added))
+        foreach (var entry in context.ChangeTracker.Entries().Where(x =>
+                     x.State is EntityState.Added or EntityState.Modified))
         {
             var mapping = mappings.Resolve(entry);
-            if (mapping is null) continue;
+            var operation = entry.State == EntityState.Added
+                ? GeneratedValueOperation.OnAdd
+                : GeneratedValueOperation.OnUpdate;
             foreach (var propertyEntry in entry.Properties)
             {
                 var property = propertyEntry.Metadata;
                 var member = property.PropertyInfo ?? (System.Reflection.MemberInfo?)property.FieldInfo;
                 var usage = member is null
                     ? ConsistencyRuntime.ModelMemberUsageKind.None
-                    : runtime.GetMemberUsage(mapping.SetDefinition, member);
-                if (member is null || property.ValueGenerated == ValueGenerated.Never ||
+                    : runtime.GetTrackedMemberUsage(mapping?.SetDefinition, member);
+                if (member is null || !GeneratesFor(property, operation) ||
                     usage == ConsistencyRuntime.ModelMemberUsageKind.None)
                     continue;
+                if (operation == GeneratedValueOperation.OnUpdate &&
+                    usage.HasFlag(ConsistencyRuntime.ModelMemberUsageKind.ObjectSetKey))
+                    throw new ConsistencyStoreGeneratedIdentityUpdateNotSupportedException(
+                        entry.Metadata.ClrType, property.Name);
                 candidates.Add(new GeneratedValueCandidate(
-                    entry.Metadata.ClrType, property.Name, propertyEntry, property, usage));
+                    entry.Metadata.ClrType, property.Name, propertyEntry, property, member,
+                    mapping, usage, operation, propertyEntry.CurrentValue));
             }
         }
         return candidates.ToArray();
     }
+
+    private static bool GeneratesFor(IProperty property, GeneratedValueOperation operation) => operation switch
+    {
+        GeneratedValueOperation.OnAdd =>
+            (property.ValueGenerated & ValueGenerated.OnAdd) != ValueGenerated.Never,
+        GeneratedValueOperation.OnUpdate =>
+            (property.ValueGenerated & ValueGenerated.OnUpdate) != ValueGenerated.Never,
+        _ => false
+    };
 }
+
+internal enum GeneratedValueOperation { OnAdd, OnUpdate }
 
 internal sealed record GeneratedValueCandidate(
     Type EntityType,
     string PropertyName,
     PropertyEntry Entry,
     IProperty Property,
-    ConsistencyRuntime.ModelMemberUsageKind Usage)
+    System.Reflection.MemberInfo Member,
+    ConsistencyUnitOfWorkMappings.IEntitySetMapping? Mapping,
+    ConsistencyRuntime.ModelMemberUsageKind Usage,
+    GeneratedValueOperation Operation,
+    object? PreSaveValue)
 {
-    public bool IsNotReady => Entry.IsTemporary || Entry.EntityEntry.State == EntityState.Added &&
-        (Property.GetBeforeSaveBehavior() == PropertySaveBehavior.Ignore || Equals(
-            Entry.CurrentValue,
-            Property.ClrType.IsValueType ? Activator.CreateInstance(Property.ClrType) : null));
+    public bool IsNotReady => Entry.IsTemporary || Operation switch
+    {
+        GeneratedValueOperation.OnUpdate => Entry.EntityEntry.State != EntityState.Unchanged,
+        _ => Entry.EntityEntry.State == EntityState.Added &&
+            (Property.GetBeforeSaveBehavior() == PropertySaveBehavior.Ignore || Equals(
+                Entry.CurrentValue,
+                Property.ClrType.IsValueType ? Activator.CreateInstance(Property.ClrType) : null))
+    };
+
+    public PropertyChange? FinalizeUpdate(DbContext context)
+    {
+        if (Operation != GeneratedValueOperation.OnUpdate) return null;
+        if (!ReferenceEquals(Entry.EntityEntry.Context, context))
+            throw new InvalidOperationException("The generated value is no longer tracked by the captured DbContext.");
+        var current = Entry.CurrentValue;
+        if (Property.GetValueComparer()?.Equals(PreSaveValue, current) ?? Equals(PreSaveValue, current))
+            return null;
+        return Mapping is null
+            ? Change.Property(Entry.EntityEntry.Entity, Member, PreSaveValue, current)
+            : Mapping.Property(Entry.EntityEntry.Entity, Member, PreSaveValue, current);
+    }
 }
 
 public sealed class ConsistencyPersistenceUnitOfWork
@@ -207,7 +247,7 @@ public sealed class ConsistencyPersistenceUnitOfWork
         try
         {
             ConsistencyGeneratedValueGuard.RejectForManualPlan(_generatedValues);
-            _unit = _mutations.FinalizeForPlanning(_context);
+            _unit = _mutations.FinalizeForPlanning(_context, _generatedValues);
             var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
                 _context, _runtime, _unit, _policy);
             _state = State.Planned;
