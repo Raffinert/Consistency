@@ -80,6 +80,49 @@ public sealed class GeneratedValueFixupTests
     }
 
     [Fact]
+    public void Generated_semantic_non_key_plans_with_final_value_after_first_save()
+    {
+        using var database = new FixupDatabase(); using var context = database.CreateContext();
+        var (_, runtime, mappings) = CreateSequencedModel();
+        var record = new SequencedRecord { BusinessId = Guid.NewGuid() }; context.Add(record);
+        var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
+        using var transaction = context.Database.BeginTransaction();
+        context.SaveChanges();
+        Assert.Equal(42, record.DatabaseSequence);
+
+        var plan = Assert.IsType<PreparedImpactPlan>(work.PrepareAndPlan());
+        Assert.Contains(plan.DerivedEvaluations, evaluation => Equals(evaluation.Value, 42));
+        Assert.Equal(42, record.Mirror);
+        context.SaveChanges(); transaction.Commit();
+        _ = work.CommitAfterDatabaseCommit(); work.Dispatch();
+        Assert.Equal(1, runtime.Version);
+        Assert.Equal(42, database.CreateContext().Set<SequencedRecord>().AsNoTracking().Single().Mirror);
+    }
+
+    [Fact]
+    public void Convenience_and_interceptor_reject_generated_semantic_input_equally()
+    {
+        using var extensionDatabase = new FixupDatabase(); using var extensionContext = extensionDatabase.CreateContext();
+        var (_, extensionRuntime, extensionMappings) = CreateSequencedModel();
+        extensionContext.Add(new SequencedRecord { BusinessId = Guid.NewGuid() });
+        var extension = Assert.Throws<ConsistencyStoreGeneratedValueRequiresManualWorkflowException>(() =>
+            extensionContext.SaveChangesConsistently(extensionRuntime, extensionMappings));
+
+        using var interceptorDatabase = new FixupDatabase();
+        var (_, interceptorRuntime, interceptorMappings) = CreateSequencedModel();
+        var interceptor = new ConsistencySaveChangesInterceptor(interceptorRuntime, interceptorMappings, new());
+        using var interceptorContext = interceptorDatabase.CreateContext(interceptor);
+        interceptorContext.Add(new SequencedRecord { BusinessId = Guid.NewGuid() });
+        var intercepted = Assert.Throws<ConsistencyStoreGeneratedValueRequiresManualWorkflowException>(() =>
+            interceptorContext.SaveChanges());
+
+        Assert.Equal(extension.EntityType, intercepted.EntityType);
+        Assert.Equal(extension.PropertyName, intercepted.PropertyName);
+        Assert.Equal(0, extensionDatabase.CreateContext().Set<SequencedRecord>().Count());
+        Assert.Equal(0, interceptorDatabase.CreateContext().Set<SequencedRecord>().Count());
+    }
+
+    [Fact]
     public void Same_clr_member_usage_is_scoped_to_exact_object_set()
     {
         using var database = new FixupDatabase(); using var context = database.CreateContext();
@@ -121,6 +164,17 @@ public sealed class GeneratedValueFixupTests
         return new RelationSetup(parents, children, relation, runtime, mappings);
     }
 
+    private static (ObjectSet<SequencedRecord> Records, ConsistencyRuntime Runtime,
+        ConsistencyEfCoreMappings Mappings) CreateSequencedModel()
+    {
+        var model = new ConsistencyModelBuilder();
+        var records = model.Objects<SequencedRecord>().Key(x => x.BusinessId);
+        var sequence = model.Derived(records).Compute(x => x.DatabaseSequence);
+        var runtime = model.Build().CreateRuntime();
+        return (records, runtime,
+            new ConsistencyEfCoreMappings().Map(records).Materialize(sequence, x => x.Mirror));
+    }
+
     private static ConsistencySaveOptions Complete(ObjectSet<Parent> parents, ObjectSet<Child> children) =>
         new() { Scope = new ConsistencyScope().Complete(parents).Complete(children) };
 
@@ -131,13 +185,16 @@ public sealed class GeneratedValueFixupTests
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
         public FixupDatabase() { _connection.Open(); using var context = CreateContext(); context.Database.EnsureCreated(); }
-        public FixupContext CreateContext() => new(_connection);
+        public FixupContext CreateContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) =>
+            new(_connection, interceptors);
         public void Dispose() => _connection.Dispose();
     }
 
-    private sealed class FixupContext(SqliteConnection connection) : DbContext
+    private sealed class FixupContext(SqliteConnection connection,
+        Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) : DbContext
     {
-        protected override void OnConfiguring(DbContextOptionsBuilder options) => options.UseSqlite(connection);
+        protected override void OnConfiguring(DbContextOptionsBuilder options) =>
+            options.UseSqlite(connection).AddInterceptors(interceptors);
         protected override void OnModelCreating(ModelBuilder model)
         {
             model.Entity<Parent>().Property(x => x.Id).ValueGeneratedOnAdd();

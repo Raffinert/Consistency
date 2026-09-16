@@ -112,8 +112,13 @@ internal static class ConsistencyGeneratedValueGuard
         var pending = CaptureCandidates(context, runtime, mappings)
             .FirstOrDefault(candidate => candidate.IsNotReady);
         if (pending is not null)
-            throw new ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(
+        {
+            if (pending.Usage.HasFlag(ConsistencyRuntime.ModelMemberUsageKind.ObjectSetKey))
+                throw new ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(
+                    pending.EntityType, pending.PropertyName);
+            throw new ConsistencyStoreGeneratedValueRequiresManualWorkflowException(
                 pending.EntityType, pending.PropertyName);
+        }
     }
 
     public static void RejectForManualPlan(IReadOnlyList<GeneratedValueCandidate> candidates)
@@ -138,12 +143,14 @@ internal static class ConsistencyGeneratedValueGuard
             {
                 var property = propertyEntry.Metadata;
                 var member = property.PropertyInfo ?? (System.Reflection.MemberInfo?)property.FieldInfo;
+                var usage = member is null
+                    ? ConsistencyRuntime.ModelMemberUsageKind.None
+                    : runtime.GetMemberUsage(mapping.SetDefinition, member);
                 if (member is null || property.ValueGenerated == ValueGenerated.Never ||
-                    runtime.GetMemberUsage(mapping.SetDefinition, member) ==
-                    ConsistencyRuntime.ModelMemberUsageKind.None)
+                    usage == ConsistencyRuntime.ModelMemberUsageKind.None)
                     continue;
                 candidates.Add(new GeneratedValueCandidate(
-                    entry.Metadata.ClrType, property.Name, propertyEntry, property));
+                    entry.Metadata.ClrType, property.Name, propertyEntry, property, usage));
             }
         }
         return candidates.ToArray();
@@ -154,7 +161,8 @@ internal sealed record GeneratedValueCandidate(
     Type EntityType,
     string PropertyName,
     PropertyEntry Entry,
-    IProperty Property)
+    IProperty Property,
+    ConsistencyRuntime.ModelMemberUsageKind Usage)
 {
     public bool IsNotReady => Entry.IsTemporary || Entry.EntityEntry.State == EntityState.Added &&
         (Property.GetBeforeSaveBehavior() == PropertySaveBehavior.Ignore || Equals(

@@ -54,6 +54,20 @@ public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException 
     { }
 }
 
+public sealed class ConsistencyStoreGeneratedValueRequiresManualWorkflowException : Exception
+{
+    internal ConsistencyStoreGeneratedValueRequiresManualWorkflowException(Type entityType, string propertyName)
+        : base($"Store-generated consistency input '{entityType.Name}.{propertyName}' is not final before SQL. " +
+            "Use CaptureConsistencyUnitOfWork and plan after generated values are final.")
+    {
+        EntityType = entityType;
+        PropertyName = propertyName;
+    }
+
+    public Type EntityType { get; }
+    public string PropertyName { get; }
+}
+
 public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
 {
     internal ConsistencyStoreGeneratedValueNotReadyException(Type entityType, string propertyName)
