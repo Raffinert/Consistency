@@ -26,9 +26,13 @@ public sealed class ConsistencyStoreSideReferentialActionNotSupportedException :
         EntityPath = entityPath;
     }
 
+    /// <summary>The tracked entity type whose deletion starts the store-side path.</summary>
     public Type DeletedEntityType { get; }
+    /// <summary>The consistency-relevant entity type reached by the path.</summary>
     public Type AffectedEntityType { get; }
+    /// <summary>The store-mutating behavior on the final relationship in the reported path.</summary>
     public DeleteBehavior DeleteBehavior { get; }
+    /// <summary>The principal-to-dependent CLR type path from the deletion to the affected type.</summary>
     public IReadOnlyList<Type> EntityPath { get; }
 }
 
@@ -41,11 +45,12 @@ internal static class ConsistencyStoreSideEffectGuard
         foreach (var entry in context.ChangeTracker.Entries().Where(entry => entry.State == EntityState.Deleted))
         {
             var origin = entry.Metadata.ClrType;
-            Traverse(runtime, entry.Metadata, origin, [origin], new HashSet<IForeignKey>());
+            Traverse(context, runtime, entry.Metadata, origin, [origin], new HashSet<IForeignKey>());
         }
     }
 
     private static void Traverse(
+        DbContext context,
         ConsistencyRuntime runtime,
         IEntityType principal,
         Type origin,
@@ -65,12 +70,37 @@ internal static class ConsistencyStoreSideEffectGuard
                 ? independentlyRepresented || !foreignKey.IsOwnership &&
                     runtime.HasNestedSemanticUsageForClrType(dependentType)
                 : independentlyRepresented || SetNullTouchesSemantics(runtime, foreignKey);
-            if (relevant)
+            if (relevant && !AllRuntimeDependentsAreTracked(context, runtime, foreignKey, behavior))
                 throw new ConsistencyStoreSideReferentialActionNotSupportedException(
                     origin, dependentType, behavior, nextPath);
             if (behavior == DeleteBehavior.Cascade)
-                Traverse(runtime, dependent, origin, nextPath, visited);
+                Traverse(context, runtime, dependent, origin, nextPath, visited);
         }
+    }
+
+    private static bool AllRuntimeDependentsAreTracked(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        IForeignKey foreignKey,
+        DeleteBehavior behavior)
+    {
+        var instances = runtime.GetObjectSetInstancesForClrType(foreignKey.DeclaringEntityType.ClrType);
+        if (instances.Count == 0) return false;
+        foreach (var instance in instances)
+        {
+            var entry = context.ChangeTracker.Entries()
+                .SingleOrDefault(candidate => ReferenceEquals(candidate.Entity, instance));
+            if (entry is null) return false;
+            if (behavior == DeleteBehavior.Cascade)
+            {
+                if (entry.State != EntityState.Deleted) return false;
+                continue;
+            }
+            if (entry.State != EntityState.Modified || foreignKey.Properties.Any(property =>
+                    entry.Property(property.Name).CurrentValue is not null))
+                return false;
+        }
+        return true;
     }
 
     private static bool SetNullTouchesSemantics(ConsistencyRuntime runtime, IForeignKey foreignKey)

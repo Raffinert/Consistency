@@ -25,6 +25,12 @@ public sealed partial class ConsistencyRuntime
         return _sets.Keys.Any(set =>
             set.ObjectType.IsAssignableFrom(clrType) || clrType.IsAssignableFrom(set.ObjectType));
     }
+    internal IReadOnlyList<object> GetObjectSetInstancesForClrType(Type clrType) => _sets
+        .Where(pair => pair.Key.ObjectType.IsAssignableFrom(clrType) ||
+            clrType.IsAssignableFrom(pair.Key.ObjectType))
+        .SelectMany(pair => pair.Value.Instances)
+        .Distinct(ReferenceEqualityComparer.Instance)
+        .ToArray();
     internal int GetDerivedId(IDerivedDefinition definition) => _derivedIds.TryGetValue(definition, out var id)
         ? id : throw new ArgumentException("The derived definition belongs to another model.");
     internal int GetInvariantId(IInvariantDefinition definition) => _invariantIds.TryGetValue(definition, out var id)
