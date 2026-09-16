@@ -89,6 +89,23 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
     }
 
     [Fact]
+    public async Task Convenience_async_rejects_generated_update_semantic_value_before_sql()
+    {
+        using var database = new TestDatabase();
+        using var context = database.CreateContext();
+        var record = SeedRecord(context);
+        var setup = CreateRecordModel(record);
+        record.Input = 4;
+
+        await Assert.ThrowsAsync<ConsistencyStoreGeneratedValueRequiresManualWorkflowException>(() =>
+            context.SaveChangesConsistentlyAsync(
+                setup.Runtime, setup.Mappings, Complete(setup.Records)));
+
+        Assert.Equal(3, database.CreateContext().Set<ComputedRecord>().AsNoTracking().Single().Input);
+        Assert.Equal(0, setup.Runtime.Version);
+    }
+
+    [Fact]
     public void Manual_workflow_reconciles_generated_update_value_after_first_save()
     {
         using var database = new TestDatabase();
@@ -151,6 +168,94 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         Assert.Throws<InvalidOperationException>(() => work.PrepareAndPlan());
         Assert.Equal(0, setup.Runtime.Version);
         transaction.Rollback();
+    }
+
+    [Fact]
+    public void Generated_update_on_existing_consistency_identity_is_explicitly_unsupported()
+    {
+        using var context = new IdentityContext();
+        var entity = new GeneratedIdentity { DatabaseId = 1, Id = 10, Value = 1 };
+        context.Attach(entity);
+        var model = new ConsistencyModelBuilder();
+        var objects = model.Objects<GeneratedIdentity>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
+        var highLevel = new ConsistencyEfCoreMappings().Map(objects);
+        var lowLevel = new ConsistencyUnitOfWorkMappings().Map(objects);
+        entity.Value = 2;
+
+        var extension = Assert.Throws<ConsistencyStoreGeneratedIdentityUpdateNotSupportedException>(() =>
+            context.SaveChangesConsistently(runtime, highLevel));
+        var manual = Assert.Throws<ConsistencyStoreGeneratedIdentityUpdateNotSupportedException>(() =>
+            context.CaptureConsistencyUnitOfWork(runtime, highLevel));
+        var low = Assert.Throws<ConsistencyStoreGeneratedIdentityUpdateNotSupportedException>(() =>
+            context.SaveChangesAndApply(runtime, lowLevel));
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime, highLevel, new());
+        using var interceptedContext = new IdentityContext(interceptor);
+        var interceptedEntity = new GeneratedIdentity { DatabaseId = 2, Id = 20, Value = 1 };
+        interceptedContext.Attach(interceptedEntity);
+        interceptedEntity.Value = 2;
+        var intercepted = Assert.Throws<ConsistencyStoreGeneratedIdentityUpdateNotSupportedException>(() =>
+            interceptedContext.SaveChanges());
+
+        Assert.Equal(typeof(GeneratedIdentity), extension.EntityType);
+        Assert.Equal(nameof(GeneratedIdentity.Id), extension.PropertyName);
+        Assert.Equal(extension.PropertyName, manual.PropertyName);
+        Assert.Equal(extension.PropertyName, low.PropertyName);
+        Assert.Equal(extension.PropertyName, intercepted.PropertyName);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Generated_but_unused_update_value_does_not_force_manual_workflow()
+    {
+        using var database = new TestDatabase();
+        using var context = database.CreateContext();
+        var record = new UnusedComputedRecord { Input = 3, SemanticValue = 1 };
+        context.Add(record);
+        context.SaveChanges();
+        var model = new ConsistencyModelBuilder();
+        var records = model.Objects<UnusedComputedRecord>().Key(x => x.Id);
+        var semantic = model.Derived(records).Compute(x => x.SemanticValue);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(records, [record]));
+        record.Input = 4;
+        record.SemanticValue = 2;
+
+        context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(records), Complete(records));
+
+        Assert.Equal(8, record.DatabaseComputed);
+        Assert.Equal(2, runtime.Get(semantic, record));
+    }
+
+    [Fact]
+    public void Manual_workflow_reconciles_generated_update_on_unmapped_nested_target()
+    {
+        using var database = new TestDatabase();
+        using var context = database.CreateContext();
+        var product = new GeneratedProduct { Input = 3 };
+        var line = new GeneratedLine { Product = product };
+        context.Add(line);
+        context.SaveChanges();
+        var model = new ConsistencyModelBuilder();
+        var lines = model.Objects<GeneratedLine>().Key(x => x.Id);
+        var computed = model.Derived(lines).Compute(x => x.Product.DatabaseComputed);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
+        _ = runtime.Get(computed, line);
+        var mappings = new ConsistencyEfCoreMappings().Map(lines)
+            .Materialize(computed, x => x.Mirror);
+        product.Input = 4;
+        var work = context.CaptureConsistencyUnitOfWork(runtime, mappings, Complete(lines));
+        using var transaction = context.Database.BeginTransaction();
+        context.SaveChanges();
+
+        var plan = Assert.IsType<PreparedImpactPlan>(work.PrepareAndPlan());
+        Assert.Contains(plan.DerivedEvaluations, evaluation => Equals(evaluation.Value, 8));
+        Assert.Equal(8, line.Mirror);
+        context.SaveChanges();
+        transaction.Commit();
+        _ = work.CommitAfterDatabaseCommit();
+        work.Dispatch();
+        Assert.Equal(8, runtime.Get(computed, line));
     }
 
     private static void RunUnmappedDependencyPath(PathKind kind)
@@ -270,6 +375,23 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
             model.Entity<OrderLine>().HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
             model.Entity<ComputedRecord>().Property(x => x.DatabaseComputed)
                 .HasComputedColumnSql("\"Input\" * 2", stored: true);
+            model.Entity<UnusedComputedRecord>().Property(x => x.DatabaseComputed)
+                .HasComputedColumnSql("\"Input\" * 2", stored: true);
+            model.Entity<GeneratedLine>().HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId);
+            model.Entity<GeneratedProduct>().Property(x => x.DatabaseComputed)
+                .HasComputedColumnSql("\"Input\" * 2", stored: true);
+        }
+    }
+
+    private sealed class IdentityContext(
+        params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) : DbContext
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder options) =>
+            options.UseInMemoryDatabase($"identity-{Guid.NewGuid()}").AddInterceptors(interceptors);
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            model.Entity<GeneratedIdentity>().HasKey(x => x.DatabaseId);
+            model.Entity<GeneratedIdentity>().Property(x => x.Id).ValueGeneratedOnAddOrUpdate();
         }
     }
 
@@ -290,5 +412,35 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         public int DatabaseComputed { get; private set; }
         public int Mirror { get; set; }
         public int CallerValue { get; set; }
+    }
+
+    private sealed class GeneratedIdentity
+    {
+        public int DatabaseId { get; set; }
+        public int Id { get; set; }
+        public int Value { get; set; }
+    }
+
+    private sealed class UnusedComputedRecord
+    {
+        public int Id { get; set; }
+        public int Input { get; set; }
+        public int DatabaseComputed { get; private set; }
+        public int SemanticValue { get; set; }
+    }
+
+    private sealed class GeneratedLine
+    {
+        public int Id { get; set; }
+        public GeneratedProduct Product { get; set; } = null!;
+        public int ProductId { get; set; }
+        public int Mirror { get; set; }
+    }
+
+    private sealed class GeneratedProduct
+    {
+        public int Id { get; set; }
+        public int Input { get; set; }
+        public int DatabaseComputed { get; private set; }
     }
 }

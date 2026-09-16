@@ -202,7 +202,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
-    public void Store_generated_key_is_registered_only_after_value_is_available()
+    public void Low_level_save_rejects_store_generated_consistency_key_before_sql()
     {
         using var database = new SqliteFixture();
         using var context = database.CreateContext();
@@ -214,10 +214,12 @@ public sealed class EntityFrameworkCoreSqliteTests
         context.Add(entity);
         Assert.Equal(0, entity.Id);
 
-        context.SaveChangesAndApply(runtime, mappings);
+        Assert.Throws<ConsistencyStoreGeneratedKeyRequiresManualWorkflowException>(() =>
+            context.SaveChangesAndApply(runtime, mappings));
 
-        Assert.True(entity.Id > 0);
-        Assert.True(runtime.Remove(objects, entity));
+        Assert.Equal(0, entity.Id);
+        Assert.Equal(0, database.CreateContext().Set<GeneratedEntity>().Count());
+        Assert.False(runtime.Remove(objects, entity));
     }
 
     [Fact]
