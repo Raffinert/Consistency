@@ -1,8 +1,20 @@
 # Codex implementation plan — store-side referential actions and persistence authority
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED**
 
 Baseline commit: `87e9bc1b9b0c8aa177cd709140dc406ce22e0326`
+
+Implementation head: `d3458575c58f6f5c22594b2906526fb855aba3c7`
+
+Release proof (2026-09-16):
+
+- CI run `35122089225`: success.
+- Release-candidate run `35122105220`: success.
+- Artifact `10457238209` (`release-candidate-packages`).
+- Core tests: 300 passed on .NET 8 and 300 passed on .NET 10.
+- EF Core/SQLite tests: 129 passed on .NET 10.
+- Both samples, formatting, package/API validation, and fresh package consumers passed.
+- No package was published and no tag or release was created.
 
 Tasks: **159–166**
 
