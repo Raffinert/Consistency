@@ -37,10 +37,15 @@ public sealed class StoreSideReferentialActionTests
         });
         context.Remove(deleted);
 
-        Assert.ThrowsAny<Exception>(() => context.SaveChangesConsistently(
+        var error = Assert.Throws<ConsistencyStoreSideReferentialActionNotSupportedException>(() =>
+            context.SaveChangesConsistently(
             runtime,
             new ConsistencyEfCoreMappings().Map(parents).Map(children),
             Complete(parents, children)));
+        Assert.Equal(typeof(CascadeParent), error.DeletedEntityType);
+        Assert.Equal(typeof(CascadeChild), error.AffectedEntityType);
+        Assert.Equal(DeleteBehavior.Cascade, error.DeleteBehavior);
+        Assert.Equal([typeof(CascadeParent), typeof(CascadeChild)], error.EntityPath);
 
         using var verify = database.CreateContext();
         Assert.Equal(1, verify.Set<CascadeParent>().Count());
@@ -80,10 +85,12 @@ public sealed class StoreSideReferentialActionTests
         });
         context.Remove(deleted);
 
-        Assert.ThrowsAny<Exception>(() => context.SaveChangesConsistently(
+        var error = Assert.Throws<ConsistencyStoreSideReferentialActionNotSupportedException>(() =>
+            context.SaveChangesConsistently(
             runtime,
             new ConsistencyEfCoreMappings().Map(parents).Map(children),
             Complete(parents, children)));
+        Assert.Equal(DeleteBehavior.SetNull, error.DeleteBehavior);
 
         using var verify = database.CreateContext();
         Assert.Equal(parentId, verify.Set<NullChild>().Single().ParentId);
@@ -114,8 +121,12 @@ public sealed class StoreSideReferentialActionTests
         var runtime = model.Build().CreateRuntime(seed => seed.Add(leaves, [runtimeLeaf]));
         context.Remove(deleted);
 
-        Assert.ThrowsAny<Exception>(() => context.SaveChangesConsistently(
+        var error = Assert.Throws<ConsistencyStoreSideReferentialActionNotSupportedException>(() =>
+            context.SaveChangesConsistently(
             runtime, new ConsistencyEfCoreMappings().Map(leaves), Complete(leaves)));
+        Assert.Equal(typeof(Root), error.DeletedEntityType);
+        Assert.Equal(typeof(Leaf), error.AffectedEntityType);
+        Assert.Equal([typeof(Root), typeof(Intermediate), typeof(Leaf)], error.EntityPath);
 
         using var verify = database.CreateContext();
         Assert.Equal(1, verify.Set<Root>().Count());
@@ -153,6 +164,163 @@ public sealed class StoreSideReferentialActionTests
             context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(owners));
             Assert.Equal(1, runtime.Version);
         }
+    }
+
+    [Theory]
+    [InlineData(SavePath.Extension)]
+    [InlineData(SavePath.ExtensionAsync)]
+    [InlineData(SavePath.Interceptor)]
+    [InlineData(SavePath.LowLevel)]
+    [InlineData(SavePath.LowLevelAsync)]
+    [InlineData(SavePath.ManualCapture)]
+    public async Task Unsafe_store_cascade_is_rejected_by_every_database_owning_path(SavePath path)
+    {
+        using var database = new ReferentialDatabase();
+        int parentId;
+        using (var seed = database.CreateContext())
+        {
+            var child = new CascadeChild { Parent = new CascadeParent() };
+            seed.Add(child);
+            seed.SaveChanges();
+            parentId = child.ParentId;
+        }
+        var model = new ConsistencyModelBuilder();
+        var children = model.Objects<CascadeChild>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(children);
+        var lowLevel = new ConsistencyUnitOfWorkMappings().Map(children);
+        var interceptor = new ConsistencySaveChangesInterceptor(runtime, mappings, new());
+        using var context = path == SavePath.Interceptor
+            ? database.CreateContext(interceptor)
+            : database.CreateContext();
+        context.Remove(context.Set<CascadeParent>().Single(x => x.Id == parentId));
+
+        await Assert.ThrowsAsync<ConsistencyStoreSideReferentialActionNotSupportedException>(async () =>
+        {
+            switch (path)
+            {
+                case SavePath.Extension:
+                    context.SaveChangesConsistently(runtime, mappings);
+                    break;
+                case SavePath.ExtensionAsync:
+                    await context.SaveChangesConsistentlyAsync(runtime, mappings);
+                    break;
+                case SavePath.Interceptor:
+                    context.SaveChanges();
+                    break;
+                case SavePath.LowLevel:
+                    context.SaveChangesAndApply(runtime, lowLevel);
+                    break;
+                case SavePath.LowLevelAsync:
+                    await context.SaveChangesAndApplyAsync(runtime, lowLevel);
+                    break;
+                case SavePath.ManualCapture:
+                    _ = context.CaptureConsistencyUnitOfWork(runtime, mappings);
+                    break;
+            }
+        });
+
+        using var verify = database.CreateContext();
+        Assert.Equal(1, verify.Set<CascadeParent>().Count());
+        Assert.Equal(1, verify.Set<CascadeChild>().Count());
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Client_cascade_with_fully_tracked_dependents_synchronizes_database_and_runtime()
+    {
+        using var database = new ReferentialDatabase();
+        int parentId;
+        using (var seed = database.CreateContext())
+        {
+            var seededChild = new ClientCascadeChild { Parent = new ClientCascadeParent() };
+            seed.Add(seededChild);
+            seed.SaveChanges();
+            parentId = seededChild.ParentId;
+        }
+        using var context = database.CreateContext();
+        var parent = context.Set<ClientCascadeParent>().Single(x => x.Id == parentId);
+        var child = context.Set<ClientCascadeChild>().Single(x => x.ParentId == parentId);
+        var model = new ConsistencyModelBuilder();
+        var parents = model.Objects<ClientCascadeParent>().Key(x => x.Id);
+        var children = model.Objects<ClientCascadeChild>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(parents, [parent]);
+            seed.Add(children, [child]);
+        });
+        context.Remove(parent);
+
+        context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(parents).Map(children));
+
+        Assert.Equal(0, database.CreateContext().Set<ClientCascadeChild>().Count());
+        Assert.False(runtime.Remove(parents, parent));
+        Assert.False(runtime.Remove(children, child));
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public void Client_set_null_with_tracked_dependent_synchronizes_relationship()
+    {
+        using var database = new ReferentialDatabase();
+        int parentId;
+        using (var seed = database.CreateContext())
+        {
+            var seededChild = new ClientNullChild { Parent = new ClientNullParent() };
+            seed.Add(seededChild);
+            seed.SaveChanges();
+            parentId = seededChild.ParentId!.Value;
+        }
+        using var context = database.CreateContext();
+        var parent = context.Set<ClientNullParent>().Single(x => x.Id == parentId);
+        var child = context.Set<ClientNullChild>().Single(x => x.ParentId == parentId);
+        var model = new ConsistencyModelBuilder();
+        var parents = model.Objects<ClientNullParent>().Key(x => x.Id);
+        var children = model.Objects<ClientNullChild>().Key(x => x.Id);
+        var relation = model.Relation(parents, children).Where((p, c) => p.Id == c.ParentId);
+        var parentIdentity = model.Derived(children).Compute(x => x.ParentId);
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(parents, [parent]);
+            seed.Add(children, [child]);
+        });
+        _ = runtime.Get(parentIdentity, child);
+        context.Remove(parent);
+
+        context.SaveChangesConsistently(runtime,
+            new ConsistencyEfCoreMappings().Map(parents).Map(children));
+
+        Assert.Null(database.CreateContext().Set<ClientNullChild>().Single().ParentId);
+        Assert.Null(runtime.Get(parentIdentity, child));
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public void Client_cascade_with_missing_dependent_fails_database_without_runtime_commit()
+    {
+        using var database = new ReferentialDatabase();
+        int parentId;
+        using (var seed = database.CreateContext())
+        {
+            var child = new ClientCascadeChild { Parent = new ClientCascadeParent() };
+            seed.Add(child);
+            seed.SaveChanges();
+            parentId = child.ParentId;
+        }
+        using var context = database.CreateContext();
+        var parent = context.Set<ClientCascadeParent>().Single(x => x.Id == parentId);
+        var model = new ConsistencyModelBuilder();
+        var parents = model.Objects<ClientCascadeParent>().Key(x => x.Id);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(parents, [parent]));
+        context.Remove(parent);
+
+        var error = Assert.Throws<DbUpdateException>(() => context.SaveChangesConsistently(
+            runtime, new ConsistencyEfCoreMappings().Map(parents)));
+
+        Assert.IsNotType<ConsistencyRuntimeSynchronizationException>(error);
+        Assert.Equal(0, runtime.Version);
+        Assert.True(runtime.Remove(parents, parent));
     }
 
     private static ConsistencySaveOptions Complete<T>(ObjectSet<T> set) where T : class =>
@@ -193,6 +361,10 @@ public sealed class StoreSideReferentialActionTests
                 .HasForeignKey(x => x.IntermediateId).OnDelete(DeleteBehavior.Cascade);
             model.Entity<AuditDetail>().HasOne(x => x.Parent).WithOne(x => x.Detail)
                 .HasForeignKey<AuditDetail>(x => x.ParentId).OnDelete(DeleteBehavior.Cascade);
+            model.Entity<ClientCascadeChild>().HasOne(x => x.Parent).WithMany()
+                .HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.ClientCascade);
+            model.Entity<ClientNullChild>().HasOne(x => x.Parent).WithMany()
+                .HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.ClientSetNull);
             model.Entity<OwnedRoot>().OwnsOne(x => x.Value);
         }
     }
@@ -206,6 +378,12 @@ public sealed class StoreSideReferentialActionTests
     private sealed class Leaf { public int Id { get; set; } public int IntermediateId { get; set; } public Intermediate Intermediate { get; set; } = null!; }
     private sealed class AuditParent { public int Id { get; set; } public AuditDetail Detail { get; set; } = null!; }
     private sealed class AuditDetail { public int Id { get; set; } public int ParentId { get; set; } public AuditParent Parent { get; set; } = null!; }
+    private sealed class ClientCascadeParent { public int Id { get; set; } }
+    private sealed class ClientCascadeChild { public int Id { get; set; } public int ParentId { get; set; } public ClientCascadeParent Parent { get; set; } = null!; }
+    private sealed class ClientNullParent { public int Id { get; set; } }
+    private sealed class ClientNullChild { public int Id { get; set; } public int? ParentId { get; set; } public ClientNullParent? Parent { get; set; } }
     private sealed class OwnedRoot { public int Id { get; set; } public OwnedValue Value { get; set; } = null!; }
     [Owned] private sealed class OwnedValue { public string Note { get; set; } = ""; }
+
+    public enum SavePath { Extension, ExtensionAsync, Interceptor, LowLevel, LowLevelAsync, ManualCapture }
 }
