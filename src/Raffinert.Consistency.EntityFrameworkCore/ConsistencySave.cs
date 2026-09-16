@@ -54,12 +54,18 @@ public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException 
     { }
 }
 
-public sealed class ConsistencyStoreGeneratedKeyNotReadyException : Exception
+public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
 {
-    internal ConsistencyStoreGeneratedKeyNotReadyException(Type entityType, string propertyName)
-        : base($"Added entity '{entityType.Name}' uses store-generated consistency key '{propertyName}' that is not final yet. " +
-            "Save inside the current database transaction to obtain final generated values before calling PrepareAndPlan().")
-    { }
+    internal ConsistencyStoreGeneratedValueNotReadyException(Type entityType, string propertyName)
+        : base($"Store-generated consistency input '{entityType.Name}.{propertyName}' is not final yet. " +
+            "Save inside the current database transaction to obtain generated values/fixup before PrepareAndPlan().")
+    {
+        EntityType = entityType;
+        PropertyName = propertyName;
+    }
+
+    public Type EntityType { get; }
+    public string PropertyName { get; }
 }
 
 public static class ConsistencyDbContextExtensions
@@ -76,10 +82,12 @@ public static class ConsistencyDbContextExtensions
         context.ChangeTracker.DetectChanges();
         var snapshot = ConsistencyPersistencePolicyEngine.CaptureAndValidate(
             context, runtime, mappings, options ?? new());
-        var generatedKeys = ConsistencyGeneratedKeyGuard.CaptureCandidates(
-            context, mappings.UnitOfWorkMappings);
-        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
-        return new ConsistencyPersistenceUnitOfWork(context, runtime, unit, snapshot, generatedKeys);
+        var generatedValues = ConsistencyGeneratedValueGuard.CaptureCandidates(
+            context, runtime, mappings.UnitOfWorkMappings);
+        var mutations = ChangeTrackerAdapter.CapturePolicyAwareSnapshot(
+            context.ChangeTracker, mappings.UnitOfWorkMappings);
+        return new ConsistencyPersistenceUnitOfWork(
+            context, runtime, mutations, snapshot, generatedValues);
     }
 
     public static int SaveChangesConsistently(this DbContext context, ConsistencyRuntime runtime,
@@ -123,7 +131,8 @@ internal static class ConsistencyCoordinator
         if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
             throw new ConsistencyUnsupportedTransactionException();
         context.ChangeTracker.DetectChanges();
-        ConsistencyGeneratedKeyGuard.RejectForConvenienceSave(context, mappings.UnitOfWorkMappings);
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
+            context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
         var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);

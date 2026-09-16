@@ -102,88 +102,99 @@ internal static class ConsistencyPersistencePolicyEngine
     }
 }
 
-internal static class ConsistencyGeneratedKeyGuard
+internal static class ConsistencyGeneratedValueGuard
 {
-    public static void RejectForConvenienceSave(DbContext context, ConsistencyUnitOfWorkMappings mappings)
+    public static void RejectForConvenienceSave(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        ConsistencyUnitOfWorkMappings mappings)
     {
-        var pending = CaptureCandidates(context, mappings).FirstOrDefault(candidate => candidate.IsNotReady);
+        var pending = CaptureCandidates(context, runtime, mappings)
+            .FirstOrDefault(candidate => candidate.IsNotReady);
         if (pending is not null)
             throw new ConsistencyStoreGeneratedKeyRequiresManualWorkflowException(
                 pending.EntityType, pending.PropertyName);
     }
 
-    public static void RejectForManualPlan(IReadOnlyList<GeneratedKeyCandidate> candidates)
+    public static void RejectForManualPlan(IReadOnlyList<GeneratedValueCandidate> candidates)
     {
         var pending = candidates.FirstOrDefault(candidate => candidate.IsNotReady);
         if (pending is not null)
-            throw new ConsistencyStoreGeneratedKeyNotReadyException(
+            throw new ConsistencyStoreGeneratedValueNotReadyException(
                 pending.EntityType, pending.PropertyName);
     }
 
-    public static IReadOnlyList<GeneratedKeyCandidate> CaptureCandidates(
+    public static IReadOnlyList<GeneratedValueCandidate> CaptureCandidates(
         DbContext context,
+        ConsistencyRuntime runtime,
         ConsistencyUnitOfWorkMappings mappings)
     {
-        var candidates = new List<GeneratedKeyCandidate>();
+        var candidates = new List<GeneratedValueCandidate>();
         foreach (var entry in context.ChangeTracker.Entries().Where(x => x.State == EntityState.Added))
         {
             var mapping = mappings.Resolve(entry);
             if (mapping is null) continue;
-            foreach (var member in mapping.KeyMembers)
+            foreach (var propertyEntry in entry.Properties)
             {
-                var property = entry.Metadata.FindProperty(member);
-                if (property is null) continue;
-                if (property.ValueGenerated != ValueGenerated.Never)
-                    candidates.Add(new GeneratedKeyCandidate(
-                        entry.Metadata.ClrType, property.Name, entry.Property(property.Name), property.ClrType));
+                var property = propertyEntry.Metadata;
+                var member = property.PropertyInfo ?? (System.Reflection.MemberInfo?)property.FieldInfo;
+                if (member is null || property.ValueGenerated == ValueGenerated.Never ||
+                    runtime.GetMemberUsage(mapping.SetDefinition, member) ==
+                    ConsistencyRuntime.ModelMemberUsageKind.None)
+                    continue;
+                candidates.Add(new GeneratedValueCandidate(
+                    entry.Metadata.ClrType, property.Name, propertyEntry, property));
             }
         }
         return candidates.ToArray();
     }
 }
 
-internal sealed record GeneratedKeyCandidate(
+internal sealed record GeneratedValueCandidate(
     Type EntityType,
     string PropertyName,
     PropertyEntry Entry,
-    Type PropertyType)
+    IProperty Property)
 {
-    public bool IsNotReady => Entry.IsTemporary || Equals(
-        Entry.CurrentValue,
-        PropertyType.IsValueType ? Activator.CreateInstance(PropertyType) : null);
+    public bool IsNotReady => Entry.IsTemporary || Entry.EntityEntry.State == EntityState.Added &&
+        (Property.GetBeforeSaveBehavior() == PropertySaveBehavior.Ignore || Equals(
+            Entry.CurrentValue,
+            Property.ClrType.IsValueType ? Activator.CreateInstance(Property.ClrType) : null));
 }
 
 public sealed class ConsistencyPersistenceUnitOfWork
 {
     private readonly DbContext _context;
     private readonly ConsistencyRuntime _runtime;
-    private readonly ConsistencyUnitOfWork _unit;
+    private readonly CapturedEfMutationSnapshot _mutations;
     private readonly ConsistencyPersistencePolicySnapshot _policy;
-    private readonly IReadOnlyList<GeneratedKeyCandidate> _generatedKeys;
+    private readonly IReadOnlyList<GeneratedValueCandidate> _generatedValues;
+    private ConsistencyUnitOfWork? _unit;
     private State _state;
 
     internal ConsistencyPersistenceUnitOfWork(
         DbContext context,
         ConsistencyRuntime runtime,
-        ConsistencyUnitOfWork unit,
+        CapturedEfMutationSnapshot mutations,
         ConsistencyPersistencePolicySnapshot policy,
-        IReadOnlyList<GeneratedKeyCandidate> generatedKeys)
+        IReadOnlyList<GeneratedValueCandidate> generatedValues)
     {
         _context = context;
         _runtime = runtime;
-        _unit = unit;
+        _mutations = mutations;
         _policy = policy;
-        _generatedKeys = generatedKeys;
+        _generatedValues = generatedValues;
     }
 
-    public bool HasChanges => _unit.HasChanges;
+    public bool HasChanges => _mutations.HasChanges;
 
     public PreparedImpactPlan? PrepareAndPlan()
     {
         Require(State.Captured, "prepared and planned");
         try
         {
-            ConsistencyGeneratedKeyGuard.RejectForManualPlan(_generatedKeys);
+            ConsistencyGeneratedValueGuard.RejectForManualPlan(_generatedValues);
+            _unit = _mutations.FinalizeForPlanning(_context);
             var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
                 _context, _runtime, _unit, _policy);
             _state = State.Planned;
@@ -202,7 +213,7 @@ public sealed class ConsistencyPersistenceUnitOfWork
         var version = _runtime.Version;
         try
         {
-            var impact = _unit.Commit(_runtime);
+            var impact = _unit!.Commit(_runtime);
             _state = State.Committed;
             return impact;
         }
@@ -216,7 +227,7 @@ public sealed class ConsistencyPersistenceUnitOfWork
     public void Dispatch()
     {
         Require(State.Committed, "dispatched");
-        _unit.Dispatch(_runtime);
+        _unit!.Dispatch(_runtime);
         _state = State.Dispatched;
     }
 

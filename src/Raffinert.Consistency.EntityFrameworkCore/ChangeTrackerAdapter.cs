@@ -51,6 +51,7 @@ public sealed class ConsistencyUnitOfWorkMappings
 
     internal interface IEntitySetMapping
     {
+        IObjectSetDefinition SetDefinition { get; }
         IReadOnlySet<MemberInfo> KeyMembers { get; }
         bool Matches(EntityEntry entry);
         ObjectAdded Add(object entity);
@@ -62,6 +63,7 @@ public sealed class ConsistencyUnitOfWorkMappings
         ObjectSet<TEntity> set,
         Func<EntityEntry<TEntity>, bool>? selector) : IEntitySetMapping where TEntity : class
     {
+        public IObjectSetDefinition SetDefinition => set.Definition;
         public IReadOnlySet<MemberInfo> KeyMembers => set.Definition.KeyMembers;
 
         public bool Matches(EntityEntry entry) =>
@@ -239,6 +241,47 @@ public sealed class ConsistencyUnitOfWork
 /// </summary>
 public static class ChangeTrackerAdapter
 {
+    internal static CapturedEfMutationSnapshot CapturePolicyAwareSnapshot(
+        ChangeTracker changeTracker,
+        ConsistencyUnitOfWorkMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(changeTracker);
+        ArgumentNullException.ThrowIfNull(mappings);
+        var navigationChanges = CaptureNavigationChanges(changeTracker, mappings);
+        changeTracker.DetectChanges();
+        var additions = new List<RuntimeMutation>();
+        var removals = new List<RuntimeMutation>();
+        var properties = new List<CapturedEfPropertyMutation>();
+        foreach (var entry in changeTracker.Entries())
+        {
+            var mapping = mappings.Resolve(entry);
+            if (mapping is null) continue;
+            if (entry.State == EntityState.Added)
+                additions.Add(mapping.Add(entry.Entity));
+            else if (entry.State == EntityState.Deleted)
+                removals.Add(mapping.Remove(entry.Entity));
+            if (entry.State != EntityState.Modified) continue;
+            foreach (var property in entry.Properties.Where(property => property.IsModified))
+            {
+                var member = GetMember(property.Metadata);
+                if (member is null) continue;
+                var mutation = mapping.Property(
+                    entry.Entity, member, property.OriginalValue, property.CurrentValue);
+                properties.Add(new CapturedEfPropertyMutation(
+                    mutation,
+                    mapping,
+                    entry,
+                    property.Metadata,
+                    CaptureGeneratedFixupEvidence(changeTracker, entry, property.Metadata)));
+            }
+        }
+        return new CapturedEfMutationSnapshot(
+            additions,
+            properties,
+            navigationChanges,
+            removals);
+    }
+
     public static ChangeSet? CreateChangeSet(ChangeTracker changeTracker)
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
@@ -437,6 +480,32 @@ public static class ChangeTrackerAdapter
     private static object? Value(EntityEntry entry, IProperty property, bool original) =>
         original ? entry.Property(property.Name).OriginalValue : entry.Property(property.Name).CurrentValue;
 
+    private static GeneratedForeignKeyFixupEvidence? CaptureGeneratedFixupEvidence(
+        ChangeTracker tracker,
+        EntityEntry dependent,
+        IProperty property)
+    {
+        var foreignKeys = dependent.Metadata.GetForeignKeys()
+            .Where(foreignKey => foreignKey.Properties.Contains(property))
+            .ToArray();
+        if (foreignKeys.Length != 1) return null;
+        var foreignKey = foreignKeys[0];
+        var navigation = foreignKey.DependentToPrincipal;
+        var principal = navigation is null ? null : dependent.Reference(navigation.Name).CurrentValue;
+        if (principal is null) return null;
+        var principalEntry = tracker.Entries().SingleOrDefault(entry => ReferenceEquals(entry.Entity, principal));
+        if (principalEntry is null) return null;
+        var component = Enumerable.Range(0, foreignKey.Properties.Count)
+            .Single(index => foreignKey.Properties[index] == property);
+        var principalProperty = foreignKey.PrincipalKey.Properties[component];
+        var principalValue = principalEntry.Property(principalProperty.Name);
+        var generatedAtCapture = principalValue.IsTemporary ||
+            principalEntry.State == EntityState.Added && principalProperty.ValueGenerated != ValueGenerated.Never;
+        return generatedAtCapture
+            ? new GeneratedForeignKeyFixupEvidence(foreignKey, navigation, principal, principalEntry)
+            : null;
+    }
+
     private static bool CollectionRelationshipChanged(ChangeTracker tracker, EntityEntry owner,
         Microsoft.EntityFrameworkCore.Metadata.IPropertyBase propertyBase)
     {
@@ -466,4 +535,70 @@ public static class ChangeTrackerAdapter
 
     private static MemberInfo? GetMember(Microsoft.EntityFrameworkCore.Metadata.IPropertyBase property) =>
         property.PropertyInfo ?? (MemberInfo?)property.FieldInfo;
+}
+
+internal sealed class CapturedEfMutationSnapshot(
+    IReadOnlyList<RuntimeMutation> additions,
+    IReadOnlyList<CapturedEfPropertyMutation> properties,
+    IReadOnlyList<RuntimeMutation> navigationChanges,
+    IReadOnlyList<RuntimeMutation> removals)
+{
+    public bool HasChanges => additions.Count + properties.Count + navigationChanges.Count + removals.Count > 0;
+
+    public ConsistencyUnitOfWork FinalizeForPlanning(DbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var mutations = additions
+            .Concat(properties.Select(property => property.FinalizeForPlanning(context)))
+            .Concat(navigationChanges)
+            .Concat(removals)
+            .ToArray();
+        return new ConsistencyUnitOfWork(
+            mutations.Length == 0 ? null : MutationSet.Create(mutations));
+    }
+}
+
+internal sealed record CapturedEfPropertyMutation(
+    PropertyChange Mutation,
+    ConsistencyUnitOfWorkMappings.IEntitySetMapping Mapping,
+    EntityEntry Entry,
+    IProperty Property,
+    GeneratedForeignKeyFixupEvidence? Fixup)
+{
+    public RuntimeMutation FinalizeForPlanning(DbContext context)
+    {
+        var current = Entry.Property(Property.Name).CurrentValue;
+        if (Equals(current, Mutation.NewValue) || Fixup is null || !Fixup.ProvesFinalValue(context, Entry))
+            return Mutation;
+        return Mapping.Property(
+            Mutation.Instance,
+            Mutation.Member,
+            Mutation.OldValue,
+            current);
+    }
+}
+
+internal sealed record GeneratedForeignKeyFixupEvidence(
+    IForeignKey ForeignKey,
+    INavigation? Navigation,
+    object IntendedPrincipal,
+    EntityEntry PrincipalEntry)
+{
+    public bool ProvesFinalValue(DbContext context, EntityEntry dependent)
+    {
+        if (!ReferenceEquals(dependent.Context, context) ||
+            !ReferenceEquals(PrincipalEntry.Context, context) ||
+            Navigation is null ||
+            !ReferenceEquals(dependent.Reference(Navigation.Name).CurrentValue, IntendedPrincipal))
+            return false;
+        for (var index = 0; index < ForeignKey.Properties.Count; index++)
+        {
+            var principal = PrincipalEntry.Property(ForeignKey.PrincipalKey.Properties[index].Name);
+            if (principal.IsTemporary || !Equals(
+                    dependent.Property(ForeignKey.Properties[index].Name).CurrentValue,
+                    principal.CurrentValue))
+                return false;
+        }
+        return true;
+    }
 }
