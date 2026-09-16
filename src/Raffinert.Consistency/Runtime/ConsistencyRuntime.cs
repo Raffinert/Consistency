@@ -19,6 +19,12 @@ public sealed partial class ConsistencyRuntime
     }
 
     internal bool OwnsObjectSet(IObjectSetDefinition definition) => _sets.ContainsKey(definition);
+    internal bool HasObjectSetForClrType(Type clrType)
+    {
+        ArgumentNullException.ThrowIfNull(clrType);
+        return _sets.Keys.Any(set =>
+            set.ObjectType.IsAssignableFrom(clrType) || clrType.IsAssignableFrom(set.ObjectType));
+    }
     internal int GetDerivedId(IDerivedDefinition definition) => _derivedIds.TryGetValue(definition, out var id)
         ? id : throw new ArgumentException("The derived definition belongs to another model.");
     internal int GetInvariantId(IInvariantDefinition definition) => _invariantIds.TryGetValue(definition, out var id)
