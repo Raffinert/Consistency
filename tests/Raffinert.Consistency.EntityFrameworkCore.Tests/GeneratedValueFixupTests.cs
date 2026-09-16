@@ -132,7 +132,7 @@ public sealed class GeneratedValueFixupTests
         var model = new ConsistencyModelBuilder();
         var active = model.Objects<SharedLine>().Key(x => x.Id);
         var archive = model.Objects<SharedLine>().Key(x => x.Id);
-        _ = model.Derived(active).Compute(x => x.Value);
+        _ = model.Derived(active).Compute(x => x.GeneratedOnly);
         var archiveValue = model.Derived(archive).Compute(x => x.Other);
         var runtime = model.Build().CreateRuntime(seed =>
         {
@@ -143,9 +143,29 @@ public sealed class GeneratedValueFixupTests
             .Map(archive, entry => entry.Entity.Kind == "archive")
             .Materialize(archiveValue, x => x.Value);
         archiveEntity.Other = 5;
+        context.Add(new SharedLine { Id = 3, Kind = "archive", Other = 6 });
 
         var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
         Assert.NotNull(work.PrepareAndPlan());
+    }
+
+    [Fact]
+    public void Generated_invariant_source_dependency_requires_first_save()
+    {
+        using var database = new FixupDatabase(); using var context = database.CreateContext();
+        var model = new ConsistencyModelBuilder();
+        var records = model.Objects<SequencedRecord>().Key(x => x.BusinessId);
+        var local = model.Derived(records).Compute(x => x.BusinessId);
+        var invariant = model.Invariant(records).Using(local)
+            .Must((source, _) => source.DatabaseSequence >= 0);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(records).Enforce(invariant);
+        context.Add(new SequencedRecord { BusinessId = Guid.NewGuid() });
+
+        var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
+        var error = Assert.Throws<ConsistencyStoreGeneratedValueNotReadyException>(() =>
+            work.PrepareAndPlan());
+        Assert.Equal(nameof(SequencedRecord.DatabaseSequence), error.PropertyName);
     }
 
     private static RelationSetup CreateRelationModel(Parent parent, Child child)
@@ -204,6 +224,7 @@ public sealed class GeneratedValueFixupTests
             model.Entity<UnusedGeneratedRecord>().HasKey(x => x.BusinessId);
             model.Entity<UnusedGeneratedRecord>().Property(x => x.DatabaseSequence).HasDefaultValueSql("42");
             model.Entity<SharedLine>().HasKey(x => x.Id);
+            model.Entity<SharedLine>().Property(x => x.GeneratedOnly).HasDefaultValueSql("7");
         }
     }
 
@@ -211,5 +232,5 @@ public sealed class GeneratedValueFixupTests
     private sealed class Child { public int Id { get; set; } public int ParentId { get; set; } public Parent Parent { get; set; } = null!; public int Quantity { get; set; } }
     private sealed class SequencedRecord { public Guid BusinessId { get; set; } public int DatabaseSequence { get; set; } public int Mirror { get; set; } }
     private sealed class UnusedGeneratedRecord { public Guid BusinessId { get; set; } public int DatabaseSequence { get; set; } public int Value { get; set; } public int Mirror { get; set; } }
-    private sealed class SharedLine { public int Id { get; set; } public string Kind { get; set; } = ""; public int Value { get; set; } public int Other { get; set; } }
+    private sealed class SharedLine { public int Id { get; set; } public string Kind { get; set; } = ""; public int GeneratedOnly { get; set; } public int Value { get; set; } public int Other { get; set; } }
 }

@@ -81,6 +81,17 @@ not mean all allocation rows are loaded and is never completeness proof. The hos
 authoritative runtime coverage and state that fact with `scope.Complete(allocations)`. Whole-set coverage
 is intentionally coarse in this version; key- or partition-scoped completeness is not implemented.
 
+Ordinary navigation traversal also requires consumer coverage:
+
+```csharp
+var price = model.Derived(lines).Compute(line => line.Product.Price);
+var scope = new ConsistencyScope().Complete(lines);
+```
+
+When `Product.Price` changes, reverse navigation must discover every consuming line. The terminal product
+does not need completeness merely for that path; the risk is a missing line owner, so `lines` receives
+`NavigationConsumerCoverage`.
+
 ## Materialization contract
 
 A materialized target is a persisted mirror, never an input to the consistency graph. Configuration rejects
@@ -125,6 +136,12 @@ Capture validates mappings and scope and preserves relationship evidence before 
 executes SQL. For pending additions, `Complete(set)` asserts completeness of the planned final boundary:
 current runtime coverage plus lifecycle changes captured by this work item. A stable application-key flow
 can prepare before its first SQL command and may require only one database save.
+
+The captured evidence keeps original FK/navigation state even when EF later replaces a temporary generated
+principal key and fixes up the dependent FK. Planning accepts that new-value transition only when it can prove
+the same tracked relationship and matching final key component(s). Arbitrary caller changes after capture
+remain invalid. Any store-generated property used as a set key, relation/derived/invariant dependency, or
+projected selector must also be final before planning; unused generated properties do not force two saves.
 
 The application owns transaction commit and rollback. After a planning or persistence failure, roll back
 and discard/reload the context. Call `CommitAfterDatabaseCommit` only after durability, then dispatch.

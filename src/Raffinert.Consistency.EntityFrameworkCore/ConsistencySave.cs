@@ -43,7 +43,10 @@ public sealed class ConsistencyMaterializationSourceNotTrackedException : Except
 
 public sealed class ConsistencyUnsupportedTransactionException : Exception
 {
-    internal ConsistencyUnsupportedTransactionException() : base("Consistent save does not support ambient or externally controlled transactions; use the manual ConsistencyUnitOfWork workflow.") { }
+    internal ConsistencyUnsupportedTransactionException() : base(
+        "Consistent save does not support ambient or externally controlled transactions; " +
+        "use the policy-aware CaptureConsistencyUnitOfWork(...) workflow.")
+    { }
 }
 
 public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException : Exception
@@ -56,6 +59,7 @@ public sealed class ConsistencyStoreGeneratedKeyRequiresManualWorkflowException 
 
 public sealed class ConsistencyStoreGeneratedValueRequiresManualWorkflowException : Exception
 {
+    /// <summary>Identifies a semantic consistency input that must be generated before planning.</summary>
     internal ConsistencyStoreGeneratedValueRequiresManualWorkflowException(Type entityType, string propertyName)
         : base($"Store-generated consistency input '{entityType.Name}.{propertyName}' is not final before SQL. " +
             "Use CaptureConsistencyUnitOfWork and plan after generated values are final.")
@@ -70,6 +74,7 @@ public sealed class ConsistencyStoreGeneratedValueRequiresManualWorkflowExceptio
 
 public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
 {
+    /// <summary>Identifies a semantic consistency input whose store-generated value is not final.</summary>
     internal ConsistencyStoreGeneratedValueNotReadyException(Type entityType, string propertyName)
         : base($"Store-generated consistency input '{entityType.Name}.{propertyName}' is not final yet. " +
             "Save inside the current database transaction to obtain generated values/fixup before PrepareAndPlan().")
@@ -84,6 +89,11 @@ public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
 
 public static class ConsistencyDbContextExtensions
 {
+    /// <summary>
+    /// Captures immutable pre-save relationship and scalar evidence together with EF persistence policy.
+    /// Before planning, only value transitions proven to be EF store-generated key propagation are
+    /// finalized; arbitrary changes after capture remain subject to strict new-value validation.
+    /// </summary>
     public static ConsistencyPersistenceUnitOfWork CaptureConsistencyUnitOfWork(
         this DbContext context,
         ConsistencyRuntime runtime,

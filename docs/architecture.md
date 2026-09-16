@@ -29,8 +29,10 @@ can affect semantics. It controls whether cached consumers are safe and whether 
 contains every object needed to make an authoritative cross-object claim. Solving either problem does not
 solve the other.
 
-Core derives data-scope requirements from compiled topology. A source-only derived value requires no
-complete object set. A relation-backed value requires both relation source and target sets. Same-source
+Core derives data-scope requirements from compiled topology. A direct source-local computation that reads
+only scalar/value members of the known source needs no complete-set proof. A computation or invariant that
+traverses reverse-indexed navigation paths requires `NavigationConsumerCoverage` for its consumer/root set.
+A relation-backed value requires both relation source and target sets. Same-source
 composition inherits the transitive union of upstream requirements. Projected composition inherits those
 requirements and adds its consumer set because reverse projection must find every consumer. Invariants
 take the deterministic, de-duplicated union of their upstream requirements.
@@ -159,6 +161,13 @@ keys, capture before the first `SaveChanges`, then perform that save inside the 
 relationship fixup are available before `PrepareAndPlan`. For stable application keys, planning may precede
 the first and only save. The application owns database durability; the consistency work item installs its
 retained runtime plan only through `CommitAfterDatabaseCommit`, followed by `Dispatch`.
+
+Capture preserves authoritative old scalar/navigation evidence. After a first save it may update only the
+captured new FK value when EF metadata, the same tracked dependent and principal, a formerly temporary
+generated principal key, the final FK/key values, and the unchanged intended navigation jointly prove EF
+generated-key propagation. Every unrelated post-capture mutation still fails Core strict-new-value validation.
+Store-generated non-key members used by the consistency graph also require the first save; generated members
+with no semantic usage do not.
 
 `ConsistencyUnitOfWork` and `ChangeTrackerAdapter.CaptureUnitOfWork` remain available as low-level runtime
 binding primitives. They intentionally do not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or

@@ -330,12 +330,17 @@ rebuild or reconcile the runtime from durable state rather than retrying the dat
 
 The EF Core adapter can translate change-tracker state into the same core mutation model.
 
-`SaveChangesAndApply` / `SaveChangesAndApplyAsync` provide the simple ordering case. More advanced
-transaction/outbox workflows can explicitly capture a `ConsistencyUnitOfWork`, then use its prepare, plan,
-commit, and dispatch phases.
+`SaveChangesConsistently` / `SaveChangesConsistentlyAsync` provide policy-aware one-save ordering. Advanced
+transaction/outbox and generated-value workflows should call `CaptureConsistencyUnitOfWork(...)`, then use
+`PrepareAndPlan`, caller-owned database commit, `CommitAfterDatabaseCommit`, and `Dispatch`.
 
-Generated keys are supported, including workflows where final identities become available only after the
-first `SaveChanges` inside a database transaction.
+`ChangeTrackerAdapter.CaptureUnitOfWork` is a lower-level, policy-agnostic runtime binding primitive. It does
+not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or `ConsistencyScope` and is not the recommended
+authoritative EF persistence workflow.
+
+Generated semantic values are supported, including existing-dependent FK fixup when final principal keys
+become available only after the first `SaveChanges` inside a database transaction. Unrelated changes after
+capture remain rejected by strict validation.
 
 See the architecture and example documentation for the exact transaction boundaries and recovery rules.
 
