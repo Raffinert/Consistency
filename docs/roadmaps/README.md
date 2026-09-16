@@ -1,6 +1,6 @@
 # Roadmaps
 
-- No implementation roadmap is currently active.
+- **Active implementation plan:** add a domain-neutral executable dogfooding example that demonstrates dependency maintenance in an anemic EF model without changing product code: [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
 - Completed store-side referential-action safety and persistence-authority preflight with local and remote
   release proof at `d3458575c58f6f5c22594b2906526fb855aba3c7`:
   [Tasks 159–166](../codex-plan-store-side-referential-actions-and-persistence-authority.md)
