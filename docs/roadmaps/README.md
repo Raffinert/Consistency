@@ -1,7 +1,9 @@
 # Roadmaps
 
-- **Active implementation plan:** add explicit source-member dependency declarations for opaque source-derived computations so reusable calculators retain normal freshness/routing guarantees: [Tasks 174–181](../codex-plan-explicit-source-derived-dependencies.md)
-- **Blocked / resume next:** domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model. Tasks 167–173 are blocked at `4dc439dc3787bfbc3df981b405d24a8ee3c8e9c9` until Tasks 174–181 provide the required explicit dependency API: [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
+- **Active implementation plan:** resume the domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model. Tasks 167–173 are unblocked by the explicit dependency API: [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
+- Completed explicit source-member dependency declarations for opaque source-derived computations with local release proof at
+  `9a5fc06ab8344635552e11946c3631fbc9cb62b2` (remote pipelines intentionally not checked):
+  [Tasks 174–181](../codex-plan-explicit-source-derived-dependencies.md)
 - Completed store-side referential-action safety and persistence-authority preflight with local and remote
   release proof at `d3458575c58f6f5c22594b2906526fb855aba3c7`:
   [Tasks 159–166](../codex-plan-store-side-referential-actions-and-persistence-authority.md)

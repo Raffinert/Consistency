@@ -151,3 +151,17 @@ This run verifies pre-SQL rejection of direct and transitive store-side cascade 
 consistency-managed state, zero-command rejection, six-path API parity, unrelated and owned cascade safety,
 and supported fully tracked client-side cascade/set-null workflows. No package was published, and no tag or
 GitHub release was created.
+
+## Explicit source-derived dependency gate (local-only)
+
+Verification date: 2026-09-16
+
+Verified implementation head: `9a5fc06ab8344635552e11946c3631fbc9cb62b2`
+
+- Core tests: 306 passed on .NET 8 and 306 passed on .NET 10.
+- EF Core and SQLite tests: 130 passed on .NET 10.
+- Both executable samples, formatting verification, package/API validation, and fresh packed consumers passed.
+- Focused tests prove opaque computations with `DependsOn`, nested fan-out/selective routing, retargeting, scope
+  requirements, external-state rejection, and EF generated-value semantic usage.
+
+Remote CI and release-candidate workflows were intentionally not queried or waited on for this closeout.

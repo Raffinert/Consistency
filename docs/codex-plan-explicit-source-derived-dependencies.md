@@ -1,6 +1,6 @@
 # Codex implementation plan — explicit dependencies for opaque source-derived computations
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED LOCALLY — REMOTE PIPELINES NOT CHECKED**
 
 Baseline commit: `4dc439dc3787bfbc3df981b405d24a8ee3c8e9c9`
 
@@ -790,6 +790,18 @@ EF/SQLite test count
 confirmation that both existing executable samples ran
 confirmation that package/API verification and fresh package consumers passed
 ```
+
+Local closeout (2026-09-16, implementation head `9a5fc06ab8344635552e11946c3631fbc9cb62b2`):
+
+- Core tests: 306 passed on .NET 8 and 306 passed on .NET 10.
+- EF Core and SQLite tests: 130 passed on .NET 10.
+- Both existing executable samples ran successfully.
+- Restore, Release build, formatting verification, package/API validation, and fresh packed consumers passed.
+- The narrow explicit-dependency tests and EF semantic-member smoke test passed.
+- Remote CI and release-candidate workflows were intentionally not queried or waited on, per the implementation
+  instruction for this closeout.
+
+The implementation is complete locally. No package was published, and no tag or GitHub release was created.
 
 After successful closeout:
 
