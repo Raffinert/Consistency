@@ -92,3 +92,23 @@ This run verifies navigation-consumer scope requirements and the public policy-a
 unit of work. SQLite proofs cover nested-navigation false authority, generated-key rollback and success,
 materialization, immutable captured policy, post-durability synchronization failure, and resumable dispatch.
 No package was published, and no tag or GitHub release was created.
+
+## Generated-value fixup and set-scoped policy safety gate
+
+Verification date: 2026-09-16
+
+Verified implementation head before closeout documentation: `7140d712fe6fcb2c314ba8364ef29fe5a21b23e6`
+
+- CI run: [35061215303](https://github.com/Raffinert/Consistency/actions/runs/35061215303) — success.
+- Release-candidate run: [35061578764](https://github.com/Raffinert/Consistency/actions/runs/35061578764) — success
+  (2026-09-16 05:57:04–06:02:44 UTC).
+- Artifact: `release-candidate-packages` (artifact ID `10432444024`).
+- Core tests: 298 passed on .NET 8 and 298 passed on .NET 10.
+- EF Core and SQLite tests: 104 passed on .NET 10.
+- Both samples, formatting verification, package/API validation, fresh package consumers, and artifact upload
+  passed.
+
+This run covers existing-dependent retargeting to a generated-key principal, selective finalization of
+proven EF FK fixup, strict rejection of unrelated post-capture drift, generated semantic non-key readiness,
+and exact object-set scoping when multiple sets share one CLR type. No package was published, and no tag or
+GitHub release was created.

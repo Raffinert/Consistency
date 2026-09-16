@@ -1,6 +1,10 @@
 # Codex implementation plan — generated-value fixup and set-scoped persistence safety
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED**
+
+Completed on 2026-09-16. Implementation head `7140d712fe6fcb2c314ba8364ef29fe5a21b23e6`
+passed CI run [35061215303](https://github.com/Raffinert/Consistency/actions/runs/35061215303)
+and release-candidate run [35061578764](https://github.com/Raffinert/Consistency/actions/runs/35061578764).
 
 Baseline commit: `419d547b926c8bba2e61a5f08134b93e1e9e25bc`
 
