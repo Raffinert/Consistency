@@ -47,6 +47,25 @@ public sealed partial class ConsistencyRuntime
         return usage;
     }
 
+    internal ModelMemberUsageKind GetTrackedMemberUsage(IObjectSetDefinition? mappedSet, MemberInfo member)
+    {
+        var usage = mappedSet is null ? ModelMemberUsageKind.None : GetMemberUsage(mappedSet, member);
+        if (_relations.Keys.Any(relation => relation.Analysis.DependencyPaths.Any(path =>
+                path.Segments.Skip(1).Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.RelationDependency;
+        if (_derivedStates.Keys.Any(definition => definition.Analysis.Dependencies.Any(dependency =>
+                dependency.Path.Segments.Skip(1).Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.DerivedDependency;
+        if (_invariants.Keys.Any(invariant => invariant.Analysis.Dependencies.Any(dependency =>
+                dependency.Path.Segments.Skip(1).Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.InvariantDependency;
+        if (_derivedStates.Keys.Any(definition => definition.Inputs
+                .OfType<ProjectedUpstreamDerivedInput>().Any(input =>
+                    input.SelectorPath.Segments.Skip(1).Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.ProjectedSelector;
+        return usage;
+    }
+
     private static IObjectSetDefinition? ResolveDependencyRootSet(
         IDerivedDefinition definition,
         ExpressionParameterRole role) => role switch
