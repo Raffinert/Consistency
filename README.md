@@ -91,8 +91,8 @@ runtime set has complete coverage. Raffinert does not load missing graph data. S
 generated keys, and recovery rules, or run the
 [`Raffinert.Consistency.EntityFrameworkCore.Sample`](samples/Raffinert.Consistency.EntityFrameworkCore.Sample).
 
-For application-owned transactions, generated keys, or an outbox, capture a policy-aware work item before
-the first save, call `PrepareAndPlan()` when keys are final, persist the returned plan data, commit the
+For application-owned transactions, generated semantic values from INSERT or UPDATE, or an outbox, capture a
+policy-aware work item before the first save, call `PrepareAndPlan()` when generated values are final, persist the returned plan data, commit the
 database transaction, then call `CommitAfterDatabaseCommit()` and `Dispatch()`. This path applies the same
 scope, enforcement, and materialization policy as convenience saves.
 
@@ -338,9 +338,13 @@ transaction/outbox and generated-value workflows should call `CaptureConsistency
 not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or `ConsistencyScope` and is not the recommended
 authoritative EF persistence workflow.
 
-Generated semantic values are supported, including existing-dependent FK fixup when final principal keys
-become available only after the first `SaveChanges` inside a database transaction. Unrelated changes after
-capture remain rejected by strict validation.
+Generated semantic values from INSERT or UPDATE are supported by the manual workflow, including
+existing-dependent FK fixup when final principal keys become available only after the first `SaveChanges`
+inside a database transaction. Convenience APIs fail closed when SQL must run before a semantic value is
+final. The captured pre-SQL value remains authoritative; only provider-generated transitions may be
+finalized afterward, and unrelated changes after capture remain rejected by strict validation. Tracked
+nested dependency targets do not need their own `ObjectSet` mapping for scalar change routing. Updating an
+existing Raffinert identity with a store-generated value is unsupported.
 
 See the architecture and example documentation for the exact transaction boundaries and recovery rules.
 

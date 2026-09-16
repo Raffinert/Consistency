@@ -104,8 +104,10 @@ old owned/reference targets. The adapter's `Enforce` and `Materialize` mappings 
 the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a consistency key,
 relation, derived value, invariant, or projected selector.
 
-The convenience save methods and interceptor validate authoritative data scope and prepare before `SaveChanges`, commit after success, and
-dispatch last. They reject ambient/external transactions and store-generated consistency identities. Those
+The convenience save methods, interceptor, and low-level save-and-apply methods prepare before `SaveChanges`,
+commit after success, and dispatch last. Policy-aware paths also validate authoritative data scope. They
+reject ambient/external transactions where applicable and fail closed when a semantic INSERT or UPDATE value
+is store-generated and therefore not final before SQL. Those
 cases require an application-owned transaction and policy-aware persistence unit, with runtime commit only
 after database commit. The adapter never auto-loads missing graph state. Cross-object enforcement and materialization
 require the host to seed complete runtime coverage and declare it with `ConsistencyScope`; `Map(...)` alone
@@ -143,7 +145,7 @@ var work = context.CaptureConsistencyUnitOfWork(runtime, mappings,
 
 await using var transaction = await context.Database.BeginTransactionAsync();
 
-// For store-generated keys, save once here to finalize keys and relationship fixup.
+// Save once here to finalize store-generated INSERT/UPDATE values and relationship fixup.
 await context.SaveChangesAsync();
 
 var plan = work.PrepareAndPlan();
@@ -162,12 +164,17 @@ relationship fixup are available before `PrepareAndPlan`. For stable application
 the first and only save. The application owns database durability; the consistency work item installs its
 retained runtime plan only through `CommitAfterDatabaseCommit`, followed by `Dispatch`.
 
-Capture preserves authoritative old scalar/navigation evidence. After a first save it may update only the
+Capture preserves authoritative old scalar/navigation evidence, including changes on tracked nested
+dependency targets that intentionally have no object-set mapping. `Map(...)` routes lifecycle changes and
+root-set scalar changes; it is not required merely because a navigation target supplies a semantic scalar.
+After a first save capture may update only the
 captured new FK value when EF metadata, the same tracked dependent and principal, a formerly temporary
 generated principal key, the final FK/key values, and the unchanged intended navigation jointly prove EF
 generated-key propagation. Every unrelated post-capture mutation still fails Core strict-new-value validation.
-Store-generated non-key members used by the consistency graph also require the first save; generated members
-with no semantic usage do not.
+Store-generated non-key members used by the consistency graph on INSERT or UPDATE also require the first
+save. Their immutable pre-save values are converted to runtime mutations only when EF metadata and the same
+tracked operation prove the provider-generated final value. Generated members with no semantic usage do not
+force the manual workflow. Store-generated UPDATE of an existing Raffinert identity is unsupported.
 
 `ConsistencyUnitOfWork` and `ChangeTrackerAdapter.CaptureUnitOfWork` remain available as low-level runtime
 binding primitives. They intentionally do not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or

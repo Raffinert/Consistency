@@ -87,6 +87,10 @@ public sealed class ConsistencyStoreGeneratedValueNotReadyException : Exception
     public string PropertyName { get; }
 }
 
+/// <summary>
+/// Indicates that EF metadata may replace the Raffinert identity of an existing object during UPDATE.
+/// Runtime identities are immutable, so this operation must use a different persistence design.
+/// </summary>
 public sealed class ConsistencyStoreGeneratedIdentityUpdateNotSupportedException : Exception
 {
     /// <summary>Identifies an existing consistency identity that EF may replace during UPDATE.</summary>
@@ -97,7 +101,9 @@ public sealed class ConsistencyStoreGeneratedIdentityUpdateNotSupportedException
         PropertyName = propertyName;
     }
 
+    /// <summary>The tracked entity type whose consistency identity may change.</summary>
     public Type EntityType { get; }
+    /// <summary>The store-generated identity property.</summary>
     public string PropertyName { get; }
 }
 

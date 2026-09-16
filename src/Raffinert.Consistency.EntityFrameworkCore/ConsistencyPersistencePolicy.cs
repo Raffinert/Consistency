@@ -237,8 +237,9 @@ public sealed class ConsistencyPersistenceUnitOfWork
     public bool HasChanges => _mutations.HasChanges;
 
     /// <summary>
-    /// Finalizes proven EF-generated relationship fixup, then creates the exact binding persistence plan.
-    /// Store-generated semantic inputs must be final, and unrelated post-capture changes are rejected.
+    /// Finalizes proven EF-generated relationship fixup and generated INSERT/UPDATE semantic values, then
+    /// creates the exact binding persistence plan. Store-generated semantic inputs must be final, and
+    /// unrelated post-capture changes are rejected.
     /// This method performs no SQL.
     /// </summary>
     public PreparedImpactPlan? PrepareAndPlan()

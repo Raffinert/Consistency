@@ -89,6 +89,7 @@ public sealed class ConsistencyUnitOfWorkMappings
 /// runtime binding primitive and does not apply <see cref="ConsistencyEfCoreMappings"/> enforcement,
 /// materialization, or <see cref="ConsistencyScope"/> policy. Use
 /// <see cref="ConsistencyDbContextExtensions.CaptureConsistencyUnitOfWork"/> for authoritative EF persistence.
+/// Save-and-apply convenience methods reject semantic values that EF can finalize only after SQL.
 /// </summary>
 public sealed class ConsistencyUnitOfWork
 {
