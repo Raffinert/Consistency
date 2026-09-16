@@ -23,6 +23,7 @@ jobs:
       - run: dotnet test tests/Raffinert.Consistency.EntityFrameworkCore.Tests/Raffinert.Consistency.EntityFrameworkCore.Tests.csproj -c Release -f net10.0 --no-build
       - run: dotnet run --project samples/Raffinert.Consistency.OrderFulfillmentSample/Raffinert.Consistency.OrderFulfillmentSample.csproj -c Release --no-build
       - run: dotnet run --project samples/Raffinert.Consistency.EntityFrameworkCore.Sample/Raffinert.Consistency.EntityFrameworkCore.Sample.csproj -c Release --no-build
+      - run: dotnet run --project samples/Raffinert.Consistency.DependencyMaintenanceSample/Raffinert.Consistency.DependencyMaintenanceSample.csproj -c Release --no-build
       - run: dotnet format Raffinert.Consistency.sln --no-restore --verify-no-changes
       - run: dotnet pack Raffinert.Consistency.sln -c Release --no-build -o artifacts/packages
       - name: Validate release version, API baselines, and package payloads

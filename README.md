@@ -359,6 +359,13 @@ before relying on it after such writes.
 
 See the architecture and example documentation for the exact transaction boundaries and recovery rules.
 
+### Dogfooding: dependency maintenance in an anemic model
+
+A domain-neutral SQLite example shows how changes to ordinary navigation targets identify affected associations,
+recalculate a derived `UnitRate`, and persist its mirror without hand-written invalidation/query orchestration.
+See the [dogfooding explanation](docs/anemic-model-dependency-maintenance-example.md) and run the
+[dependency-maintenance sample](samples/Raffinert.Consistency.DependencyMaintenanceSample).
+
 ## Exact vs conservative propagation
 
 Reusable calculation methods can hide source dependencies from expression analysis. For source-derived values,

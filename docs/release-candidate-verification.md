@@ -165,3 +165,16 @@ Verified implementation head: `9a5fc06ab8344635552e11946c3631fbc9cb62b2`
   requirements, external-state rejection, and EF generated-value semantic usage.
 
 Remote CI and release-candidate workflows were intentionally not queried or waited on for this closeout.
+
+## Dependency-maintenance dogfooding example (local-only)
+
+Verification date: 2026-09-16
+
+Verified implementation head: `TO_BE_RECORDED`
+
+- The new `Raffinert.Consistency.DependencyMaintenanceSample` built and passed all self-verifying SQLite scenarios.
+- The sample proves shared-source fan-out, selective target invalidation, retargeted routing, nullable-source and
+  zero-target semantics, tracked/runtime/persisted mirror agreement, and explicit authoritative scope coverage.
+- Solution build, formatting verification, core tests, EF/SQLite tests, and both existing executable samples passed.
+
+Remote CI and release-candidate workflows were intentionally not queried or waited on for this closeout.

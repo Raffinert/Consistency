@@ -33,6 +33,8 @@ jobs:
         run: dotnet run --project samples/Raffinert.Consistency.OrderFulfillmentSample/Raffinert.Consistency.OrderFulfillmentSample.csproj -c Release --no-build
       - name: Run EF Core consistency sample
         run: dotnet run --project samples/Raffinert.Consistency.EntityFrameworkCore.Sample/Raffinert.Consistency.EntityFrameworkCore.Sample.csproj -c Release --no-build
+      - name: Run dependency maintenance dogfood sample
+        run: dotnet run --project samples/Raffinert.Consistency.DependencyMaintenanceSample/Raffinert.Consistency.DependencyMaintenanceSample.csproj -c Release --no-build
       - name: Verify formatting
         run: dotnet format Raffinert.Consistency.sln --no-restore --verify-no-changes
       - name: Pack

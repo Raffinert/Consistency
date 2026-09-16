@@ -1,6 +1,6 @@
 # Codex implementation plan — anemic-model dependency-maintenance dogfooding example
 
-Status: **READY TO RESUME — BLOCKER RESOLVED BY TASKS 174–181**
+Status: **COMPLETED LOCALLY — REMOTE PIPELINES NOT CHECKED**
 
 Baseline commit: `616ba28dc820475d08ed59b771b79b8608a7e7aa`
 
@@ -549,6 +549,8 @@ var associations = builder.Objects<Association>()
     .Key(x => x.Id);
 
 var unitRate = builder.Derived(associations)
+    .DependsOn(a => a.SourceItem.UnitValue)
+    .DependsOn(a => a.TargetItem.UnitValue)
     .Compute(a => UnitRateCalculator.Calculate(
         a.SourceItem.UnitValue,
         a.TargetItem.UnitValue));
@@ -733,6 +735,16 @@ Only after both remote gates are green:
 5. state that all three executable samples passed;
 6. update `docs/release-candidate-verification.md` with a short dogfooding-example verification entry;
 7. replace the active-roadmap line in `docs/roadmaps/README.md` with a completed entry.
+
+Local closeout (2026-09-16, implementation head `TO_BE_RECORDED`):
+
+- The dependency-maintenance sample built and ran successfully against SQLite in-memory.
+- The solution build, formatting verification, core tests, EF/SQLite tests, and both existing executable samples
+  passed locally.
+- Remote CI and release-candidate workflows were intentionally not queried or waited on, per the implementation
+  instruction for this closeout.
+
+No package was published, and no tag or GitHub release was created.
 
 ---
 

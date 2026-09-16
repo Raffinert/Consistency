@@ -1,6 +1,8 @@
 # Roadmaps
 
-- **Active implementation plan:** resume the domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model. Tasks 167–173 are unblocked by the explicit dependency API: [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
+- Completed domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model with local
+  proof at `TO_BE_RECORDED` (remote pipelines intentionally not checked):
+  [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
 - Completed explicit source-member dependency declarations for opaque source-derived computations with local release proof at
   `9a5fc06ab8344635552e11946c3631fbc9cb62b2` (remote pipelines intentionally not checked):
   [Tasks 174–181](../codex-plan-explicit-source-derived-dependencies.md)
