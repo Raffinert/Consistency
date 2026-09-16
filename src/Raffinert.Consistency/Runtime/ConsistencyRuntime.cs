@@ -27,12 +27,36 @@ public sealed partial class ConsistencyRuntime
     {
         if (!_sets.ContainsKey(set)) throw new ArgumentException("The object set belongs to another model.");
         var usage = set.KeyMembers.Contains(member) ? ModelMemberUsageKind.ObjectSetKey : ModelMemberUsageKind.None;
-        if (_relations.Keys.Any(x => x.Analysis.DependencyPaths.Any(p => p.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.RelationDependency;
-        if (_derivedStates.Keys.Any(x => x.Analysis.Dependencies.Any(d => d.Path.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.DerivedDependency;
-        if (_invariants.Keys.Any(x => x.Analysis.Dependencies.Any(d => d.Path.Segments.Any(s => s.Member == member)))) usage |= ModelMemberUsageKind.InvariantDependency;
-        if (_derivedStates.Keys.SelectMany(x => x.Inputs.OfType<ProjectedUpstreamDerivedInput>()).Any(x => x.SelectorPath.Segments.Any(s => s.Member == member))) usage |= ModelMemberUsageKind.ProjectedSelector;
+        if (_relations.Keys.Any(relation => relation.Analysis.DependencyPaths.Any(path =>
+                ReferenceEquals(path.RootParameterIndex == 0 ? relation.LeftSet : relation.RightSet, set) &&
+                path.Segments.Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.RelationDependency;
+        if (_derivedStates.Keys.Any(definition => definition.Analysis.Dependencies.Any(dependency =>
+                ReferenceEquals(ResolveDependencyRootSet(definition, dependency.Role), set) &&
+                dependency.Path.Segments.Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.DerivedDependency;
+        if (_invariants.Keys.Any(invariant => invariant.Analysis.Dependencies.Any(dependency =>
+                dependency.Role == ExpressionParameterRole.InvariantSource &&
+                ReferenceEquals(invariant.SourceSet, set) &&
+                dependency.Path.Segments.Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.InvariantDependency;
+        if (_derivedStates.Keys.Any(definition => ReferenceEquals(definition.SourceSet, set) &&
+                definition.Inputs.OfType<ProjectedUpstreamDerivedInput>().Any(input =>
+                    input.SelectorPath.Segments.Any(segment => segment.Member == member))))
+            usage |= ModelMemberUsageKind.ProjectedSelector;
         return usage;
     }
+
+    private static IObjectSetDefinition? ResolveDependencyRootSet(
+        IDerivedDefinition definition,
+        ExpressionParameterRole role) => role switch
+        {
+            ExpressionParameterRole.DerivedSource => definition.SourceSet,
+            ExpressionParameterRole.RelationItem => definition.Inputs
+                .OfType<RelationDerivedInput>()
+                .Single().Relation.RightSet,
+            _ => null
+        };
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> _relations;
     private readonly NavigationIndexRegistry _navigation;
