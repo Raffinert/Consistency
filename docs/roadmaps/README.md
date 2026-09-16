@@ -1,6 +1,6 @@
 # Roadmaps
 
-- No implementation roadmap is currently active.
+- **Active implementation plan:** fail closed when EF-declared database-side referential actions can mutate or delete Raffinert-managed consistency state without tracked mutation evidence: [Tasks 159–166](../codex-plan-store-side-referential-actions-and-persistence-authority.md)
 - Completed generated UPDATE value safety and policy-aware capture of unmapped nested dependency targets with
   local and remote release proof at `5623971a98d222c90cf388dc3c0eb23724fbc75e`:
   [Tasks 152–158](../codex-plan-generated-update-values-and-unmapped-dependency-capture.md)
