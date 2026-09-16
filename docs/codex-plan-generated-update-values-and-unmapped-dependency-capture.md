@@ -1,8 +1,20 @@
 # Codex implementation plan — generated UPDATE values and unmapped dependency capture
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETED**
 
 Baseline commit: `bc7840893fb633106f8a8203e4987d5315fc9e13`
+
+Implementation head: `5623971a98d222c90cf388dc3c0eb23724fbc75e`
+
+Release proof (2026-09-16):
+
+- CI run `35118835450`: success.
+- Release-candidate run `35118849723`: success.
+- Release-candidate artifact `10456377799` (`release-candidate-packages`).
+- Core tests: 298 passed on .NET 8 and 298 passed on .NET 10.
+- EF Core/SQLite tests: 115 passed on .NET 10.
+- Both executable samples, formatting, package/API verification, and fresh package consumers passed.
+- No package was published and no tag or release was created.
 
 Tasks: **152–158**
 
