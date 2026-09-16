@@ -255,18 +255,18 @@ public static class ChangeTrackerAdapter
         foreach (var entry in changeTracker.Entries())
         {
             var mapping = mappings.Resolve(entry);
-            if (mapping is null) continue;
-            if (entry.State == EntityState.Added)
+            if (mapping is not null && entry.State == EntityState.Added)
                 additions.Add(mapping.Add(entry.Entity));
-            else if (entry.State == EntityState.Deleted)
+            else if (mapping is not null && entry.State == EntityState.Deleted)
                 removals.Add(mapping.Remove(entry.Entity));
             if (entry.State != EntityState.Modified) continue;
             foreach (var property in entry.Properties.Where(property => property.IsModified))
             {
                 var member = GetMember(property.Metadata);
                 if (member is null) continue;
-                var mutation = mapping.Property(
-                    entry.Entity, member, property.OriginalValue, property.CurrentValue);
+                var mutation = mapping is null
+                    ? Change.Property(entry.Entity, member, property.OriginalValue, property.CurrentValue)
+                    : mapping.Property(entry.Entity, member, property.OriginalValue, property.CurrentValue);
                 properties.Add(new CapturedEfPropertyMutation(
                     mutation,
                     mapping,
@@ -560,7 +560,7 @@ internal sealed class CapturedEfMutationSnapshot(
 
 internal sealed record CapturedEfPropertyMutation(
     PropertyChange Mutation,
-    ConsistencyUnitOfWorkMappings.IEntitySetMapping Mapping,
+    ConsistencyUnitOfWorkMappings.IEntitySetMapping? Mapping,
     EntityEntry Entry,
     IProperty Property,
     GeneratedForeignKeyFixupEvidence? Fixup)
@@ -570,11 +570,9 @@ internal sealed record CapturedEfPropertyMutation(
         var current = Entry.Property(Property.Name).CurrentValue;
         if (Equals(current, Mutation.NewValue) || Fixup is null || !Fixup.ProvesFinalValue(context, Entry))
             return Mutation;
-        return Mapping.Property(
-            Mutation.Instance,
-            Mutation.Member,
-            Mutation.OldValue,
-            current);
+        return Mapping is null
+            ? Change.Property(Mutation.Instance, Mutation.Member, Mutation.OldValue, current)
+            : Mapping.Property(Mutation.Instance, Mutation.Member, Mutation.OldValue, current);
     }
 }
 
