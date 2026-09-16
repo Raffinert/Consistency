@@ -1,10 +1,33 @@
 # Codex implementation plan — anemic-model dependency-maintenance dogfooding example
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **BLOCKED — CURRENT PUBLIC API CANNOT EXPRESS THE REQUIRED COMPLETE DEPENDENCIES**
 
 Baseline commit: `616ba28dc820475d08ed59b771b79b8608a7e7aa`
 
 Tasks: **167–173**
+
+## Implementation blocker discovered 2026-09-16
+
+The required declaration:
+
+```csharp
+builder.Derived(associations)
+    .Compute(association => UnitRateCalculator.Calculate(
+        association.SourceItem.UnitValue,
+        association.TargetItem.UnitValue))
+```
+
+is rejected by `ConsistencyModelBuilder.Build()` because the method call is classified as
+`ContainsOpaqueCode`. The current public builder has no API for attaching explicit dependency paths to an
+otherwise opaque derived computation. Its only available escape hatch is `AllowIncompleteDependencies()`,
+which explicitly accepts weaker cached-freshness guarantees. That cannot satisfy this roadmap's required
+proof that source/target changes reliably discover every affected association and keep selective routing
+fresh after retargeting.
+
+No Core or EF product source was changed. The incomplete sample draft and solution wiring were removed. To
+resume this roadmap, a separate product roadmap must first provide a public, analyzable way to combine an
+explicit pure calculator with complete declared dependency paths (or another complete-dependency expression
+shape that preserves the frozen calculator separation).
 
 ## Goal
 
