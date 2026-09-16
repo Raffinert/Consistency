@@ -1,5 +1,6 @@
 # Roadmaps
 
+- **Active implementation plan:** make the manual/generated-value EF workflow safe for temporary-key propagation and make persistence member-usage metadata object-set scoped: [Tasks 145–151](../codex-plan-generated-value-fixup-and-set-scoped-policy-safety.md)
 - Completed authoritative scope coverage for reverse-navigation consumers and policy-aware manual/generated-key
   EF persistence with local and remote release proof at `fdf8c010917c07c0ea57737a7dc2b0bbdbd96dee`:
   [Tasks 137–144](../codex-plan-scope-safety-completion-and-manual-persistence.md)
