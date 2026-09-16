@@ -85,3 +85,17 @@ not replace rich-domain modeling or event-driven integration.
 
 Run the [dependency-maintenance sample](../samples/Raffinert.Consistency.DependencyMaintenanceSample/Program.cs)
 to execute the SQLite scenarios and their self-verifying assertions.
+
+## What the executable proves
+
+The SQLite sample verifies the complete persistence path:
+
+- ordinary POCO mutations are captured through EF;
+- affected derived values produce the correct results;
+- materialized `UnitRate` mirrors agree between the tracked entity, Raffinert runtime, and database;
+- relationship retargeting causes subsequent calculations to use the new endpoint;
+- null and zero-denominator behavior is preserved.
+
+The executable intentionally does not inspect internal `Fresh`/`Dirty` state to prove that unaffected associations
+were never invalidated. Selective invalidation and reverse-navigation retargeting are covered separately by the
+Core tests for explicit derived dependencies, where `DerivedValueState.Fresh` and `Dirty` are asserted directly.

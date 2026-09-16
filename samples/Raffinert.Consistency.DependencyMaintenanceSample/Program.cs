@@ -69,7 +69,7 @@ SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
 
 // Retargeting moves the reverse-navigation dependency from source A to source B.
 associationB.SourceItem = sourceB;
-associationB.SourceItemId = sourceB.Id;
+context.ChangeTracker.DetectChanges();
 RequireEqual(sourceB.Id, associationB.SourceItemId, "relationship fixup");
 SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
@@ -92,9 +92,9 @@ SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
     (associationA, 2.5m), (associationB, null));
 
 Console.WriteLine("Dependency-maintenance dogfood sample passed:");
-Console.WriteLine("- source changes propagated to all consumers");
-Console.WriteLine("- target changes stayed selective");
-Console.WriteLine("- association retargeting updated dependency routing");
+Console.WriteLine("- shared source changes updated all affected association mirrors");
+Console.WriteLine("- target changes preserved correct mirrors for other associations");
+Console.WriteLine("- retargeted associations followed their new source");
 Console.WriteLine("- null/zero semantics were materialized consistently");
 
 static void SaveAndVerify(
