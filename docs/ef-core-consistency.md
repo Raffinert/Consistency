@@ -151,10 +151,33 @@ Tracked nested navigation targets do not require their own Raffinert object-set 
 scalar dependency changes. Additions and removals still require `Map(...)`, because lifecycle changes belong
 to a specific object set. The adapter never auto-loads an untracked target.
 
+## Store-side referential actions
+
+Scope completeness proves data coverage in the runtime; it does not prove mutation coverage for SQL-side
+effects. Every authoritative/call-and-save path inspects actual tracked deletions before planning or SQL. It
+rejects EF-declared database `Cascade` and `SetNull` paths, including transitive cascade paths, when they can
+reach consistency-relevant rows that may be absent from the tracker. The dedicated exception identifies the
+deleted type, affected type, action, and entity-type path. Unrelated cascades and owned state that is not an
+independent Raffinert object set remain supported.
+
+For consistency-managed aggregates, prefer `ClientCascade` / `ClientSetNull` and explicitly track all affected
+dependents. `Restrict` / `NoAction` are appropriate when domain rules require explicit deletion. With a client
+behavior, missing dependents cause the relational command to fail instead of succeeding with an invisible
+runtime side effect. Database `Cascade` is not universally prohibited; it is rejected only when a reachable
+store-side effect can touch Raffinert-managed state.
+
+Automatic EF evidence includes tracked lifecycle/scalar/reference/collection mutations, proven generated FK
+fixup, and proven same-entry store-generated INSERT/UPDATE values. Database triggers that mutate other rows,
+raw SQL, `ExecuteUpdate` / `ExecuteDelete`, bulk libraries that bypass `ChangeTracker`, other application
+processes or pods, and manual DBA/data-fix writes are outside automatic synchronization. The application must
+emit exact mutations using authoritative old/new evidence or rebuild/reseed/reconcile the runtime before using
+it again. EF trigger metadata alone does not describe arbitrary trigger side effects.
+
 The application owns transaction commit and rollback. After a planning or persistence failure, roll back
 and discard/reload the context. Call `CommitAfterDatabaseCommit` only after durability, then dispatch.
 The low-level `ChangeTrackerAdapter.CaptureUnitOfWork` and `ConsistencyUnitOfWork.PlanDetailed` remain
-policy-agnostic runtime primitives; they do not apply `Enforce`, `Materialize`, or `ConsistencyScope`.
+policy-agnostic runtime primitives; they do not apply `Enforce`, `Materialize`, or `ConsistencyScope`. A caller
+that owns SQL through those primitives also owns the external/store-side-effect boundary.
 
 A database rollback does not restore EF's in-memory generated keys or tracking snapshots. Discard the
 context, or clear and reload authoritative state; do not guess-reset keys and reuse the prepared plan.

@@ -91,6 +91,11 @@ runtime set has complete coverage. Raffinert does not load missing graph data. S
 generated keys, and recovery rules, or run the
 [`Raffinert.Consistency.EntityFrameworkCore.Sample`](samples/Raffinert.Consistency.EntityFrameworkCore.Sample).
 
+Scope completeness proves data coverage in the runtime; it does not prove mutation coverage for SQL-side
+effects. Authoritative saves reject EF-declared `ON DELETE CASCADE` and `ON DELETE SET NULL` paths that can
+reach consistency-managed state without tracked mutation evidence. Prefer `ClientCascade` / `ClientSetNull`
+with explicitly tracked dependents, or `Restrict` / `NoAction` when deletion must be explicit.
+
 For application-owned transactions, generated semantic values from INSERT or UPDATE, or an outbox, capture a
 policy-aware work item before the first save, call `PrepareAndPlan()` when generated values are final, persist the returned plan data, commit the
 database transaction, then call `CommitAfterDatabaseCommit()` and `Dispatch()`. This path applies the same
@@ -345,6 +350,12 @@ final. The captured pre-SQL value remains authoritative; only provider-generated
 finalized afterward, and unrelated changes after capture remain rejected by strict validation. Tracked
 nested dependency targets do not need their own `ObjectSet` mapping for scalar change routing. Updating an
 existing Raffinert identity with a store-generated value is unsupported.
+
+Automatic synchronization covers tracked lifecycle/scalar/navigation/collection changes and narrowly proven
+same-entry generated values or FK fixup. Database triggers that mutate other rows, raw SQL,
+`ExecuteUpdate`/`ExecuteDelete`, change-tracker-bypassing bulk libraries, external writers, and manual data
+fixes are outside that contract. Supply exact authoritative mutations or rebuild/reseed/reconcile the runtime
+before relying on it after such writes.
 
 See the architecture and example documentation for the exact transaction boundaries and recovery rules.
 

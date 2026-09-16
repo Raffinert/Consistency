@@ -114,6 +114,13 @@ require the host to seed complete runtime coverage and declare it with `Consiste
 is change translation, not coverage proof. Full operational details are in
 [EF Core consistency](ef-core-consistency.md).
 
+Scope completeness proves runtime data coverage, not mutation coverage for SQL-side effects. Before SQL, the
+adapter traverses store-side `Cascade` and `SetNull` paths reachable from tracked deletions and rejects paths
+that can mutate consistency-relevant rows without tracked evidence. Transitive paths are included; unrelated
+database cascades and non-independent owned state remain valid. Consistency-managed relationships should
+normally use client-side referential actions with explicitly tracked dependents, or restrictive database
+behavior where the domain requires explicit deletion.
+
 `PreviewDetailed` predicts against the already-mutated, prepared domain state, restores runtime-owned state,
 and returns only a `RuntimeApplyResult`. It is diagnostic and non-binding: a later normal commit may execute
 semantic code again. Do not use it when durable external work requires exact parity with the later runtime
@@ -178,7 +185,13 @@ force the manual workflow. Store-generated UPDATE of an existing Raffinert ident
 
 `ConsistencyUnitOfWork` and `ChangeTrackerAdapter.CaptureUnitOfWork` remain available as low-level runtime
 binding primitives. They intentionally do not apply `ConsistencyEfCoreMappings.Enforce`, `Materialize`, or
-`ConsistencyScope`; use `CaptureConsistencyUnitOfWork` for authoritative EF persistence.
+`ConsistencyScope`; callers that own SQL also own database/store-side-effect detection and reconciliation.
+Use `CaptureConsistencyUnitOfWork` for authoritative EF persistence.
+
+The automatic evidence boundary consists of tracked lifecycle, scalar, reference, and collection changes;
+proven temporary/generated FK fixup; and proven same-entry store-generated INSERT/UPDATE values. Arbitrary
+trigger side effects, raw SQL, bulk or execute-update/delete operations, other process writers, and manual
+database changes require exact application-supplied mutations or a runtime rebuild/reseed/reconciliation.
 
 Planning is post-domain-mutation prediction, not a hypothetical what-if overlay.
 `RuntimeApplyResult` remains rich in-process impact and causal diagnostic data. `GetDurablePolicyWork()`

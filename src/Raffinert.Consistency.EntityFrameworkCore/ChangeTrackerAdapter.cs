@@ -90,6 +90,8 @@ public sealed class ConsistencyUnitOfWorkMappings
 /// materialization, or <see cref="ConsistencyScope"/> policy. Use
 /// <see cref="ConsistencyDbContextExtensions.CaptureConsistencyUnitOfWork"/> for authoritative EF persistence.
 /// Save-and-apply convenience methods reject semantic values that EF can finalize only after SQL.
+/// Callers that use this capture primitive and execute SQL themselves own detection and reconciliation of
+/// database triggers, referential actions, raw SQL, bulk operations, and other external mutations.
 /// </summary>
 public sealed class ConsistencyUnitOfWork
 {
