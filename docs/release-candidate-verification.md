@@ -1,5 +1,27 @@
 # First-alpha release-candidate verification
 
+## 0.1.0-rc.1 final release verification
+
+Verification date: 2026-09-17
+
+Package-producing RC head: `a5535c177859533c2afa2a6ccef3ddf4bd8323d3`
+
+- Ordinary CI [run 35235641296 (#301)](https://github.com/Raffinert/Consistency/actions/runs/35235641296): success at the exact RC head.
+- Release Candidate Verification [run 35235966767 (#11)](https://github.com/Raffinert/Consistency/actions/runs/35235966767): success at the exact RC head.
+- Uploaded artifact: `release-candidate-packages`, artifact ID `10503009762`.
+- The artifact contains exactly `Raffinert.Consistency.0.1.0-rc.1.nupkg`, `Raffinert.Consistency.0.1.0-rc.1.snupkg`, `Raffinert.Consistency.EntityFrameworkCore.0.1.0-rc.1.nupkg`, and `Raffinert.Consistency.EntityFrameworkCore.0.1.0-rc.1.snupkg`.
+- Package version: `0.1.0-rc.1`; package metadata, repository commit, README, changelog, target frameworks, and the exact EF dependency were validated.
+- Core tests: 319 passed on .NET 8 and 319 passed on .NET 10.
+- EF Core tests: 176 passed on .NET 10.
+- Order-fulfillment, EF, and dependency-maintenance samples: passed.
+- `dotnet format --verify-no-changes`: passed.
+- `PublicAPI.Unshipped.txt` for both packages: empty.
+- Fresh package-only Core and EF consumers restored from the RC artifact and passed.
+- Repository visibility: **private**. Public OSS/NuGet publication is therefore blocked. No `v0.1.0-rc.1` tag, NuGet publication, or GitHub release was created.
+
+The RC artifact is fully verified at the package-producing head, but release closeout must wait until
+`Raffinert/Consistency` is public (or the intended destination is explicitly changed to a private feed).
+
 Verification date: 2026-09-15
 
 Verified implementation head before documentation: `de1f6ba6bfcb40fe3626354601d127f176414dd0`
