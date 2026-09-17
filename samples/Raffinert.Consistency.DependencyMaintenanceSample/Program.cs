@@ -156,7 +156,6 @@ static async Task RunExternalConsumerDiscoveryScenario()
         })
         .DiscoverConsumers(associations, x => x.TargetItem, (db, targets) =>
         {
-            resolverCalls++;
             var ids = targets.Select(x => x.Id).ToArray();
             return db.Set<Association>()
                 .Where(x => ids.Contains(x.TargetItemId))
@@ -165,10 +164,9 @@ static async Task RunExternalConsumerDiscoveryScenario()
         });
 
     sourceKnown.UnitValue = 200m;
-    known.TargetItem.UnitValue = 100m;
     await context.SaveChangesConsistentlyAsync(runtime, mappings);
 
-    RequireEqual(2, resolverCalls, "batched external consumer resolver calls");
+    RequireEqual(1, resolverCalls, "batched source consumer resolver calls");
     var discovered = context.Associations.OrderBy(x => x.Id).ToArray();
     RequireEqual(3, discovered.Length, "discovered consumer count");
     foreach (var association in discovered)
@@ -180,7 +178,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
     using var verification = new DependencyMaintenanceContext(connection);
     foreach (var association in verification.Associations.AsNoTracking().OrderBy(x => x.Id))
     {
-        decimal? expected = association.Id switch { 500 => 2m, 501 => 8m, 502 => 20m, _ => null };
+        decimal? expected = association.Id switch { 500 => 4m, 501 => 8m, 502 => 20m, _ => null };
         RequireEqual(expected, association.UnitRate, $"discovered persisted UnitRate for {association.Id}");
     }
 }

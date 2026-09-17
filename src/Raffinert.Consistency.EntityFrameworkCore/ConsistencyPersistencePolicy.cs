@@ -34,8 +34,10 @@ internal static class ConsistencyPersistencePolicyEngine
         DbContext context,
         ConsistencyRuntime runtime,
         ConsistencyUnitOfWork unit,
-        ConsistencyPersistencePolicySnapshot policy)
+        ConsistencyPersistencePolicySnapshot policy,
+        out MaterializationRollback? materializationRollback)
     {
+        materializationRollback = null;
         unit.Prepare(runtime);
         var plan = unit.PlanDetailed(runtime, policy.DetailLevel,
             policy.EnforcedInvariantIds.Count > 0
@@ -52,13 +54,13 @@ internal static class ConsistencyPersistencePolicyEngine
                 evaluation.State == InvariantEvaluationState.Violated).ToArray();
             if (violations.Length > 0) throw new ConsistencyInvariantViolationException(violations);
             if (policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
-                ApplyMaterializations(context, runtime, policy.Materializations, plan);
+                materializationRollback = ApplyMaterializations(context, runtime, policy.Materializations, plan);
         }
         context.ChangeTracker.DetectChanges();
         return plan;
     }
 
-    private static void ApplyMaterializations(
+    private static MaterializationRollback ApplyMaterializations(
         DbContext context,
         ConsistencyRuntime runtime,
         IReadOnlyList<ConsistencyEfCoreMappings.Materialization> mappings,
@@ -89,6 +91,7 @@ internal static class ConsistencyPersistencePolicyEngine
                     property.IsModified = true;
                 }
             }
+            return new MaterializationRollback(applied.ToArray());
         }
         catch (Exception error)
         {
@@ -100,6 +103,26 @@ internal static class ConsistencyPersistencePolicyEngine
             if (error is System.Reflection.TargetInvocationException { InnerException: { } inner })
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
+        }
+    }
+}
+
+internal sealed class MaterializationRollback
+{
+    internal static MaterializationRollback Empty { get; } = new([]);
+
+    private readonly IReadOnlyList<(PropertyEntry Entry, object Source, object? Value, bool Modified)> _writes;
+
+    internal MaterializationRollback(
+        IReadOnlyList<(PropertyEntry Entry, System.Reflection.PropertyInfo Property, object Source, object? Value, bool Modified)> writes) =>
+        _writes = writes.Select(write => (write.Entry, write.Source, write.Value, write.Modified)).ToArray();
+
+    internal void Restore()
+    {
+        foreach (var write in _writes)
+        {
+            write.Entry.CurrentValue = write.Value;
+            write.Entry.IsModified = write.Modified;
         }
     }
 }
@@ -254,11 +277,12 @@ public sealed class ConsistencyPersistenceUnitOfWork
         {
             ConsistencyGeneratedValueGuard.RejectForManualPlan(_generatedValues);
             var captured = _mutations.FinalizeForPlanning(_context, _generatedValues);
-            var admissions = ExternalConsumerDiscovery.Discover(_context, _runtime, _mappings, captured, _policy.Scope);
+            var admissions = ExternalConsumerDiscovery.Discover(
+                _context, _runtime, _mappings, captured, _policy.SaveBehavior, _policy.Scope);
             _unit = new ConsistencyUnitOfWork(
                 MutationSet.Combine(captured.Mutations.Concat(admissions)));
             var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-                _context, _runtime, _unit, _policy);
+                _context, _runtime, _unit, _policy, out _);
             _state = State.Planned;
             return plan;
         }

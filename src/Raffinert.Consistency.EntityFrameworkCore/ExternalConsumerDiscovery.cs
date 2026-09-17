@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Raffinert.Consistency.Expressions;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
@@ -13,9 +14,10 @@ internal static class ExternalConsumerDiscovery
         ConsistencyRuntime runtime,
         ConsistencyEfCoreMappings mappings,
         ConsistencyUnitOfWork unit,
+        ConsistencySaveBehavior saveBehavior,
         ConsistencyScope? scope = null)
     {
-        var requests = BuildRequests(runtime, mappings, unit.Mutations, scope);
+        var requests = BuildRequests(runtime, mappings, unit.Mutations, saveBehavior, scope);
         if (requests.Count == 0) return [];
         var admissions = new List<RuntimeMutation>();
         foreach (var request in requests)
@@ -27,7 +29,8 @@ internal static class ExternalConsumerDiscovery
                     new ConsistencyScopeGap(request.RootSet.Id, request.RootSet.DefinitionKey,
                         request.RootSet.ObjectType, ConsistencyScopeRequirementKind.NavigationConsumerCoverage)]);
             var roots = registration.Query(context, request.Targets).ToArray();
-            Collect(context, runtime, mappings, request, roots, admissions);
+            Collect(context, runtime, mappings, request with { EfNavigation = registration.EfNavigation }, roots,
+                admissions, saveBehavior);
         }
         return admissions;
     }
@@ -38,9 +41,10 @@ internal static class ExternalConsumerDiscovery
         ConsistencyEfCoreMappings mappings,
         ConsistencyUnitOfWork unit,
         CancellationToken cancellationToken,
+        ConsistencySaveBehavior saveBehavior,
         ConsistencyScope? scope = null)
     {
-        var requests = BuildRequests(runtime, mappings, unit.Mutations, scope);
+        var requests = BuildRequests(runtime, mappings, unit.Mutations, saveBehavior, scope);
         if (requests.Count == 0) return [];
         var admissions = new List<RuntimeMutation>();
         foreach (var request in requests)
@@ -54,7 +58,8 @@ internal static class ExternalConsumerDiscovery
                         request.RootSet.ObjectType, ConsistencyScopeRequirementKind.NavigationConsumerCoverage)]);
             var roots = await registration.Query(context, request.Targets).ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-            Collect(context, runtime, mappings, request, roots, admissions);
+            Collect(context, runtime, mappings, request with { EfNavigation = registration.EfNavigation }, roots,
+                admissions, saveBehavior);
         }
         return admissions;
     }
@@ -63,9 +68,10 @@ internal static class ExternalConsumerDiscovery
         ConsistencyRuntime runtime,
         ConsistencyEfCoreMappings mappings,
         IReadOnlyList<RuntimeMutation> mutations,
+        ConsistencySaveBehavior saveBehavior,
         ConsistencyScope? scope)
     {
-        var descriptors = mappings.ActiveConsumerDescriptors(runtime).ToArray();
+        var descriptors = mappings.ActiveConsumerDescriptors(runtime, saveBehavior).ToArray();
         var groups = new Dictionary<(IObjectSetDefinition Set, MemberInfo Navigation), List<object>>(
             new RequestKeyComparer());
         foreach (var change in mutations.OfType<PropertyChange>())
@@ -99,7 +105,8 @@ internal static class ExternalConsumerDiscovery
         ConsistencyEfCoreMappings mappings,
         ExternalConsumerRequest request,
         IEnumerable<object> resolvedRoots,
-        List<RuntimeMutation> admissions)
+        List<RuntimeMutation> admissions,
+        ConsistencySaveBehavior saveBehavior)
     {
         var targets = request.Targets.ToHashSet(ReferenceEqualityComparer.Instance);
         var candidates = resolvedRoots
@@ -123,8 +130,7 @@ internal static class ExternalConsumerDiscovery
             var currentTarget = MemberReader.Read(request.Navigation, root);
             if (currentTarget is null)
             {
-                if (request.Navigation is PropertyInfo && entry.Metadata.FindNavigation(request.Navigation.Name) is not null &&
-                    !entry.Navigation(request.Navigation.Name).IsLoaded)
+                if (request.EfNavigation is not null && !entry.Navigation(request.EfNavigation.Name).IsLoaded)
                     throw new InvalidOperationException(
                         "A discovered consumer is missing a tracked evaluation reference.");
                 continue;
@@ -151,7 +157,7 @@ internal static class ExternalConsumerDiscovery
                     Equals(request.RootSet.ReadKey(value.Instance), key)))
                 throw new InvalidOperationException("A consumer resolver returned duplicate runtime keys.");
             keys.Add(root, key);
-            ValidateEvaluationClosure(context, mappings, runtime, request.RootSet, root);
+            ValidateEvaluationClosure(context, mappings, runtime, request.RootSet, root, saveBehavior);
             admissions.Add(new CoverageAdmission(request.RootSet, root));
         }
     }
@@ -161,9 +167,10 @@ internal static class ExternalConsumerDiscovery
         ConsistencyEfCoreMappings mappings,
         ConsistencyRuntime runtime,
         IObjectSetDefinition rootSet,
-        object root)
+        object root,
+        ConsistencySaveBehavior saveBehavior)
     {
-        foreach (var descriptor in mappings.ActiveConsumerDescriptors(runtime)
+        foreach (var descriptor in mappings.ActiveConsumerDescriptors(runtime, saveBehavior)
                      .Where(value => ReferenceEquals(value.RootSet, rootSet)))
         {
             var target = MemberReader.Read(descriptor.Navigation, root);
@@ -177,7 +184,8 @@ internal static class ExternalConsumerDiscovery
         IObjectSetDefinition RootSet,
         MemberInfo Navigation,
         Type TargetType,
-        IReadOnlyList<object> Targets);
+        IReadOnlyList<object> Targets,
+        INavigation? EfNavigation = null);
 
     private sealed class RequestKeyComparer : IEqualityComparer<(IObjectSetDefinition Set, MemberInfo Navigation)>
     {

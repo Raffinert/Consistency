@@ -33,11 +33,27 @@ public sealed partial class ConsistencyRuntime
         ArgumentNullException.ThrowIfNull(definition);
         if (!_derivedStates.ContainsKey(definition))
             throw new ArgumentException("The derived definition belongs to another compiled model.", nameof(definition));
-        return CompileExternalConsumerAnalysis(
-            definition.SourceSet,
-            definition.Analysis.Dependencies
-                .Where(dependency => dependency.Role == ExpressionParameterRole.DerivedSource),
-            definition);
+        var descriptors = new List<ExternalConsumerDescriptor>();
+        var unsupported = new HashSet<IObjectSetDefinition>(ReferenceEqualityComparer<IObjectSetDefinition>.Instance);
+        VisitDerived(definition, new HashSet<IDerivedDefinition>(ReferenceEqualityComparer.Instance));
+        return new ExternalConsumerAnalysis(descriptors.DistinctBy(value =>
+            (value.RootSet, value.Navigation, value.TargetMember)).ToArray(), unsupported);
+
+        void VisitDerived(IDerivedDefinition current, HashSet<IDerivedDefinition> visited)
+        {
+            if (!visited.Add(current)) return;
+            var analysis = CompileExternalConsumerAnalysis(
+                current.SourceSet,
+                current.Analysis.Dependencies.Where(dependency =>
+                    dependency.Role == ExpressionParameterRole.DerivedSource),
+                current);
+            descriptors.AddRange(analysis.Descriptors);
+            unsupported.UnionWith(analysis.UnsupportedRootSets);
+            if (analysis.HasUnsupportedNavigationDependency)
+                unsupported.Add(current.SourceSet);
+            foreach (var upstream in current.Inputs.OfType<UpstreamDerivedInput>())
+                VisitDerived(upstream.Upstream, visited);
+        }
     }
 
     internal ExternalConsumerAnalysis GetExternalConsumerAnalysis(IInvariantDefinition definition)
@@ -45,11 +61,38 @@ public sealed partial class ConsistencyRuntime
         ArgumentNullException.ThrowIfNull(definition);
         if (!_invariants.ContainsKey(definition))
             throw new ArgumentException("The invariant belongs to another compiled model.", nameof(definition));
-        return CompileExternalConsumerAnalysis(
+        var descriptors = new List<ExternalConsumerDescriptor>();
+        var unsupported = new HashSet<IObjectSetDefinition>(ReferenceEqualityComparer<IObjectSetDefinition>.Instance);
+        var visited = new HashSet<IDerivedDefinition>(ReferenceEqualityComparer.Instance);
+        foreach (var upstream in definition.UpstreamDerived)
+            VisitDerived(upstream);
+        var analysis = CompileExternalConsumerAnalysis(
             definition.SourceSet,
-            definition.Analysis.Dependencies
-                .Where(dependency => dependency.Role == ExpressionParameterRole.InvariantSource),
+            definition.Analysis.Dependencies.Where(dependency =>
+                dependency.Role == ExpressionParameterRole.InvariantSource),
             definition);
+        descriptors.AddRange(analysis.Descriptors);
+        unsupported.UnionWith(analysis.UnsupportedRootSets);
+        if (analysis.HasUnsupportedNavigationDependency)
+            unsupported.Add(definition.SourceSet);
+        return new ExternalConsumerAnalysis(descriptors.DistinctBy(value =>
+            (value.RootSet, value.Navigation, value.TargetMember)).ToArray(), unsupported);
+
+        void VisitDerived(IDerivedDefinition current)
+        {
+            if (!visited.Add(current)) return;
+            var currentAnalysis = CompileExternalConsumerAnalysis(
+                current.SourceSet,
+                current.Analysis.Dependencies.Where(dependency =>
+                    dependency.Role == ExpressionParameterRole.DerivedSource),
+                current);
+            descriptors.AddRange(currentAnalysis.Descriptors);
+            unsupported.UnionWith(currentAnalysis.UnsupportedRootSets);
+            if (currentAnalysis.HasUnsupportedNavigationDependency)
+                unsupported.Add(current.SourceSet);
+            foreach (var upstream in current.Inputs.OfType<UpstreamDerivedInput>())
+                VisitDerived(upstream.Upstream);
+        }
     }
 
     private static ExternalConsumerAnalysis CompileExternalConsumerAnalysis(
@@ -58,7 +101,7 @@ public sealed partial class ConsistencyRuntime
         object definition)
     {
         var descriptors = new List<ExternalConsumerDescriptor>();
-        var unsupported = false;
+        var unsupported = new HashSet<IObjectSetDefinition>(ReferenceEqualityComparer<IObjectSetDefinition>.Instance);
         foreach (var dependency in dependencies)
         {
             var path = dependency.Path;
@@ -68,7 +111,7 @@ public sealed partial class ConsistencyRuntime
                 !DependencyPathNavigation.IsNavigation(path.Segments[0]) ||
                 DependencyPathNavigation.IsCollection(path.Segments[0].Member))
             {
-                unsupported = true;
+                unsupported.Add(rootSet);
                 continue;
             }
             descriptors.Add(new ExternalConsumerDescriptor(

@@ -24,8 +24,9 @@ public sealed class IncompleteConsistencyScopeException : Exception
         var missing = string.Join(", ", gaps.Select(gap =>
             $"{gap.ObjectSetDefinitionKey ?? gap.ObjectType.Name} (set {gap.ObjectSetId}, {gap.RequirementKind})"));
         return $"Persistence was not attempted because authoritative consistency scope coverage is missing: {missing}. " +
-            "Seed and maintain authoritative runtime coverage, then declare it through ConsistencyScope. " +
-            "Raffinert will not auto-load missing objects.";
+            "Either assert closed-world coverage with ConsistencyScope.Complete(set), or register a host-owned " +
+            "DiscoverConsumers query for an eligible direct reference-navigation dependency. Raffinert does not " +
+            "invent database queries and cannot prove that a host resolver did not under-fetch.";
     }
 }
 
@@ -141,7 +142,11 @@ public static class ConsistencyDbContextExtensions
         var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
         int result;
         try { result = context.SaveChanges(); }
-        catch { throw; }
+        catch
+        {
+            pending.MaterializationRollback?.Restore();
+            throw;
+        }
         ConsistencyCoordinator.Complete(runtime, pending);
         return result;
     }
@@ -152,14 +157,26 @@ public static class ConsistencyDbContextExtensions
     {
         var pending = await ConsistencyCoordinator.PrepareAsync(
             context, runtime, mappings, options ?? new(), cancellationToken).ConfigureAwait(false);
-        var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        int result;
+        try
+        {
+            result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            pending.MaterializationRollback?.Restore();
+            throw;
+        }
         ConsistencyCoordinator.Complete(runtime, pending);
         return result;
     }
 
 }
 
-internal sealed record PendingConsistencySave(ConsistencyUnitOfWork Unit, PreparedImpactPlan? Plan);
+internal sealed record PendingConsistencySave(
+    ConsistencyUnitOfWork Unit,
+    PreparedImpactPlan? Plan,
+    MaterializationRollback? MaterializationRollback);
 
 internal static class ConsistencyCoordinator
 {
@@ -182,10 +199,12 @@ internal static class ConsistencyCoordinator
             context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
         var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
-        var admissions = ExternalConsumerDiscovery.Discover(context, runtime, mappings, captured, options.Scope);
+        var admissions = ExternalConsumerDiscovery.Discover(
+            context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);
-        return new PendingConsistencySave(unit, plan);
+        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+            context, runtime, unit, policy, out var materializationRollback);
+        return new PendingConsistencySave(unit, plan, materializationRollback);
     }
 
     public static async Task<PendingConsistencySave> PrepareAsync(
@@ -205,10 +224,12 @@ internal static class ConsistencyCoordinator
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
         var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
         var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
-            context, runtime, mappings, captured, cancellationToken, options.Scope).ConfigureAwait(false);
+            context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
+            .ConfigureAwait(false);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);
-        return new PendingConsistencySave(unit, plan);
+        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+            context, runtime, unit, policy, out var materializationRollback);
+        return new PendingConsistencySave(unit, plan, materializationRollback);
     }
 
     private static ConsistencyUnitOfWork Combine(

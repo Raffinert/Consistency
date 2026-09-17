@@ -13,4 +13,7 @@ internal sealed record ExternalConsumerDescriptor(
 
 internal sealed record ExternalConsumerAnalysis(
     IReadOnlyList<ExternalConsumerDescriptor> Descriptors,
-    bool HasUnsupportedNavigationDependency);
+    IReadOnlySet<IObjectSetDefinition> UnsupportedRootSets)
+{
+    public bool HasUnsupportedNavigationDependency => UnsupportedRootSets.Count > 0;
+}
