@@ -98,10 +98,12 @@ internal sealed class CompiledDependencyGraph
 
         if (ordered.Count != definitions.Length)
         {
-            var cycle = Enumerable.Range(0, definitions.Length).Where(id => indegree[id] > 0)
-                .Select(id => Describe(definitions[id]));
+            var unresolved = Enumerable.Range(0, definitions.Length)
+                .Where(id => indegree[id] > 0)
+                .ToHashSet();
+            var cycle = FindCycle(outgoing, unresolved);
             throw new InvalidOperationException(
-                $"Dependency cycle detected among: {string.Join(" -> ", cycle)}.");
+                $"Dependency cycle detected: {FormatCycle(definitions, cycle)}.");
         }
 
         var positions = ordered.Select((id, position) => (id, position))
@@ -153,6 +155,64 @@ internal sealed class CompiledDependencyGraph
                 throw new InvalidOperationException(
                     "A derived-to-invariant edge must target an invariant node without a derived input.");
         }
+    }
+
+    private static IReadOnlyList<int> FindCycle(
+        IReadOnlyList<CompiledDependencyEdge>[] outgoing,
+        IReadOnlySet<int> unresolved)
+    {
+        var states = new byte[outgoing.Length];
+        var path = new List<int>();
+        foreach (var start in unresolved.Order())
+        {
+            var cycle = Visit(start);
+            if (cycle is not null)
+                return cycle;
+        }
+        throw new InvalidOperationException("Dependency graph compilation failed without a cycle witness.");
+
+        IReadOnlyList<int>? Visit(int nodeId)
+        {
+            if (states[nodeId] != 0)
+                return null;
+            states[nodeId] = 1;
+            path.Add(nodeId);
+            foreach (var edge in outgoing[nodeId]
+                         .Where(edge => unresolved.Contains(edge.ToNodeId))
+                         .OrderBy(edge => edge.ToNodeId))
+            {
+                if (states[edge.ToNodeId] == 0)
+                {
+                    var nested = Visit(edge.ToNodeId);
+                    if (nested is not null)
+                        return nested;
+                }
+                else if (states[edge.ToNodeId] == 1)
+                {
+                    var cycleStart = path.IndexOf(edge.ToNodeId);
+                    return path.Skip(cycleStart).Append(edge.ToNodeId).ToArray();
+                }
+            }
+            path.RemoveAt(path.Count - 1);
+            states[nodeId] = 2;
+            return null;
+        }
+    }
+
+    private static string FormatCycle(IReadOnlyList<object> definitions, IReadOnlyList<int> cycle)
+    {
+        var descriptions = cycle.Take(cycle.Count - 1)
+            .Select(id => (Id: id, Description: Describe(definitions[id])))
+            .ToArray();
+        var duplicates = descriptions.GroupBy(value => value.Description, StringComparer.Ordinal)
+            .Where(group => group.Select(value => value.Id).Distinct().Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        return string.Join(" -> ", cycle.Select(id =>
+        {
+            var description = Describe(definitions[id]);
+            return duplicates.Contains(description) ? $"{description} [node {id}]" : description;
+        }));
     }
 
     private static string Describe(object definition) => definition switch
