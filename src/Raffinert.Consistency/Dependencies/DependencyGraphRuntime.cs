@@ -206,17 +206,13 @@ internal sealed class DependencyGraphRuntime
             foreach (var pair in previous.Derived)
                 derivedSources[pair.Key].UnionWith(pair.Value.Sources);
 
-        var changed = true;
-        while (changed)
+        // Direct seeds are complete for every node. In topological order each upstream source set is
+        // therefore final before its downstream node is visited, so one forward DAG pass is sufficient.
+        foreach (var node in _derivedNodes)
         {
-            changed = false;
-            foreach (var node in _derivedNodes)
-            {
-                foreach (var upstream in GetUpstreams(node))
-                    foreach (var source in DerivedNode.Map(
-                                 upstream.Input, derivedSources[upstream.Node], _projections))
-                        changed |= derivedSources[node].Add(source);
-            }
+            foreach (var upstream in GetUpstreams(node))
+                derivedSources[node].UnionWith(DerivedNode.Map(
+                    upstream.Input, derivedSources[upstream.Node], _projections));
         }
 
         var invariantSources = _invariantNodes.ToDictionary(
