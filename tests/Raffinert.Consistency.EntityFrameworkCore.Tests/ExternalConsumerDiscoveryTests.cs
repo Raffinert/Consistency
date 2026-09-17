@@ -39,13 +39,16 @@ public sealed class ExternalConsumerDiscoveryTests
         var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
             .Single(x => x.Id == 1);
         var calls = new Counter();
-        var (runtime, mappings, _) = fixture.CreateModel(known, calls);
+        var targetCalls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls, targetCalls);
 
         known.Source.UnitValue = 125m;
+        known.Target.UnitValue = 12m;
         context.SaveChangesConsistently(runtime, mappings,
             new ConsistencySaveOptions { Scope = new ConsistencyScope().Complete(fixture.Associations) });
 
         Assert.Equal(0, calls.Value);
+        Assert.Equal(0, targetCalls.Value);
     }
 
     [Fact]
@@ -166,6 +169,9 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, calls.Value);
         Assert.Equal(0, runtime.Version);
         Assert.Equal(0, context.SaveChangesInvocations);
+        Assert.Equal(10m, known.UnitRate);
+        Assert.False(context.Entry(known).Property(x => x.UnitRate).IsModified);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
         Assert.False(runtime.IsRegistered(fixture.Associations.Definition,
             context.Associations.Single(x => x.Id == 2)));
     }
@@ -801,6 +807,196 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(0, runtime.Version);
     }
 
+    [Fact]
+    public async Task Retargeted_away_consumer_is_excluded()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        fixture.AddSecondarySourceAssociation();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var retargeted = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 2);
+        var newSource = context.Set<DiscoverySource>().Single(x => x.Id == 2);
+        var calls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls,
+            initialAssociations: [known, retargeted]);
+        retargeted.Source = newSource;
+        retargeted.SourceId = newSource.Id;
+        known.Source.UnitValue = 120m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(4m, retargeted.UnitRate);
+        Assert.Equal(3, runtime.GetObjectSetInstancesForClrType(typeof(DiscoveryAssociation)).Count);
+        Assert.True(runtime.IsRegistered(fixture.Associations.Definition, retargeted));
+    }
+
+    [Fact]
+    public async Task Retargeted_in_registered_consumer_is_included()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        fixture.AddSecondarySourceAssociation();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var moved = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 4);
+        var calls = new Counter();
+        var (runtime, mappings, derived) = fixture.CreateModel(known, calls,
+            initialAssociations: [known, moved]);
+        moved.Source = known.Source;
+        moved.SourceId = known.SourceId;
+        known.Source.UnitValue = 120m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(12m, moved.UnitRate);
+        Assert.Equal(12m, runtime.Get(derived, moved));
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Tracked_Deleted_consumer_is_excluded()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var deleted = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 2);
+        var calls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls,
+            initialAssociations: [known, deleted]);
+        context.Remove(deleted);
+        known.Source.UnitValue = 120m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, calls.Value);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition, deleted));
+        Assert.False(context.Associations.AsNoTracking().Any(x => x.Id == 2));
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Two_changed_members_same_target_same_navigation_one_resolver_call()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var inputCount = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls,
+            includeSourceOffset: true, sourceInputCount: inputCount);
+        known.Source.UnitValue = 120m;
+        known.Source.Offset = 10m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(1, inputCount.Value);
+        Assert.Equal(6.5m, context.Associations.Single(x => x.Id == 2).UnitRate);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Source_and_Target_changes_one_call_per_navigation()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var sourceCalls = new Counter();
+        var targetCalls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, sourceCalls, targetCalls);
+        known.Source.UnitValue = 120m;
+        known.Target.UnitValue = 12m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, sourceCalls.Value);
+        Assert.Equal(1, targetCalls.Value);
+        Assert.Equal(3, runtime.GetObjectSetInstancesForClrType(typeof(DiscoveryAssociation)).Count);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Same_target_reference_is_deduplicated_within_batch()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var inputCount = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls,
+            includeSourceOffset: true, sourceInputCount: inputCount);
+        known.Source.UnitValue = 120m;
+        known.Source.Offset = 5m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(1, inputCount.Value);
+    }
+
+    [Fact]
+    public async Task Wrong_exact_ObjectSet_mapping_fails()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var model = new ConsistencyModelBuilder();
+        var required = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var wrong = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(required).DependsOn(x => x.Source.UnitValue)
+            .Compute(x => x.Source.UnitValue);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(required, [known]));
+        var mappings = new ConsistencyEfCoreMappings()
+            .Map(required, entry => entry.Entity.Id <= 3).Map(wrong, entry => entry.Entity.Id > 3)
+            .Materialize(value, x => x.UnitRate)
+            .DiscoverConsumers(wrong, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+        known.Source.UnitValue = 120m;
+
+        await Assert.ThrowsAsync<IncompleteConsistencyScopeException>(() =>
+            context.SaveChangesConsistentlyAsync(runtime, mappings));
+
+        Assert.Equal(0, context.SaveChangesInvocations);
+        Assert.Equal(0, runtime.Version);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+    }
+
+    [Fact]
+    public async Task Missing_required_resolver_fails_before_sql()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(associations).DependsOn(x => x.Source.UnitValue)
+            .Compute(x => x.Source.UnitValue);
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(associations, [known]));
+        var mappings = new ConsistencyEfCoreMappings().Map(associations)
+            .Materialize(value, x => x.UnitRate);
+        known.Source.UnitValue = 120m;
+
+        var error = await Assert.ThrowsAsync<IncompleteConsistencyScopeException>(() =>
+            context.SaveChangesConsistentlyAsync(runtime, mappings));
+
+        Assert.Contains(error.Gaps, gap => gap.RequirementKind ==
+            ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, context.SaveChangesInvocations);
+        Assert.Equal(0, runtime.Version);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+    }
+
     private static (ConsistencyRuntime Runtime, ConsistencyEfCoreMappings Mappings,
         ObjectSet<DiscoveryAssociation> Associations, ObjectSet<DiscoveryTarget> Targets)
         CreateRelationScopeScenario()
@@ -861,16 +1057,22 @@ public sealed class ExternalConsumerDiscoveryTests
                 bool materialize = true, bool enforceInvariant = false,
             bool sourceQuerySuperset = false, IReadOnlyList<DiscoveryAssociation>? initialAssociations = null,
                 bool duplicateSourceRows = false, bool sourceDetachedTarget = false,
-                bool useRuntimeKey = false, int? sourceResultId = null, int? targetResultId = null)
+                bool useRuntimeKey = false, int? sourceResultId = null, int? targetResultId = null,
+                bool includeSourceOffset = false, Counter? sourceInputCount = null)
         {
             var builder = new ConsistencyModelBuilder();
             var associations = useRuntimeKey
                 ? builder.Objects<DiscoveryAssociation>().Key(x => x.RuntimeKey)
                 : builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
             Associations = associations;
-            var derived = builder.Derived(associations)
-                .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
-                .Compute(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue);
+            var derivedBuilder = builder.Derived(associations)
+                .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue);
+            var derived = includeSourceOffset
+                ? derivedBuilder.DependsOn(x => x.Source.Offset)
+                    .Compute(x => x.Target == null ? 0m :
+                        (x.Source.UnitValue + x.Source.Offset) / x.Target.UnitValue)
+                : derivedBuilder.Compute(x => x.Target == null ? 0m :
+                    x.Source.UnitValue / x.Target.UnitValue);
             var invariant = builder.Invariant(associations).Using(derived).Must((_, value) => value >= 0m);
             var runtime = builder.Build().CreateRuntime(seed => seed.Add(associations,
                 initialAssociations ?? [known]));
@@ -883,6 +1085,8 @@ public sealed class ExternalConsumerDiscoveryTests
                 {
                     sourceQueryHook?.Invoke();
                     calls.Value++;
+                    if (sourceInputCount is not null)
+                        sourceInputCount.Value = sources.Count;
                     var ids = sources.Select(x => x.Id).ToArray();
                     IQueryable<DiscoveryAssociation> query = db.Set<DiscoveryAssociation>();
                     if (!sourceQuerySuperset)
@@ -966,6 +1170,7 @@ public sealed class ExternalConsumerDiscoveryTests
     {
         public int Id { get; set; }
         public decimal UnitValue { get; set; }
+        public decimal Offset { get; set; }
         public DiscoverySource? Parent { get; set; }
     }
     private sealed class DiscoveryTarget { public int Id { get; set; } public decimal UnitValue { get; set; } }
