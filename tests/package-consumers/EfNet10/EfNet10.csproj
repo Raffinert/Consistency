@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Raffinert.Consistency.EntityFrameworkCore" Version="0.1.0-alpha.1" />
+    <PackageReference Include="Raffinert.Consistency.EntityFrameworkCore" Version="0.1.0-rc.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
   </ItemGroup>
 </Project>
