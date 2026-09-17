@@ -11,12 +11,12 @@ RequireEqual(0.333333m, UnitRateCalculator.Calculate(1m, 3m), "rounded rate");
 RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 1m), "maximum supported rate");
 RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 0.1m), "division overflow");
 
-using var connection = new SqliteConnection("Data Source=:memory:");
+await using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
 var options = new DbContextOptionsBuilder<DependencyMaintenanceContext>()
     .UseSqlite(connection)
     .Options;
-using var context = new DependencyMaintenanceContext(options);
+await using var context = new DependencyMaintenanceContext(options);
 context.Database.EnsureCreated();
 
 var sourceA = new SourceItem { Id = 1, UnitValue = 12m };
@@ -99,15 +99,16 @@ Console.WriteLine("- retargeted associations followed their new source");
 Console.WriteLine("- null/zero semantics were materialized consistently");
 
 await RunExternalConsumerDiscoveryScenario();
+return;
 
 static async Task RunExternalConsumerDiscoveryScenario()
 {
-    using var connection = new SqliteConnection("Data Source=:memory:");
+    await using var connection = new SqliteConnection("Data Source=:memory:");
     connection.Open();
     var options = new DbContextOptionsBuilder<DependencyMaintenanceContext>()
         .UseSqlite(connection)
         .Options;
-    using (var seed = new DependencyMaintenanceContext(options))
+    await using (var seed = new DependencyMaintenanceContext(options))
     {
         seed.Database.EnsureCreated();
         var source = new SourceItem { Id = 50, UnitValue = 100m };
@@ -124,7 +125,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
         seed.SaveChanges();
     }
 
-    using var context = new DependencyMaintenanceContext(options);
+    await using var context = new DependencyMaintenanceContext(options);
     var known = context.Associations
         .Include(x => x.SourceItem)
         .Include(x => x.TargetItem)
@@ -148,7 +149,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
         .DiscoverConsumers(associations, x => x.SourceItem, (db, sources) =>
         {
             resolverCalls++;
-            var ids = sources.Select(x => x.Id).ToArray();
+            var ids = sources.Select(x => x.Id).ToList();
             return db.Set<Association>()
                 .Where(x => ids.Contains(x.SourceItemId))
                 .Include(x => x.SourceItem)
@@ -156,7 +157,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
         })
         .DiscoverConsumers(associations, x => x.TargetItem, (db, targets) =>
         {
-            var ids = targets.Select(x => x.Id).ToArray();
+            var ids = targets.Select(x => x.Id).ToList();
             return db.Set<Association>()
                 .Where(x => ids.Contains(x.TargetItemId))
                 .Include(x => x.SourceItem)
@@ -167,7 +168,11 @@ static async Task RunExternalConsumerDiscoveryScenario()
     await context.SaveChangesConsistentlyAsync(runtime, mappings);
 
     RequireEqual(1, resolverCalls, "batched source consumer resolver calls");
-    var discovered = context.Associations.OrderBy(x => x.Id).ToArray();
+    var discovered = context.Associations.OrderBy(x => x.Id)
+        .Include(association => association.SourceItem)
+        .Include(association => association.TargetItem)
+        .ToArray();
+
     RequireEqual(3, discovered.Length, "discovered consumer count");
     foreach (var association in discovered)
     {
@@ -175,7 +180,8 @@ static async Task RunExternalConsumerDiscoveryScenario()
         RequireEqual(expected, association.UnitRate, $"discovered tracked UnitRate for {association.Id}");
         RequireEqual(expected, runtime.Get(unitRate, association), $"discovered runtime UnitRate for {association.Id}");
     }
-    using var verification = new DependencyMaintenanceContext(connection);
+
+    await using var verification = new DependencyMaintenanceContext(connection);
     foreach (var association in verification.Associations.AsNoTracking().OrderBy(x => x.Id))
     {
         decimal? expected = association.Id switch { 500 => 4m, 501 => 8m, 502 => 20m, _ => null };
