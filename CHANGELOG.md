@@ -4,6 +4,39 @@ All notable package changes are recorded here. This project follows Semantic Ver
 `1.0.0` release exists; during `0.x`, minor versions may contain deliberate breaking API changes and
 patch versions remain backward-compatible bug fixes where practical.
 
+## 0.1.0-rc.1
+
+### Added
+
+- Explicit `DependsOn(...)` declarations for opaque source-derived calculations.
+- Authoritative EF consistency-scope validation for cross-object enforcement and materialization.
+- Targeted, batched `DiscoverConsumers(...)` support for eligible direct EF reference-navigation consumers,
+  including consumers whose navigation is not currently loaded.
+- Policy-aware manual consistency unit-of-work flow for caller-owned transactions, outboxes, and generated
+  semantic values.
+- Generated INSERT/UPDATE semantic-value and foreign-key fixup handling in the public EF workflow.
+- Store-side referential-action preflight for dangerous cascade and set-null paths into managed state.
+
+### Correctness and hardening
+
+- Exact binding-plan installation after database durability, with structural coverage admission kept separate
+  from domain `ObjectAdded` semantics.
+- ChangeTracker overlay handling for added, deleted, and retargeted consumers, plus evaluation-closure
+  validation for discovery resolver results.
+- SQL-failure, cancellation, retry, and manual-UoW atomicity protections.
+- Sink-only materialization enforcement, approved public API baselines, and packed-package consumer smoke
+  verification.
+
+### Known limitations
+
+- External consumer discovery currently supports eligible direct reference navigations only.
+- Multi-hop, collection-navigation, relation-source/target, and projected-consumer discovery are not
+  substituted by `DiscoverConsumers`.
+- `ConsistencyRuntime` is not thread-safe.
+- Raw SQL, `ExecuteUpdate`/`ExecuteDelete`, triggers mutating other rows, external writers, and other
+  mutations invisible to EF/Raffinert require exact mutation publication or runtime reconciliation/rebuild.
+- Host query completeness and database concurrency/isolation remain application responsibilities.
+
 ## 0.1.0-alpha.1
 
 - Renamed product/package/namespace from `Raffinert.Relations` to `Raffinert.Consistency` before first
