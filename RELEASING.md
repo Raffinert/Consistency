@@ -1,6 +1,6 @@
 # Release process
 
-Package publication is manual for the alpha series.
+Package publication is manual for prerelease versions.
 
 ## Versioning policy
 
@@ -24,8 +24,8 @@ Package publication is manual for the alpha series.
 5. Inspect both `.nupkg` files and `.snupkg` symbol packages, including target frameworks, README,
    changelog, license, repository URL/commit metadata, and SourceLink information.
    Run `./eng/VerifyReleaseCandidate.ps1 -PackageDirectory artifacts/packages -RequireEmptyUnshipped`
-   to enforce the current alpha.1 version, initial API-baseline, package metadata, target assets, and
-   core/EF dependency alignment checks locally.
+   to enforce the version from `Directory.Build.props`, package/API consistency, target assets, and core/EF
+   dependency alignment checks locally.
 6. Create and push a signed/versioned tag only from the reviewed release commit.
 7. Manually push packages with `dotnet nuget push` using a scoped NuGet API key.
 8. Verify the packages on NuGet.org before announcing the release.

@@ -39,7 +39,7 @@ if ($RequireEmptyUnshipped) {
         $apiLines = @(Get-Content -LiteralPath (Join-Path $repositoryRoot $relativePath) |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne '#nullable enable' })
         if ($apiLines.Count -ne 0) {
-            throw "The alpha.1 release gate requires an empty unshipped API baseline: $relativePath"
+            throw "The release gate requires an empty unshipped API baseline: $relativePath"
         }
     }
 }
