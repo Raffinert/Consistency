@@ -1,6 +1,7 @@
 # Roadmaps
 
-- **Active implementation plan:** add mutation-driven external consumer discovery for direct reference-navigation dependencies so EF persistence can resolve unloaded consumer roots at the save boundary without requiring whole-set preloading: [Tasks 182–191](../codex-plan-external-consumer-discovery-and-incomplete-graph-resolution.md)
+- **Active hardening plan:** make external consumer discovery release-safe by proving active-policy applicability, exact coverage substitution, EF evaluation closure, structural coverage admission, ChangeTracker overlay, and failure/retry semantics: [Tasks 192–201](../codex-plan-external-consumer-discovery-hardening-and-proof.md)
+- Implemented mutation-driven external consumer discovery for direct reference-navigation dependencies at `b57b4ba98922abbb61c2a86bcdc3b81adf377897`; CI for that implementation commit is green, but release hardening/proof continues in Tasks 192–201: [Tasks 182–191](../codex-plan-external-consumer-discovery-and-incomplete-graph-resolution.md)
 - Completed domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model with local
   proof at `8da58b4` (remote pipelines intentionally not checked):
   [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
