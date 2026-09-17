@@ -261,6 +261,62 @@ public sealed class CompiledDependencyGraphTests
         Assert.Single(result.RepairRequests);
     }
 
+    [Fact]
+    public void Runtime_DAG_topology_matches_compiled_graph_for_chain_diamond_and_invariant()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value).Named("root");
+        var chain = model.Derived(sources).Using(root).Compute((_, value) => value + 1).Named("chain");
+        var left = model.Derived(sources).Using(chain).Compute((_, value) => value + 2).Named("left");
+        var right = model.Derived(sources).Using(chain).Compute((_, value) => value + 3).Named("right");
+        var join = model.Derived(sources).Using(left, right)
+            .Compute((_, first, second) => first + second).Named("join");
+        model.Invariant(sources).Using(join).Must((_, value) => value >= 0).Named("non-negative");
+        var source = new Source { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        _ = runtime.Get(join, source);
+        source.Value = 2;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(sources, source, value => value.Value, 1, 2))).Result;
+
+        Assert.Equal(
+            ["chain", "join", "left", "right", "root"],
+            result.DerivedImpacts.Select(impact => impact.DefinitionKey).Order(StringComparer.Ordinal));
+        Assert.Equal("non-negative", Assert.Single(result.InvariantImpacts).DefinitionKey);
+    }
+
+    [Fact]
+    public void Projected_runtime_edge_uses_compiled_input_metadata()
+    {
+        var model = new ConsistencyModelBuilder();
+        var roots = model.Objects<Root>().Key(root => root.Id);
+        var middles = model.Objects<Middle>().Key(middle => middle.Id);
+        var rootValue = model.Derived(roots).Compute(root => root.Value).Named("root");
+        var projected = model.Derived(middles).Using(middle => middle.Root, rootValue)
+            .Compute((_, value) => value + 1).Named("projected");
+        var firstRoot = new Root { Value = 1 };
+        var secondRoot = new Root { Value = 10 };
+        var firstMiddle = new Middle { Root = firstRoot };
+        var secondMiddle = new Middle { Root = secondRoot };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(roots, [firstRoot, secondRoot]);
+            seed.Add(middles, [firstMiddle, secondMiddle]);
+        });
+        _ = runtime.Get(projected, firstMiddle);
+        _ = runtime.Get(projected, secondMiddle);
+        firstRoot.Value = 2;
+
+        var result = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(roots, firstRoot, root => root.Value, 1, 2))).Result;
+
+        var impact = result.DerivedImpacts.Single(value => value.DefinitionKey == "projected");
+        Assert.Same(firstMiddle, Assert.Single(impact.Sources).Source);
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(projected, secondMiddle));
+    }
+
     private static CompiledDependencyGraph Compile(
         IReadOnlyList<Derived<Source, int>> derived,
         IReadOnlyList<Invariant<Source>>? invariants = null) => CompiledDependencyGraph.Compile(

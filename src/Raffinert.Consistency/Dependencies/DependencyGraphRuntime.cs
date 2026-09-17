@@ -53,14 +53,14 @@ internal sealed class DependencyGraphRuntime
     private readonly NavigationIndexRegistry _navigation;
     private readonly ProjectionIndexRegistry _projections;
     private readonly IDependencyImpactPolicy _impactPolicy;
+    private readonly CompiledDependencyGraph _compiledGraph;
     private readonly IReadOnlyList<DerivedNode> _derivedNodes;
     private readonly IReadOnlyList<InvariantNode> _invariantNodes;
+    private readonly DerivedNode?[] _derivedByCompiledId;
+    private readonly InvariantNode?[] _invariantByCompiledId;
+    private readonly IReadOnlyDictionary<DerivedNode, int> _compiledIdByDerived;
     private readonly IReadOnlyDictionary<IRelationDefinition, IReadOnlyList<DerivedNode>> _derivedByRelation;
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<DerivedNode>> _derivedByMember;
-    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<InvariantNode>> _invariantsByDerived;
-    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<DerivedNode>> _derivedByUpstream;
-    private readonly IReadOnlyDictionary<DerivedNode, IReadOnlyList<(UpstreamDerivedInput Input, DerivedNode Node)>>
-        _upstreamsByDerived;
     private readonly IReadOnlyDictionary<MemberInfo, IReadOnlyList<InvariantNode>> _invariantsByMember;
     private HashSet<DerivedNode> _previousDerived = [];
     private HashSet<InvariantNode> _previousInvariants = [];
@@ -80,18 +80,30 @@ internal sealed class DependencyGraphRuntime
         _navigation = navigation;
         _projections = projections;
         _impactPolicy = impactPolicy;
-        var derivedByDefinition = derivedStates.ToDictionary(
-            pair => pair.Key,
-            pair => new DerivedNode(pair.Key, pair.Value));
+        _compiledGraph = compiledGraph;
+        _derivedByCompiledId = new DerivedNode?[compiledGraph.Nodes.Count];
+        _invariantByCompiledId = new InvariantNode?[compiledGraph.Nodes.Count];
+        foreach (var compiledNode in compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived))
+        {
+            var definition = (IDerivedDefinition)compiledNode.Definition;
+            _derivedByCompiledId[compiledNode.Id] = new DerivedNode(definition, derivedStates[definition]);
+        }
         _derivedNodes = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived)
-            .Select(node => derivedByDefinition[(IDerivedDefinition)node.Definition]).ToArray();
+            .Select(node => _derivedByCompiledId[node.Id]!).ToArray();
+        _compiledIdByDerived = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived)
+            .ToDictionary(node => _derivedByCompiledId[node.Id]!, node => node.Id);
+        foreach (var compiledNode in compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Invariant))
+        {
+            var definition = (IInvariantDefinition)compiledNode.Definition;
+            var upstreams = compiledGraph.GetIncoming(compiledNode.Id)
+                .Where(edge => edge.Kind == CompiledDependencyEdgeKind.DerivedToInvariant)
+                .Select(edge => _derivedByCompiledId[edge.FromNodeId]!)
+                .ToArray();
+            _invariantByCompiledId[compiledNode.Id] = new InvariantNode(
+                definition, invariants[definition], upstreams);
+        }
         _invariantNodes = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Invariant)
-            .Select(node => (IInvariantDefinition)node.Definition)
-            .Select(definition => new InvariantNode(
-                definition,
-                invariants[definition],
-                definition.UpstreamDerived.Select(upstream => derivedByDefinition[upstream]).ToArray()))
-            .ToArray();
+            .Select(node => _invariantByCompiledId[node.Id]!).ToArray();
         _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
             .OfType<RelationDerivedInput>()
             .Select(input => input.Relation)
@@ -100,18 +112,6 @@ internal sealed class DependencyGraphRuntime
             node.SourceDependencies.Concat(node.ItemDependencies)
                 .SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
-        _invariantsByDerived = Group(_invariantNodes.SelectMany(node =>
-            node.Derived.Select(derived => (derived, node))));
-        _derivedByUpstream = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
-            .OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
-            .Select(upstream => (derivedByDefinition[upstream], node))));
-        _upstreamsByDerived = _derivedNodes.SelectMany(node => node.Definition.Inputs
-                .OfType<UpstreamDerivedInput>()
-                .Select(input => (Downstream: node, Value: (Input: input, Node: derivedByDefinition[input.Upstream]))))
-            .GroupBy(value => value.Downstream)
-            .ToDictionary(group => group.Key,
-                group => (IReadOnlyList<(UpstreamDerivedInput Input, DerivedNode Node)>)group
-                    .Select(value => value.Value).ToArray());
         _invariantsByMember = Group(_invariantNodes.SelectMany(node =>
             node.SourceDependencies.SelectMany(dependency => dependency.Path.Segments)
                 .Select(segment => (segment.Member, node))));
@@ -212,9 +212,7 @@ internal sealed class DependencyGraphRuntime
             changed = false;
             foreach (var node in _derivedNodes)
             {
-                if (!_upstreamsByDerived.TryGetValue(node, out var upstreams))
-                    continue;
-                foreach (var upstream in upstreams)
+                foreach (var upstream in GetUpstreams(node))
                     foreach (var source in DerivedNode.Map(
                                  upstream.Input, derivedSources[upstream.Node], _projections))
                         changed |= derivedSources[node].Add(source);
@@ -268,15 +266,34 @@ internal sealed class DependencyGraphRuntime
 
     private void ExpandDownstream(HashSet<DerivedNode> nodes)
     {
-        var pending = new Queue<DerivedNode>(_derivedNodes.Where(nodes.Contains));
-        while (pending.TryDequeue(out var node))
+        var pending = new Queue<int>(_derivedNodes.Where(nodes.Contains).Select(node => _compiledIdByDerived[node]));
+        while (pending.TryDequeue(out var nodeId))
         {
-            if (!_derivedByUpstream.TryGetValue(node, out var downstream))
-                continue;
-            foreach (var candidate in downstream)
+            foreach (var edge in _compiledGraph.GetOutgoing(nodeId)
+                         .Where(edge => edge.Kind == CompiledDependencyEdgeKind.DerivedToDerived))
+            {
+                var candidate = _derivedByCompiledId[edge.ToNodeId]!;
                 if (nodes.Add(candidate))
-                    pending.Enqueue(candidate);
+                    pending.Enqueue(edge.ToNodeId);
+            }
         }
+    }
+
+    private IEnumerable<(UpstreamDerivedInput Input, DerivedNode Node)> GetUpstreams(DerivedNode node)
+    {
+        foreach (var edge in _compiledGraph.GetIncoming(_compiledIdByDerived[node]))
+            if (edge.Kind == CompiledDependencyEdgeKind.DerivedToDerived)
+                yield return (edge.DerivedInput!, _derivedByCompiledId[edge.FromNodeId]!);
+    }
+
+    private void AddReachableInvariants(
+        IEnumerable<DerivedNode> derived,
+        HashSet<InvariantNode> invariants)
+    {
+        foreach (var node in derived)
+            foreach (var edge in _compiledGraph.GetOutgoing(_compiledIdByDerived[node]))
+                if (edge.Kind == CompiledDependencyEdgeKind.DerivedToInvariant)
+                    invariants.Add(_invariantByCompiledId[edge.ToNodeId]!);
     }
 
     public void RestoreState(object snapshot)
@@ -362,14 +379,11 @@ internal sealed class DependencyGraphRuntime
                 node.Definition.ImpactPolicy.ItemChanged.ToKind(),
                 relationImpact,
                 changes);
-            if (_upstreamsByDerived.TryGetValue(node, out var upstreams))
-                node.ApplyInherited(upstreams, _projections, upstreamEvidence);
+            node.ApplyInherited(GetUpstreams(node), _projections, upstreamEvidence);
         }
 
         var currentInvariants = new HashSet<InvariantNode>(Candidates(changes, _invariantsByMember));
-        foreach (var derived in currentDerived)
-            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
-                currentInvariants.UnionWith(nodes);
+        AddReachableInvariants(currentDerived, currentInvariants);
         foreach (var node in _previousInvariants.Except(currentInvariants))
             node.ClearImpact();
         foreach (var node in _invariantNodes)
@@ -407,13 +421,11 @@ internal sealed class DependencyGraphRuntime
         }
         ExpandDownstream(currentDerived);
         foreach (var node in _derivedNodes)
-            if (currentDerived.Contains(node) && _upstreamsByDerived.TryGetValue(node, out var upstreams))
-                node.ApplyInherited(upstreams, _projections, null);
+            if (currentDerived.Contains(node))
+                node.ApplyInherited(GetUpstreams(node), _projections, null);
 
         var currentInvariants = new HashSet<InvariantNode>(_previousInvariants);
-        foreach (var derived in currentDerived)
-            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
-                currentInvariants.UnionWith(nodes);
+        AddReachableInvariants(currentDerived, currentInvariants);
         var discardedPolicyActions = new RuntimePolicyActions();
         foreach (var node in _invariantNodes)
             if (currentInvariants.Contains(node))
