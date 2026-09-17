@@ -91,6 +91,77 @@ public sealed class CompiledDependencyGraphTests
     }
 
     [Fact]
+    public void Compiled_graph_outgoing_adjacency_matches_edges()
+    {
+        var graph = CreateDiamondGraph();
+
+        Assert.All(graph.Nodes, node => Assert.Equal(
+            graph.Edges.Where(edge => edge.FromNodeId == node.Id),
+            graph.GetOutgoing(node.Id)));
+    }
+
+    [Fact]
+    public void Compiled_graph_incoming_adjacency_matches_edges()
+    {
+        var graph = CreateDiamondGraph();
+
+        Assert.All(graph.Nodes, node => Assert.Equal(
+            graph.Edges.Where(edge => edge.ToNodeId == node.Id),
+            graph.GetIncoming(node.Id)));
+    }
+
+    [Fact]
+    public void Derived_to_derived_edge_retains_exact_upstream_input_metadata()
+    {
+        var model = new ConsistencyModelBuilder();
+        var roots = model.Objects<Root>().Key(root => root.Id);
+        var middles = model.Objects<Middle>().Key(middle => middle.Id);
+        var rootValue = model.Derived(roots).Compute(root => root.Value);
+        var middleValue = model.Derived(middles).Using(middle => middle.Root, rootValue)
+            .Compute((_, value) => value + 1);
+        var input = Assert.Single(middleValue.Definition.Inputs.OfType<UpstreamDerivedInput>());
+
+        var graph = CompiledDependencyGraph.Compile(
+            [rootValue.Definition, middleValue.Definition], []);
+        var edge = Assert.Single(graph.Edges);
+
+        Assert.Equal(CompiledDependencyEdgeKind.DerivedToDerived, edge.Kind);
+        Assert.Same(input, edge.DerivedInput);
+    }
+
+    [Fact]
+    public void Derived_to_invariant_edge_has_correct_kind()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var value = model.Derived(sources).Compute(source => source.Value);
+        var invariant = model.Invariant(sources).Using(value).Must((_, current) => current >= 0);
+
+        var graph = Compile([value], [invariant]);
+        var edge = Assert.Single(graph.Edges);
+
+        Assert.Equal(CompiledDependencyEdgeKind.DerivedToInvariant, edge.Kind);
+        Assert.Null(edge.DerivedInput);
+    }
+
+    [Fact]
+    public void Compiled_graph_adjacency_is_duplicate_free()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var upstream = model.Derived(sources).Compute(source => source.Value);
+        var downstream = model.Derived(sources).Using(upstream, upstream)
+            .Compute((_, left, right) => left + right);
+
+        var graph = Compile([upstream, downstream]);
+        var upstreamNode = Node(graph, upstream);
+        var downstreamNode = Node(graph, downstream);
+
+        Assert.Single(graph.GetOutgoing(upstreamNode.Id));
+        Assert.Single(graph.GetIncoming(downstreamNode.Id));
+    }
+
+    [Fact]
     public void Deep_derived_chain_propagates_in_topological_order_without_registration_order_dependency()
     {
         var model = new ConsistencyModelBuilder();
@@ -195,6 +266,17 @@ public sealed class CompiledDependencyGraphTests
         IReadOnlyList<Invariant<Source>>? invariants = null) => CompiledDependencyGraph.Compile(
         derived.Select(value => value.Definition).ToArray(),
         invariants?.Select(value => value.Definition).ToArray() ?? []);
+
+    private static CompiledDependencyGraph CreateDiamondGraph()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value);
+        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
+        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
+        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+        return Compile([root, left, right, join]);
+    }
 
     private static CompiledDependencyNode Node<T>(CompiledDependencyGraph graph, Derived<Source, T> derived) =>
         graph.Nodes.Single(node => ReferenceEquals(node.Definition, derived.Definition));
