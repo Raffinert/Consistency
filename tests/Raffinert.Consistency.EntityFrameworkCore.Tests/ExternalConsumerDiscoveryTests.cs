@@ -556,6 +556,109 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(3, runtime.GetObjectSetInstancesForClrType(typeof(DiscoveryAssociation)).Count);
     }
 
+    [Fact]
+    public async Task Different_instances_with_same_runtime_key_across_resolvers_fail_closed()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Associations.Single(x => x.Id == 2).RuntimeKey = 20;
+            seed.Associations.Single(x => x.Id == 3).RuntimeKey = 20;
+            seed.SaveChanges();
+        }
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var changedTarget = context.Targets.Single(x => x.Id == 3);
+        var sourceCalls = new Counter();
+        var targetCalls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(
+            known, sourceCalls, targetCalls, useRuntimeKey: true, sourceResultId: 2, targetResultId: 3);
+        known.Source.UnitValue = 120m;
+        changedTarget.UnitValue = 30m;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            context.SaveChangesConsistentlyAsync(runtime, mappings));
+
+        Assert.Equal(1, sourceCalls.Value);
+        Assert.Equal(1, targetCalls.Value);
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(0, context.SaveChangesInvocations);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition,
+            context.Associations.Local.Single(x => x.Id == 2)));
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition,
+            context.Associations.Local.Single(x => x.Id == 3)));
+        Assert.Equal(5m, context.Associations.Local.Single(x => x.Id == 2).UnitRate);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+    }
+
+    [Fact]
+    public async Task All_required_references_loaded_and_tracked_pass()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var (runtime, mappings, derived) = fixture.CreateModel(known, calls);
+        known.Source.UnitValue = 120m;
+
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        var discovered = context.Associations.Local.Single(x => x.Id == 2);
+        Assert.True(context.Entry(discovered).Reference(x => x.Source).IsLoaded);
+        Assert.True(context.Entry(discovered).Reference(x => x.Target).IsLoaded);
+        Assert.NotEqual(EntityState.Detached, context.Entry(discovered.Source).State);
+        Assert.NotEqual(EntityState.Detached, context.Entry(discovered.Target).State);
+        Assert.True(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.Equal(6m, discovered.UnitRate);
+        Assert.Equal(6m, runtime.Get(derived, discovered));
+        Assert.Equal(6m, context.Associations.AsNoTracking().Single(x => x.Id == 2).UnitRate);
+        Assert.Equal(1, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Evaluation_closure_uses_exact_ObjectSet_and_navigation_metadata()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var builder = new ConsistencyModelBuilder();
+        var primary = builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var secondary = builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var derived = builder.Derived(primary)
+            .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
+            .Compute(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue);
+        var runtime = builder.Build().CreateRuntime(seed => seed.Add(primary, [known]));
+        var mappings = new ConsistencyEfCoreMappings()
+            .Map(primary, entry => entry.Entity.Id <= 2)
+            .Map(secondary, entry => entry.Entity.Id > 2)
+            .Materialize(derived, x => x.UnitRate)
+            .DiscoverConsumers(primary, x => x.Source, (db, sources) =>
+            {
+                var ids = sources.Select(x => x.Id).ToArray();
+                return db.Set<DiscoveryAssociation>().Where(x => ids.Contains(x.SourceId))
+                    .Include(x => x.Source).Include(x => x.Target);
+            })
+            .DiscoverConsumers(secondary, x => x.Target, (db, targets) =>
+            {
+                var ids = targets.Select(x => x.Id).ToArray();
+                return db.Set<DiscoveryAssociation>().Where(x => x.TargetId.HasValue &&
+                    ids.Contains(x.TargetId.Value)).Include(x => x.Source).Include(x => x.Target);
+            });
+        known.Source.UnitValue = 120m;
+
+        var error = await Assert.ThrowsAsync<IncompleteConsistencyScopeException>(() =>
+            context.SaveChangesConsistentlyAsync(runtime, mappings));
+
+        Assert.Contains(error.Gaps, gap => gap.ObjectSetId == primary.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, context.SaveChangesInvocations);
+        Assert.Equal(0, runtime.Version);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+    }
+
     private sealed class DiscoveryFixture : IDisposable
     {
         private readonly SqliteConnection _connection;
@@ -598,10 +701,13 @@ public sealed class ExternalConsumerDiscoveryTests
             Action? sourceQueryHook = null, bool includeTarget = true, bool sourceAsNoTracking = false,
                 bool materialize = true, bool enforceInvariant = false,
             bool sourceQuerySuperset = false, IReadOnlyList<DiscoveryAssociation>? initialAssociations = null,
-                bool duplicateSourceRows = false, bool sourceDetachedTarget = false)
+                bool duplicateSourceRows = false, bool sourceDetachedTarget = false,
+                bool useRuntimeKey = false, int? sourceResultId = null, int? targetResultId = null)
         {
             var builder = new ConsistencyModelBuilder();
-            var associations = builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
+            var associations = useRuntimeKey
+                ? builder.Objects<DiscoveryAssociation>().Key(x => x.RuntimeKey)
+                : builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
             Associations = associations;
             var derived = builder.Derived(associations)
                 .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
@@ -622,6 +728,8 @@ public sealed class ExternalConsumerDiscoveryTests
                     IQueryable<DiscoveryAssociation> query = db.Set<DiscoveryAssociation>();
                     if (!sourceQuerySuperset)
                         query = query.Where(x => ids.Contains(x.SourceId));
+                    if (sourceResultId.HasValue)
+                        query = query.Where(x => x.Id == sourceResultId.Value);
                     query = query.Include(x => x.Source);
                     if (includeTarget && !sourceDetachedTarget)
                         query = query.Include(x => x.Target);
@@ -644,7 +752,8 @@ public sealed class ExternalConsumerDiscoveryTests
                         targetCalls.Value++;
                     var ids = targets.Select(x => x.Id).ToArray();
                     return db.Set<DiscoveryAssociation>().Where(x => x.TargetId.HasValue &&
-                        ids.Contains(x.TargetId.Value))
+                        ids.Contains(x.TargetId.Value) &&
+                        (!targetResultId.HasValue || x.Id == targetResultId.Value))
                         .Include(x => x.Source).Include(x => x.Target);
                 });
             return (runtime, mappings, derived);
@@ -699,6 +808,7 @@ public sealed class ExternalConsumerDiscoveryTests
     private sealed class DiscoveryAssociation
     {
         public int Id { get; set; }
+        public int RuntimeKey { get; set; }
         public int SourceId { get; set; }
         public DiscoverySource Source { get; set; } = null!;
         public int? TargetId { get; set; }
