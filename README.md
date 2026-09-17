@@ -1,47 +1,51 @@
 # Raffinert.Consistency
 
-**Incremental consistency for .NET object models.**
+**Declarative consistency for ordinary .NET objects.**
 
-Raffinert.Consistency lets you declare relations, derived values, and invariants as expression trees.
-It analyzes those declarations to build the dependency graph, indexes, reverse navigation, invalidation
-rules, and incremental propagation needed to keep a model consistent as objects change.
+When one value changes, other calculated values, invariants, and relationships may become stale or invalid.
+Raffinert.Consistency lets you declare those dependencies once instead of maintaining the same consistency
+logic across setters, handlers, services, and persistence code.
 
-Instead of manually wiring consistency logic across services and handlers:
-
-```mermaid
-flowchart TD
-    A[Field changed] --> B[Invalidate calculation]
-    B --> C[Invalidate dependent calculation]
-    C --> D[Check persisted links]
-    D --> E[Schedule repair]
+```csharp
+var unitRate = model.Derived(associations)
+    .DependsOn(x => x.Source.UnitValue)
+    .DependsOn(x => x.Target.UnitValue)
+    .Compute(x => UnitRateCalculator.Calculate(
+        x.Source.UnitValue,
+        x.Target.UnitValue));
 ```
 
-you declare the relationships and computations once. The runtime determines **what is affected**, **how
-severe the impact is**, and **what work must happen next**.
+Now a change to either input has an explicit consequence:
 
-> You declare domain relationships. Raffinert.Consistency derives the consistency machinery.
+```text
+Source.Value ─┐
+              ├──> UnitRate ──> Invariant ──> repair / persistence
+Target.Value ─┘
+```
+
+Raffinert determines what is affected, propagates invalidation through the dependency graph, evaluates the
+state that matters, and can integrate with EF Core to validate invariants and persist derived mirrors at the
+save boundary.
+
+> **You declare what depends on what. Raffinert derives the consistency machinery.**
 
 The dependency-free core targets .NET 8 and .NET 10. The EF Core adapter targets .NET 10 / EF Core 10.
-The project is pre-1.0 and currently available as a release candidate. APIs may still change before 1.0.
+Raffinert.Consistency is pre-1.0 and currently available as a release candidate. APIs may still change before
+1.0.
 
 ## Why?
 
-Consistency logic in rich applications tends to spread:
+Consistency logic tends to spread as a system grows:
 
-- one service updates a field;
-- another remembers to invalidate a calculation;
-- another knows which persisted links depend on that calculation;
-- another decides whether repair or rematching must happen now or can be deferred.
+- a handler changes a field;
+- another service knows which calculation must be refreshed;
+- another query finds the affected consumers;
+- another rule decides whether stale state is merely dirty or already unsafe;
+- persistence code must remember what needs to be validated or materialized.
 
-That works until the domain evolves and one of those paths is forgotten.
+The individual rules are usually simple. **Remembering every consequence from every mutation path is not.**
 
-Raffinert.Consistency makes the dependency graph explicit and executable. The same expressions that define
-relationships and derived values are analyzed to derive indexes, reverse access paths, change impact, and
-propagation behavior.
-
-This is especially useful in domains such as procurement, accounting, pricing, inventory, reservations,
-allocation, eligibility, planning, and other models where one business change can have several dependent
-consequences.
+Raffinert makes that dependency graph explicit and executable.
 
 ## Core capabilities
 
