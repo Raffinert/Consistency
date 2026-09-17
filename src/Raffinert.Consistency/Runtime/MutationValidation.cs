@@ -12,15 +12,15 @@ public sealed partial class ConsistencyRuntime
         IReadOnlyList<RuntimeMutation> mutations,
         ChangeValidationMode validationMode)
     {
-        var lifecycle = mutations
-            .Where(mutation => mutation is IAddedMutation or ObjectRemoved)
-            .ToArray();
+        var lifecycle = mutations.Where(mutation => mutation is ObjectAdded or ObjectRemoved).ToArray();
+        var coverageAdmissions = mutations.OfType<CoverageAdmission>().ToArray();
         var simulations = new Dictionary<IObjectSetDefinition, ObjectSetSimulation>();
-        foreach (var mutation in lifecycle)
+        foreach (var mutation in lifecycle.Cast<RuntimeMutation>().Concat(coverageAdmissions))
         {
             var set = mutation switch
             {
-                IAddedMutation added => added.Set,
+                ObjectAdded added => added.Set,
+                CoverageAdmission admission => admission.Set,
                 ObjectRemoved removed => removed.Set,
                 _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
             };
@@ -29,15 +29,18 @@ public sealed partial class ConsistencyRuntime
                 simulation = new ObjectSetSimulation(set, GetSet(set));
                 simulations.Add(set, simulation);
             }
-            if (mutation is IAddedMutation addition)
+            if (mutation is ObjectAdded addition)
                 simulation.Add(addition.Instance);
+            else if (mutation is CoverageAdmission admission)
+                simulation.Add(admission.Instance);
             else
                 simulation.Remove(((ObjectRemoved)mutation).Instance);
         }
 
         var lifecycleTargets = lifecycle.Select(mutation => mutation switch
         {
-            IAddedMutation added => new SetInstance(added.Set, added.Instance),
+            ObjectAdded added => new SetInstance(added.Set, added.Instance),
+            CoverageAdmission admission => new SetInstance(admission.Set, admission.Instance),
             ObjectRemoved removed => new SetInstance(removed.Set, removed.Instance),
             _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
         }).ToHashSet();
@@ -72,7 +75,7 @@ public sealed partial class ConsistencyRuntime
                 MutationOriginKind.CollectionChanged, change.Set, change.Owner, change.Member,
                 null, null, change.Kind, change.Item)))
             .ToArray();
-        return new ValidatedMutationBatch(lifecycle, changes, provenance);
+        return new ValidatedMutationBatch(lifecycle, coverageAdmissions, changes, provenance);
     }
 
     private PropertyChange ValidateBatchChange(
@@ -292,6 +295,7 @@ public sealed partial class ConsistencyRuntime
 
     private sealed record ValidatedMutationBatch(
         IReadOnlyList<RuntimeMutation> LifecycleMutations,
+        IReadOnlyList<CoverageAdmission> CoverageAdmissions,
         IReadOnlyList<PropertyChange> Changes,
         IReadOnlyList<NormalizedMutationProvenance> Provenance);
 

@@ -228,7 +228,7 @@ public sealed class ObjectAdded : RuntimeMutation, IAddedMutation
 }
 
 /// <summary>Internal operation-scoped admission of an existing persisted object for coverage planning.</summary>
-internal sealed class CoverageAdmission : RuntimeMutation, IAddedMutation
+internal sealed class CoverageAdmission : RuntimeMutation
 {
     internal CoverageAdmission(IObjectSetDefinition set, object instance)
     {
@@ -236,8 +236,8 @@ internal sealed class CoverageAdmission : RuntimeMutation, IAddedMutation
         Instance = instance;
     }
 
-    public IObjectSetDefinition Set { get; }
-    public object Instance { get; }
+    internal IObjectSetDefinition Set { get; }
+    internal object Instance { get; }
 }
 
 /// <summary>Describes removing an object from a runtime object set.</summary>

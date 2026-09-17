@@ -488,6 +488,7 @@ public sealed class PreparedMutation
         ConsistencyRuntime runtime,
         long baseVersion,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<CoverageAdmission> coverageAdmissions,
         IReadOnlyList<PropertyChange> changes,
         IReadOnlyList<NormalizedMutationProvenance> provenance,
         IReadOnlyList<PreparedDomainAssumption> domainAssumptions)
@@ -495,6 +496,7 @@ public sealed class PreparedMutation
         Runtime = runtime;
         BaseVersion = baseVersion;
         LifecycleMutations = lifecycleMutations;
+        CoverageAdmissions = coverageAdmissions;
         Changes = changes;
         Provenance = provenance;
         DomainAssumptions = domainAssumptions;
@@ -502,6 +504,7 @@ public sealed class PreparedMutation
 
     internal ConsistencyRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
+    internal IReadOnlyList<CoverageAdmission> CoverageAdmissions { get; }
     internal IReadOnlyList<PropertyChange> Changes { get; }
     internal IReadOnlyList<NormalizedMutationProvenance> Provenance { get; }
     internal IReadOnlyList<PreparedDomainAssumption> DomainAssumptions { get; }
@@ -530,9 +533,15 @@ public sealed class PreparedMutation
             assumption.Validate();
 
         var simulated = new Dictionary<IObjectSetDefinition, PreparedSetState>();
-        foreach (var mutation in LifecycleMutations)
+        foreach (var mutation in LifecycleMutations.Cast<RuntimeMutation>().Concat(CoverageAdmissions))
         {
-            var set = mutation is IAddedMutation added ? added.Set : ((ObjectRemoved)mutation).Set;
+            var set = mutation switch
+            {
+                ObjectAdded added => added.Set,
+                CoverageAdmission admission => admission.Set,
+                ObjectRemoved removed => removed.Set,
+                _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
+            };
             if (!sets.TryGetValue(set, out var runtime))
                 throw new ArgumentException("The object set does not belong to this compiled model.");
             if (!simulated.TryGetValue(set, out var state))
@@ -540,8 +549,10 @@ public sealed class PreparedMutation
                 state = new PreparedSetState(runtime);
                 simulated.Add(set, state);
             }
-            if (mutation is IAddedMutation addition)
+            if (mutation is ObjectAdded addition)
                 state.Add(set, addition.Instance);
+            else if (mutation is CoverageAdmission admission)
+                state.Add(set, admission.Instance);
             else
                 state.Remove(((ObjectRemoved)mutation).Instance);
         }

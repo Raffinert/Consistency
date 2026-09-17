@@ -254,6 +254,9 @@ internal sealed class DependencyGraphRuntime
                     case IAddedMutation added when ReferenceEquals(added.Set, set):
                         sources.Add(added.Instance);
                         break;
+                    case CoverageAdmission admission when ReferenceEquals(admission.Set, set):
+                        sources.Add(admission.Instance);
+                        break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, set):
                         sources.Add(removed.Instance);
                         break;

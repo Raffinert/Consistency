@@ -109,6 +109,9 @@ internal sealed class ProjectionIndexRegistry
                         ReferenceEquals(value.Set, entry.DownstreamSet) &&
                         value.Member == entry.SelectorMember)
                     .Select(value => value.Instance))
+                .Concat(lifecycleMutations.OfType<CoverageAdmission>()
+                    .Where(value => ReferenceEquals(value.Set, entry.DownstreamSet))
+                    .Select(value => value.Instance))
                 .Distinct(ReferenceEqualityComparer.Instance);
             foreach (var source in touchedDownstreams)
             {
@@ -148,6 +151,7 @@ internal sealed class ProjectionIndexRegistry
             entry.CaptureSources(lifecycleMutations.Select(mutation => mutation switch
                 {
                     IAddedMutation added when ReferenceEquals(added.Set, entry.DownstreamSet) => added.Instance,
+                    CoverageAdmission admission when ReferenceEquals(admission.Set, entry.DownstreamSet) => admission.Instance,
                     ObjectRemoved removed when ReferenceEquals(removed.Set, entry.DownstreamSet) => removed.Instance,
                     _ => null
                 }).OfType<object>()
@@ -238,6 +242,8 @@ internal sealed class ProjectionIndexRegistry
             foreach (var mutation in mutations)
                 if (mutation is IAddedMutation added)
                     _added.Add((added.Set, added.Instance));
+                else if (mutation is CoverageAdmission admission)
+                    _added.Add((admission.Set, admission.Instance));
                 else if (mutation is ObjectRemoved removed)
                     _removed.Add((removed.Set, removed.Instance));
         }

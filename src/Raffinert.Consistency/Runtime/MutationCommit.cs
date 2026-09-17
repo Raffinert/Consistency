@@ -38,11 +38,12 @@ public sealed partial class ConsistencyRuntime
         var navigationRoots = _dependencyGraph.ResolveNavigationRoots(plannedImpact, prepared.Changes);
         var rollbackJournal = _rollbackSnapshotsEnabled || requireSnapshot
             ? CaptureRollbackJournal(
-                prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
+                prepared.CoverageAdmissions, prepared.LifecycleMutations, prepared.Changes, plannedImpact, navigationRoots)
             : null;
         try
         {
             var result = CommitMutations(
+                prepared.CoverageAdmissions,
                 prepared.LifecycleMutations,
                 prepared.Changes,
                 plannedImpact,
@@ -56,7 +57,7 @@ public sealed partial class ConsistencyRuntime
                 : [];
             var forwardPatch = capturePostState
                 ? CaptureForwardPatch(
-                    prepared.LifecycleMutations,
+                    prepared.CoverageAdmissions, prepared.LifecycleMutations,
                     prepared.Changes,
                     plannedImpact,
                     navigationRoots,
@@ -85,12 +86,13 @@ public sealed partial class ConsistencyRuntime
     }
 
     private RuntimeRollbackJournal CaptureRollbackJournal(
+        IReadOnlyList<CoverageAdmission> coverageAdmissions,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
         IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots)
     {
-        var parts = CapturePatchParts(lifecycleMutations, changes, impact, navigationRoots, null);
+        var parts = CapturePatchParts(coverageAdmissions, lifecycleMutations, changes, impact, navigationRoots, null);
         return new RuntimeRollbackJournal(
             parts.Sets,
             parts.Relations,
@@ -101,13 +103,14 @@ public sealed partial class ConsistencyRuntime
     }
 
     private RuntimeForwardPatch CaptureForwardPatch(
+        IReadOnlyList<CoverageAdmission> coverageAdmissions,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
         IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
         RuntimeRollbackJournal scopeSource)
     {
-        var parts = CapturePatchParts(lifecycleMutations, changes, impact, navigationRoots, scopeSource);
+        var parts = CapturePatchParts(coverageAdmissions, lifecycleMutations, changes, impact, navigationRoots, scopeSource);
         return new RuntimeForwardPatch(
             parts.Sets,
             parts.Relations,
@@ -118,21 +121,24 @@ public sealed partial class ConsistencyRuntime
     }
 
     private RuntimePatchParts CapturePatchParts(
+        IReadOnlyList<CoverageAdmission> coverageAdmissions,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
         IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
         IRuntimePatchScope? scopeSource)
     {
-        var lifecycleSets = lifecycleMutations.Select(mutation => mutation is IAddedMutation added
-            ? added.Set
-            : ((ObjectRemoved)mutation).Set).ToHashSet();
+        var lifecycleSets = coverageAdmissions.Select(admission => admission.Set)
+            .Concat(lifecycleMutations.Select(mutation => mutation is IAddedMutation added
+                ? added.Set
+                : ((ObjectRemoved)mutation).Set)).ToHashSet();
+        var structuralMutations = coverageAdmissions.Cast<RuntimeMutation>().Concat(lifecycleMutations).ToArray();
         var affectedRelations = impact.AffectedRelations.ToHashSet();
         affectedRelations.UnionWith(_relations.Keys.Where(relation =>
             lifecycleSets.Contains(relation.LeftSet) || lifecycleSets.Contains(relation.RightSet)));
-        var navigationChanged = lifecycleMutations.Count > 0 ||
+        var navigationChanged = structuralMutations.Length > 0 ||
             changes.Any(change => _navigation.IsIndexedNavigation(change.Member));
-        var projectionChanged = lifecycleMutations.Any(mutation => mutation switch
+        var projectionChanged = structuralMutations.Any(mutation => mutation switch
             {
                 IAddedMutation added => _projections.IsDownstreamSet(added.Set),
                 ObjectRemoved removed => _projections.IsDownstreamSet(removed.Set),
@@ -151,7 +157,7 @@ public sealed partial class ConsistencyRuntime
                 touchedLefts.UnionWith(reindexedLefts);
             if (impact.ReindexRoots.TryGetValue(runtimeState, out var reindexedRights))
                 touchedRights.UnionWith(reindexedRights);
-            foreach (var mutation in lifecycleMutations)
+            foreach (var mutation in structuralMutations)
                 switch (mutation)
                 {
                     case IAddedMutation added when ReferenceEquals(added.Set, relation.LeftSet):
@@ -172,9 +178,10 @@ public sealed partial class ConsistencyRuntime
             relationStates.Add(relation, runtimeState.CaptureTouchedState(
                 touchedLefts, touchedRights, previousRelationState));
         }
-        var touchedNavigationRoots = navigationRoots.Concat(lifecycleMutations.Select(mutation => mutation switch
+        var touchedNavigationRoots = navigationRoots.Concat(structuralMutations.Select(mutation => mutation switch
         {
             IAddedMutation added => (added.Set, added.Instance),
+            CoverageAdmission admission => (admission.Set, admission.Instance),
             ObjectRemoved removed => (removed.Set, removed.Instance),
             _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
         })).ToArray();
@@ -183,9 +190,10 @@ public sealed partial class ConsistencyRuntime
         return new RuntimePatchParts(
         lifecycleSets.ToDictionary(
             set => set,
-            set => _sets[set].CaptureEntriesState(lifecycleMutations.Select(mutation => mutation switch
+            set => _sets[set].CaptureEntriesState(structuralMutations.Select(mutation => mutation switch
             {
                 IAddedMutation added when ReferenceEquals(added.Set, set) => added.Instance,
+                CoverageAdmission admission when ReferenceEquals(admission.Set, set) => admission.Instance,
                 ObjectRemoved removed when ReferenceEquals(removed.Set, set) => removed.Instance,
                 _ => null
             }).OfType<object>())),
@@ -193,7 +201,7 @@ public sealed partial class ConsistencyRuntime
         navigationChanged ? _navigation.CaptureTouchedState(
             touchedNavigationRoots, touchedNavigationOwners, scopeSource?.Navigation) : null,
         projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
-        _dependencyGraph.CaptureState(impact, lifecycleMutations, changes, scopeSource?.Dependencies),
+        _dependencyGraph.CaptureState(impact, structuralMutations, changes, scopeSource?.Dependencies),
         new RuntimeScalarState(
             LastRelationImpacts,
             _reindexedRoots,
@@ -275,7 +283,7 @@ public sealed partial class ConsistencyRuntime
             impact.MergeFrom(_impactResolver.Resolve(change));
         var navigationRoots = _dependencyGraph.ResolveNavigationRoots(impact, prepared.Changes);
         return CaptureRollbackJournal(
-            prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots);
+            prepared.CoverageAdmissions, prepared.LifecycleMutations, prepared.Changes, impact, navigationRoots);
     }
 
     internal void ValidatePlanInstallForBenchmark(PreparedImpactPlan plan)
@@ -368,6 +376,7 @@ public sealed partial class ConsistencyRuntime
     }
 
     private RuntimeCommitResult CommitMutations(
+        IReadOnlyList<CoverageAdmission> coverageAdmissions,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<PropertyChange> changes,
         ResolvedChangeImpact impact,
@@ -375,6 +384,8 @@ public sealed partial class ConsistencyRuntime
         bool captureCausalEvidence)
     {
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        foreach (var admission in coverageAdmissions)
+            CommitCoverageAdmission(admission);
         foreach (var mutation in lifecycleMutations)
         {
             if (mutation is IAddedMutation added)
@@ -845,6 +856,19 @@ public sealed partial class ConsistencyRuntime
             MergeDelta(deltas, pair.Key, pair.Value.AddRight(mutation.Instance));
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, mutation.Set)))
             MergeDelta(deltas, pair.Key, pair.Value.AddLeft(mutation.Instance));
+    }
+
+    private void CommitCoverageAdmission(CoverageAdmission admission)
+    {
+        var state = GetSet(admission.Set);
+        state.Add(admission.Instance);
+        NotifySourceAdded(admission.Set, admission.Instance);
+        _navigation.AddRoot(admission.Set, admission.Instance);
+        _projections.AddRoot(admission.Set, admission.Instance);
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.RightSet, admission.Set)))
+            _ = pair.Value.AddRight(admission.Instance);
+        foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, admission.Set)))
+            _ = pair.Value.AddLeft(admission.Instance);
     }
 
     private void CommitRemove(
