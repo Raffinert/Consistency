@@ -1,14 +1,15 @@
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Raffinert.Consistency;
 using Raffinert.Consistency.EntityFrameworkCore;
 
-RequireEqual<decimal?>(null, UnitRateCalculator.Calculate(null, 4m), "null source");
-RequireEqual<decimal?>(null, UnitRateCalculator.Calculate(10m, 0m), "zero target");
+RequireEqual(null, UnitRateCalculator.Calculate(null, 4m), "null source");
+RequireEqual(null, UnitRateCalculator.Calculate(10m, 0m), "zero target");
 RequireEqual(2.5m, UnitRateCalculator.Calculate(10m, 4m), "basic rate");
 RequireEqual(0.333333m, UnitRateCalculator.Calculate(1m, 3m), "rounded rate");
-RequireEqual<decimal?>(null, UnitRateCalculator.Calculate(decimal.MaxValue, 1m), "maximum supported rate");
-RequireEqual<decimal?>(null, UnitRateCalculator.Calculate(decimal.MaxValue, 0.1m), "division overflow");
+RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 1m), "maximum supported rate");
+RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 0.1m), "division overflow");
 
 using var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
@@ -97,6 +98,93 @@ Console.WriteLine("- target changes preserved correct mirrors for other associat
 Console.WriteLine("- retargeted associations followed their new source");
 Console.WriteLine("- null/zero semantics were materialized consistently");
 
+await RunExternalConsumerDiscoveryScenario();
+
+static async Task RunExternalConsumerDiscoveryScenario()
+{
+    using var connection = new SqliteConnection("Data Source=:memory:");
+    connection.Open();
+    var options = new DbContextOptionsBuilder<DependencyMaintenanceContext>()
+        .UseSqlite(connection)
+        .Options;
+    using (var seed = new DependencyMaintenanceContext(options))
+    {
+        seed.Database.EnsureCreated();
+        var source = new SourceItem { Id = 50, UnitValue = 100m };
+        var targetA = new TargetItem { Id = 60, UnitValue = 50m };
+        var targetB = new TargetItem { Id = 61, UnitValue = 25m };
+        var targetC = new TargetItem { Id = 62, UnitValue = 10m };
+        var first = new Association { Id = 500, SourceItem = source, TargetItem = targetA };
+        var second = new Association { Id = 501, SourceItem = source, TargetItem = targetB };
+        var third = new Association { Id = 502, SourceItem = source, TargetItem = targetC };
+        first.UnitRate = UnitRateCalculator.Calculate(source.UnitValue, targetA.UnitValue);
+        second.UnitRate = UnitRateCalculator.Calculate(source.UnitValue, targetB.UnitValue);
+        third.UnitRate = UnitRateCalculator.Calculate(source.UnitValue, targetC.UnitValue);
+        seed.AddRange(source, targetA, targetB, targetC, first, second, third);
+        seed.SaveChanges();
+    }
+
+    using var context = new DependencyMaintenanceContext(options);
+    var known = context.Associations
+        .Include(x => x.SourceItem)
+        .Include(x => x.TargetItem)
+        .Single(x => x.Id == 500);
+    var sourceKnown = known.SourceItem;
+    Require(context.ChangeTracker.Entries<Association>().Count() == 1,
+        "incomplete operation graph before discovery");
+
+    var builder = new ConsistencyModelBuilder();
+    var associations = builder.Objects<Association>().Named("discovery-associations").Key(x => x.Id);
+    var unitRate = builder.Derived(associations)
+        .DependsOn(x => x.SourceItem.UnitValue)
+        .DependsOn(x => x.TargetItem.UnitValue)
+        .Compute(x => UnitRateCalculator.Calculate(x.SourceItem.UnitValue, x.TargetItem.UnitValue))
+        .Named("discovery-unit-rate");
+    var runtime = builder.Build().CreateRuntime(seed => seed.Add(associations, [known]));
+    var resolverCalls = 0;
+    var mappings = new ConsistencyEfCoreMappings()
+        .Map(associations)
+        .Materialize(unitRate, x => x.UnitRate)
+        .DiscoverConsumers(associations, x => x.SourceItem, (db, sources) =>
+        {
+            resolverCalls++;
+            var ids = sources.Select(x => x.Id).ToArray();
+            return db.Set<Association>()
+                .Where(x => ids.Contains(x.SourceItemId))
+                .Include(x => x.SourceItem)
+                .Include(x => x.TargetItem);
+        })
+        .DiscoverConsumers(associations, x => x.TargetItem, (db, targets) =>
+        {
+            resolverCalls++;
+            var ids = targets.Select(x => x.Id).ToArray();
+            return db.Set<Association>()
+                .Where(x => ids.Contains(x.TargetItemId))
+                .Include(x => x.SourceItem)
+                .Include(x => x.TargetItem);
+        });
+
+    sourceKnown.UnitValue = 200m;
+    known.TargetItem.UnitValue = 100m;
+    await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+    RequireEqual(2, resolverCalls, "batched external consumer resolver calls");
+    var discovered = context.Associations.OrderBy(x => x.Id).ToArray();
+    RequireEqual(3, discovered.Length, "discovered consumer count");
+    foreach (var association in discovered)
+    {
+        var expected = UnitRateCalculator.Calculate(association.SourceItem.UnitValue, association.TargetItem.UnitValue);
+        RequireEqual(expected, association.UnitRate, $"discovered tracked UnitRate for {association.Id}");
+        RequireEqual(expected, runtime.Get(unitRate, association), $"discovered runtime UnitRate for {association.Id}");
+    }
+    using var verification = new DependencyMaintenanceContext(connection);
+    foreach (var association in verification.Associations.AsNoTracking().OrderBy(x => x.Id))
+    {
+        decimal? expected = association.Id switch { 500 => 2m, 501 => 8m, 502 => 20m, _ => null };
+        RequireEqual(expected, association.UnitRate, $"discovered persisted UnitRate for {association.Id}");
+    }
+}
+
 static void SaveAndVerify(
     DependencyMaintenanceContext context,
     ConsistencyRuntime runtime,
@@ -138,7 +226,7 @@ internal sealed class DependencyMaintenanceContext : DbContext
     {
     }
 
-    public DependencyMaintenanceContext(System.Data.Common.DbConnection connection)
+    public DependencyMaintenanceContext(DbConnection connection)
         : base(new DbContextOptionsBuilder<DependencyMaintenanceContext>().UseSqlite(connection).Options)
     {
     }

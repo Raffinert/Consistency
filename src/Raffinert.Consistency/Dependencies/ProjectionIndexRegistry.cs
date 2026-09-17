@@ -102,7 +102,7 @@ internal sealed class ProjectionIndexRegistry
         foreach (var entry in _entries)
         {
             var touchedDownstreams = lifecycleMutations
-                .OfType<ObjectAdded>()
+                .OfType<IAddedMutation>()
                 .Where(value => ReferenceEquals(value.Set, entry.DownstreamSet))
                 .Select(value => value.Instance)
                 .Concat(changes.Where(value =>
@@ -147,7 +147,7 @@ internal sealed class ProjectionIndexRegistry
             entry,
             entry.CaptureSources(lifecycleMutations.Select(mutation => mutation switch
                 {
-                    ObjectAdded added when ReferenceEquals(added.Set, entry.DownstreamSet) => added.Instance,
+                    IAddedMutation added when ReferenceEquals(added.Set, entry.DownstreamSet) => added.Instance,
                     ObjectRemoved removed when ReferenceEquals(removed.Set, entry.DownstreamSet) => removed.Instance,
                     _ => null
                 }).OfType<object>()
@@ -236,7 +236,7 @@ internal sealed class ProjectionIndexRegistry
         {
             _sets = sets;
             foreach (var mutation in mutations)
-                if (mutation is ObjectAdded added)
+                if (mutation is IAddedMutation added)
                     _added.Add((added.Set, added.Instance));
                 else if (mutation is ObjectRemoved removed)
                     _removed.Add((removed.Set, removed.Instance));

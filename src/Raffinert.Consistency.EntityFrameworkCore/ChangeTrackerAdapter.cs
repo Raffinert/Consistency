@@ -104,6 +104,8 @@ public sealed class ConsistencyUnitOfWork
 
     internal ConsistencyUnitOfWork(MutationSet? mutations) => _mutations = mutations;
 
+    internal IReadOnlyList<RuntimeMutation> Mutations => _mutations?.Mutations ?? [];
+
     public bool HasChanges => _mutations is not null;
 
     /// <summary>Validates all captured mutations before the database operation begins.</summary>

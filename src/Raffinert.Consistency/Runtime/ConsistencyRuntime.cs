@@ -19,6 +19,15 @@ public sealed partial class ConsistencyRuntime
     }
 
     internal bool OwnsObjectSet(IObjectSetDefinition definition) => _sets.ContainsKey(definition);
+    internal bool IsRegistered(IObjectSetDefinition definition, object instance) =>
+        _sets.TryGetValue(definition, out var state) && state.Contains(instance);
+    internal bool HasRegisteredKey(IObjectSetDefinition definition, object instance)
+    {
+        if (!_sets.TryGetValue(definition, out var state))
+            throw new ArgumentException("The object set does not belong to this compiled model.", nameof(definition));
+        var key = definition.ReadKey(instance) ?? throw new InvalidOperationException("Object keys cannot be null.");
+        return state.RegisteredEntries.Any(entry => Equals(entry.Key, key));
+    }
     internal bool HasObjectSetForClrType(Type clrType)
     {
         ArgumentNullException.ThrowIfNull(clrType);

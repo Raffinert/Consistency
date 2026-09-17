@@ -207,7 +207,13 @@ public abstract class RuntimeMutation
 }
 
 /// <summary>Describes adding an object to a runtime object set.</summary>
-public sealed class ObjectAdded : RuntimeMutation
+internal interface IAddedMutation
+{
+    IObjectSetDefinition Set { get; }
+    object Instance { get; }
+}
+
+public sealed class ObjectAdded : RuntimeMutation, IAddedMutation
 {
     internal ObjectAdded(IObjectSetDefinition set, object instance)
     {
@@ -216,6 +222,21 @@ public sealed class ObjectAdded : RuntimeMutation
     }
 
     internal IObjectSetDefinition Set { get; }
+    public object Instance { get; }
+    IObjectSetDefinition IAddedMutation.Set => Set;
+    object IAddedMutation.Instance => Instance;
+}
+
+/// <summary>Internal operation-scoped admission of an existing persisted object for coverage planning.</summary>
+internal sealed class CoverageAdmission : RuntimeMutation, IAddedMutation
+{
+    internal CoverageAdmission(IObjectSetDefinition set, object instance)
+    {
+        Set = set;
+        Instance = instance;
+    }
+
+    public IObjectSetDefinition Set { get; }
     public object Instance { get; }
 }
 
@@ -247,6 +268,12 @@ public sealed class MutationSet
         if (mutations.Any(mutation => mutation is null))
             throw new ArgumentException("A mutation set cannot contain null mutations.", nameof(mutations));
         return new MutationSet(mutations.ToArray());
+    }
+
+    internal static MutationSet? Combine(IEnumerable<RuntimeMutation> mutations)
+    {
+        var values = mutations.ToArray();
+        return values.Length == 0 ? null : Create(values);
     }
 }
 

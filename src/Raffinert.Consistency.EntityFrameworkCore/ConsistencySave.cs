@@ -132,7 +132,7 @@ public static class ConsistencyDbContextExtensions
         var mutations = ChangeTrackerAdapter.CapturePolicyAwareSnapshot(
             context.ChangeTracker, mappings.UnitOfWorkMappings);
         return new ConsistencyPersistenceUnitOfWork(
-            context, runtime, mutations, snapshot, generatedValues);
+            context, runtime, mappings, mutations, snapshot, generatedValues);
     }
 
     public static int SaveChangesConsistently(this DbContext context, ConsistencyRuntime runtime,
@@ -150,7 +150,8 @@ public static class ConsistencyDbContextExtensions
         ConsistencyEfCoreMappings mappings, ConsistencySaveOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var pending = ConsistencyCoordinator.Prepare(context, runtime, mappings, options ?? new());
+        var pending = await ConsistencyCoordinator.PrepareAsync(
+            context, runtime, mappings, options ?? new(), cancellationToken).ConfigureAwait(false);
         var result = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         ConsistencyCoordinator.Complete(runtime, pending);
         return result;
@@ -180,8 +181,38 @@ internal static class ConsistencyCoordinator
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
             context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
-        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        var admissions = ExternalConsumerDiscovery.Discover(context, runtime, mappings, captured, options.Scope);
+        var unit = Combine(captured, admissions);
         var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);
         return new PendingConsistencySave(unit, plan);
     }
+
+    public static async Task<PendingConsistencySave> PrepareAsync(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        ConsistencyEfCoreMappings mappings,
+        ConsistencySaveOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
+        if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
+            throw new ConsistencyUnsupportedTransactionException();
+        context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings.UnitOfWorkMappings);
+        var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
+        var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
+            context, runtime, mappings, captured, cancellationToken, options.Scope).ConfigureAwait(false);
+        var unit = Combine(captured, admissions);
+        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(context, runtime, unit, policy);
+        return new PendingConsistencySave(unit, plan);
+    }
+
+    private static ConsistencyUnitOfWork Combine(
+        ConsistencyUnitOfWork captured,
+        IReadOnlyList<RuntimeMutation> admissions) =>
+        new(MutationSet.Combine(captured.Mutations.Concat(admissions)));
 }

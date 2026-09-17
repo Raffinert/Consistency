@@ -45,7 +45,13 @@ var unitRate = builder.Derived(associations)
 
 var mappings = new ConsistencyEfCoreMappings()
     .Map(associations)
-    .Materialize(unitRate, a => a.UnitRate);
+    .Materialize(unitRate, a => a.UnitRate)
+    .DiscoverConsumers(associations, a => a.SourceItem, (db, sources) =>
+        db.Set<Association>().Where(a => sources.Select(s => s.Id).Contains(a.SourceItemId))
+            .Include(a => a.SourceItem).Include(a => a.TargetItem))
+    .DiscoverConsumers(associations, a => a.TargetItem, (db, targets) =>
+        db.Set<Association>().Where(a => targets.Select(t => t.Id).Contains(a.TargetItemId))
+            .Include(a => a.SourceItem).Include(a => a.TargetItem));
 ```
 
 After an ordinary mutation, the EF adapter performs the consistent save:
@@ -69,7 +75,9 @@ await db.SaveChangesConsistentlyAsync(...);
 
 - The host still owns authoritative runtime coverage.
 - `new ConsistencyScope().Complete(associations)` is an assertion, not a database query.
-- Raffinert does not auto-load missing associations or endpoints.
+- For an active direct-navigation dependency, the EF persistence boundary can use a host-supplied
+  `DiscoverConsumers` query to resolve missing persisted consumers for the current target batch. The host
+  still owns query completeness and evaluation closure.
 - Database changes invisible to EF or Raffinert still require the documented reconciliation or rebuild boundary.
 - The calculator and business formula still exist and should remain explicit.
 - This example demonstrates dependency maintenance; it is not a generic replacement for repositories or querying.
@@ -85,6 +93,15 @@ not replace rich-domain modeling or event-driven integration.
 
 Run the [dependency-maintenance sample](../samples/Raffinert.Consistency.DependencyMaintenanceSample/Program.cs)
 to execute the SQLite scenarios and their self-verifying assertions.
+
+The incomplete-graph scenario starts with one association in the runtime and tracker. The handler changes
+only the shared source scalar; the registered EF resolvers batch-load the remaining persisted consumers at
+the save boundary. No handler-specific changed-ID collection or dependent-association query is required.
+
+External discovery is limited to the exact direct-navigation target batch requested by the current mutation.
+It does not make the complete association set authoritative: `ConsistencyScope.Complete(associations)` remains
+the closed-world alternative. Resolver completeness and the database read boundary remain host responsibilities,
+including the usual concurrency/isolation caveat for consumer membership changes made concurrently elsewhere.
 
 ## What the executable proves
 

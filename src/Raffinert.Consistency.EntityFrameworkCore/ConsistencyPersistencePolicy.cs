@@ -8,7 +8,8 @@ internal sealed record ConsistencyPersistencePolicySnapshot(
     IReadOnlySet<int> EnforcedInvariantIds,
     IReadOnlyList<ConsistencyEfCoreMappings.Materialization> Materializations,
     ConsistencySaveBehavior SaveBehavior,
-    RuntimeImpactDetailLevel DetailLevel);
+    RuntimeImpactDetailLevel DetailLevel,
+    ConsistencyScope? Scope);
 
 internal static class ConsistencyPersistencePolicyEngine
 {
@@ -25,7 +26,8 @@ internal static class ConsistencyPersistencePolicyEngine
             enforced,
             mappings.Materializations.ToArray(),
             options.SaveBehavior,
-            options.DetailLevel);
+            options.DetailLevel,
+            options.Scope);
     }
 
     public static PreparedImpactPlan? PrepareAndPlan(
@@ -214,6 +216,7 @@ public sealed class ConsistencyPersistenceUnitOfWork
 {
     private readonly DbContext _context;
     private readonly ConsistencyRuntime _runtime;
+    private readonly ConsistencyEfCoreMappings _mappings;
     private readonly CapturedEfMutationSnapshot _mutations;
     private readonly ConsistencyPersistencePolicySnapshot _policy;
     private readonly IReadOnlyList<GeneratedValueCandidate> _generatedValues;
@@ -223,12 +226,14 @@ public sealed class ConsistencyPersistenceUnitOfWork
     internal ConsistencyPersistenceUnitOfWork(
         DbContext context,
         ConsistencyRuntime runtime,
+        ConsistencyEfCoreMappings mappings,
         CapturedEfMutationSnapshot mutations,
         ConsistencyPersistencePolicySnapshot policy,
         IReadOnlyList<GeneratedValueCandidate> generatedValues)
     {
         _context = context;
         _runtime = runtime;
+        _mappings = mappings;
         _mutations = mutations;
         _policy = policy;
         _generatedValues = generatedValues;
@@ -248,7 +253,10 @@ public sealed class ConsistencyPersistenceUnitOfWork
         try
         {
             ConsistencyGeneratedValueGuard.RejectForManualPlan(_generatedValues);
-            _unit = _mutations.FinalizeForPlanning(_context, _generatedValues);
+            var captured = _mutations.FinalizeForPlanning(_context, _generatedValues);
+            var admissions = ExternalConsumerDiscovery.Discover(_context, _runtime, _mappings, captured, _policy.Scope);
+            _unit = new ConsistencyUnitOfWork(
+                MutationSet.Combine(captured.Mutations.Concat(admissions)));
             var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
                 _context, _runtime, _unit, _policy);
             _state = State.Planned;

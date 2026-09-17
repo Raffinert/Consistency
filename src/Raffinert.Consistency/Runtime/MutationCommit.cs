@@ -124,7 +124,7 @@ public sealed partial class ConsistencyRuntime
         IReadOnlyCollection<(IObjectSetDefinition Set, object Root)> navigationRoots,
         IRuntimePatchScope? scopeSource)
     {
-        var lifecycleSets = lifecycleMutations.Select(mutation => mutation is ObjectAdded added
+        var lifecycleSets = lifecycleMutations.Select(mutation => mutation is IAddedMutation added
             ? added.Set
             : ((ObjectRemoved)mutation).Set).ToHashSet();
         var affectedRelations = impact.AffectedRelations.ToHashSet();
@@ -134,7 +134,7 @@ public sealed partial class ConsistencyRuntime
             changes.Any(change => _navigation.IsIndexedNavigation(change.Member));
         var projectionChanged = lifecycleMutations.Any(mutation => mutation switch
             {
-                ObjectAdded added => _projections.IsDownstreamSet(added.Set),
+                IAddedMutation added => _projections.IsDownstreamSet(added.Set),
                 ObjectRemoved removed => _projections.IsDownstreamSet(removed.Set),
                 _ => false
             }) || changes.Any(change => change.Set is not null &&
@@ -154,13 +154,13 @@ public sealed partial class ConsistencyRuntime
             foreach (var mutation in lifecycleMutations)
                 switch (mutation)
                 {
-                    case ObjectAdded added when ReferenceEquals(added.Set, relation.LeftSet):
+                    case IAddedMutation added when ReferenceEquals(added.Set, relation.LeftSet):
                         touchedLefts.Add(added.Instance);
                         break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.LeftSet):
                         touchedLefts.Add(removed.Instance);
                         break;
-                    case ObjectAdded added when ReferenceEquals(added.Set, relation.RightSet):
+                    case IAddedMutation added when ReferenceEquals(added.Set, relation.RightSet):
                         touchedRights.Add(added.Instance);
                         break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.RightSet):
@@ -174,7 +174,7 @@ public sealed partial class ConsistencyRuntime
         }
         var touchedNavigationRoots = navigationRoots.Concat(lifecycleMutations.Select(mutation => mutation switch
         {
-            ObjectAdded added => (added.Set, added.Instance),
+            IAddedMutation added => (added.Set, added.Instance),
             ObjectRemoved removed => (removed.Set, removed.Instance),
             _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
         })).ToArray();
@@ -185,7 +185,7 @@ public sealed partial class ConsistencyRuntime
             set => set,
             set => _sets[set].CaptureEntriesState(lifecycleMutations.Select(mutation => mutation switch
             {
-                ObjectAdded added when ReferenceEquals(added.Set, set) => added.Instance,
+                IAddedMutation added when ReferenceEquals(added.Set, set) => added.Instance,
                 ObjectRemoved removed when ReferenceEquals(removed.Set, set) => removed.Instance,
                 _ => null
             }).OfType<object>())),
@@ -377,7 +377,7 @@ public sealed partial class ConsistencyRuntime
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
         foreach (var mutation in lifecycleMutations)
         {
-            if (mutation is ObjectAdded added)
+            if (mutation is IAddedMutation added)
                 CommitAdd(added, relationDeltas);
             else
                 CommitRemove((ObjectRemoved)mutation, relationDeltas);
@@ -833,7 +833,7 @@ public sealed partial class ConsistencyRuntime
     }
 
     private void CommitAdd(
-        ObjectAdded mutation,
+        IAddedMutation mutation,
         IDictionary<IRelationDefinition, RelationDelta> deltas)
     {
         var state = GetSet(mutation.Set);

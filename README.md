@@ -362,7 +362,9 @@ See the architecture and example documentation for the exact transaction boundar
 ### Dogfooding: dependency maintenance in an anemic model
 
 A domain-neutral SQLite example shows how changes to ordinary navigation targets identify affected associations,
-recalculate a derived `UnitRate`, and persist its mirror without hand-written invalidation/query orchestration.
+recalculate a derived `UnitRate`, and persist its mirror without handler-specific invalidation/query orchestration.
+The sample also demonstrates mutation-driven, batched external-consumer discovery for an intentionally incomplete
+operation graph; the host supplies the authoritative EF queries.
 See the [dogfooding explanation](docs/anemic-model-dependency-maintenance-example.md) and run the
 [dependency-maintenance sample](samples/Raffinert.Consistency.DependencyMaintenanceSample).
 

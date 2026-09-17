@@ -532,7 +532,7 @@ public sealed class PreparedMutation
         var simulated = new Dictionary<IObjectSetDefinition, PreparedSetState>();
         foreach (var mutation in LifecycleMutations)
         {
-            var set = mutation is ObjectAdded added ? added.Set : ((ObjectRemoved)mutation).Set;
+            var set = mutation is IAddedMutation added ? added.Set : ((ObjectRemoved)mutation).Set;
             if (!sets.TryGetValue(set, out var runtime))
                 throw new ArgumentException("The object set does not belong to this compiled model.");
             if (!simulated.TryGetValue(set, out var state))
@@ -540,7 +540,7 @@ public sealed class PreparedMutation
                 state = new PreparedSetState(runtime);
                 simulated.Add(set, state);
             }
-            if (mutation is ObjectAdded addition)
+            if (mutation is IAddedMutation addition)
                 state.Add(set, addition.Instance);
             else
                 state.Remove(((ObjectRemoved)mutation).Instance);

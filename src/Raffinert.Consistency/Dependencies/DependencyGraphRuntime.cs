@@ -191,7 +191,7 @@ internal sealed class DependencyGraphRuntime
                 .Concat(ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes))
                 .Concat(lifecycleMutations.Select(mutation => mutation switch
                 {
-                    ObjectAdded added when ReferenceEquals(added.Set, node.Relation.RightSet) => added.Instance,
+                    IAddedMutation added when ReferenceEquals(added.Set, node.Relation.RightSet) => added.Instance,
                     ObjectRemoved removed when ReferenceEquals(removed.Set, node.Relation.RightSet) =>
                         removed.Instance,
                     _ => null
@@ -251,7 +251,7 @@ internal sealed class DependencyGraphRuntime
             foreach (var mutation in lifecycleMutations)
                 switch (mutation)
                 {
-                    case ObjectAdded added when ReferenceEquals(added.Set, set):
+                    case IAddedMutation added when ReferenceEquals(added.Set, set):
                         sources.Add(added.Instance);
                         break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, set):
