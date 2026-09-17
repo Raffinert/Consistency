@@ -659,6 +659,165 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
     }
 
+    [Fact]
+    public void Supported_direct_navigation_with_exact_resolver_can_replace_navigation_complete_scope()
+    {
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(associations).DependsOn(x => x.Source.UnitValue)
+            .Compute(x => x.Source.UnitValue);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(associations)
+            .Materialize(value, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+
+        Assert.Empty(mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate));
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Supported_and_unsupported_navigation_on_same_set_remain_fail_closed()
+    {
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(associations)
+            .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Source.Parent!.UnitValue)
+            .Compute(x => x.Source.UnitValue + (x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue));
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(associations)
+            .Materialize(value, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.ObjectSetId == associations.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Upstream_derived_navigation_requirement_is_preserved()
+    {
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var upstream = model.Derived(associations).DependsOn(x => x.Source.Parent!.UnitValue)
+            .Compute(x => x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue);
+        var downstream = model.Derived(associations).Using(upstream)
+            .Compute((x, value) => x.Source.UnitValue + value);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(associations)
+            .Materialize(downstream, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.RequirementKind ==
+            ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void All_active_navigation_obligations_require_exact_resolvers()
+    {
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(associations)
+            .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
+            .Compute(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(associations)
+            .Materialize(value, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.RequirementKind ==
+            ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Same_CLR_type_in_two_ObjectSets_does_not_cross_satisfy_resolver()
+    {
+        var model = new ConsistencyModelBuilder();
+        var required = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var other = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var value = model.Derived(required).DependsOn(x => x.Source.UnitValue)
+            .Compute(x => x.Source.UnitValue);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(required).Map(other)
+            .Materialize(value, x => x.UnitRate)
+            .DiscoverConsumers(other, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.ObjectSetId == required.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.NavigationConsumerCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void RelationSourceCoverage_is_never_substituted_by_DiscoverConsumers()
+    {
+        var (runtime, mappings, associations, _) = CreateRelationScopeScenario();
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.ObjectSetId == associations.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.RelationSourceCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void RelationTargetCoverage_is_never_substituted_by_DiscoverConsumers()
+    {
+        var (runtime, mappings, _, targets) = CreateRelationScopeScenario();
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.ObjectSetId == targets.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.RelationTargetCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void ProjectedConsumerCoverage_is_never_substituted_by_DiscoverConsumers()
+    {
+        var model = new ConsistencyModelBuilder();
+        var targets = model.Objects<DiscoveryTarget>().Key(x => x.Id);
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var targetValue = model.Derived(targets).Compute(x => x.UnitValue);
+        var projected = model.Derived(associations).Using(x => x.Target, targetValue)
+            .Compute((_, value) => value);
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(targets).Map(associations)
+            .Materialize(projected, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Target, (db, _) => db.Set<DiscoveryAssociation>());
+
+        var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
+
+        Assert.Contains(gaps, gap => gap.ObjectSetId == associations.Definition.Id &&
+            gap.RequirementKind == ConsistencyScopeRequirementKind.ProjectedConsumerCoverage);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    private static (ConsistencyRuntime Runtime, ConsistencyEfCoreMappings Mappings,
+        ObjectSet<DiscoveryAssociation> Associations, ObjectSet<DiscoveryTarget> Targets)
+        CreateRelationScopeScenario()
+    {
+        var model = new ConsistencyModelBuilder();
+        var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
+        var targets = model.Objects<DiscoveryTarget>().Key(x => x.Id);
+        var relation = model.Relation(associations, targets).Where((left, right) => left.TargetId == right.Id);
+        var count = model.Derived(associations).Using(relation)
+            .Compute((source, rows) => rows.Count + (source.Source.UnitValue * 0m));
+        var runtime = model.Build().CreateRuntime();
+        var mappings = new ConsistencyEfCoreMappings().Map(associations).Map(targets)
+            .Materialize(count, x => x.UnitRate)
+            .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
+        return (runtime, mappings, associations, targets);
+    }
+
     private sealed class DiscoveryFixture : IDisposable
     {
         private readonly SqliteConnection _connection;
@@ -803,7 +962,12 @@ public sealed class ExternalConsumerDiscoveryTests
         }
     }
 
-    private sealed class DiscoverySource { public int Id { get; set; } public decimal UnitValue { get; set; } }
+    private sealed class DiscoverySource
+    {
+        public int Id { get; set; }
+        public decimal UnitValue { get; set; }
+        public DiscoverySource? Parent { get; set; }
+    }
     private sealed class DiscoveryTarget { public int Id { get; set; } public decimal UnitValue { get; set; } }
     private sealed class DiscoveryAssociation
     {
