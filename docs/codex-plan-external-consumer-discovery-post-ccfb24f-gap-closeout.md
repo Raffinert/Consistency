@@ -968,3 +968,47 @@ When Tasks 237–243 are complete, the claim should be supportable that:
 > External consumer discovery for the supported direct-reference-navigation case is operation-scoped, structurally atomic, exact-ObjectSet-aware, ChangeTracker-overlay-aware, correctly batched, fail-closed outside its supported coverage boundary, retry-safe across persistence failure, compatible with manual persistence units of work, and does not confuse structural baseline admission with domain lifecycle addition.
 
 Anything weaker means the plan is still active.
+
+---
+
+# 5. Completion log and requirement-to-test audit
+
+Implementation checkpoints:
+
+| Task | Commit |
+|---|---|
+| 237 | `cbe5387e1318be66548c50b99aaffbc4c23c91f1` |
+| 238 | `eba8ec9d43a9f26d04fabb77cd80659945219008` |
+| 239 | `159e3d2ce13e96f106c13345aa21fd188b01008d` |
+| 240 | `fcd5eb1960b4a5c46a955334405f980b3b12fe41` |
+| 241 | `ed383a919ca0a41fe75a2c00a59de265de4cbf5a` |
+
+All tests below are in `CoverageAdmissionPlanningTests` or `ExternalConsumerDiscoveryTests`.
+
+| Contract item | Exact test method / equivalent proof |
+|---|---|
+| relation-right admission dependency snapshot | `Coverage_admission_on_relation_right_captures_affected_left_dependency_state` |
+| relation-right planning rollback | `Coverage_admission_on_relation_right_planning_restores_primed_derived_state` and `Coverage_admission_on_relation_right_planning_restores_primed_invariant_state` |
+| relation-right exact install without semantic add | `Coverage_admission_on_relation_right_exact_install_rebases_derived_without_semantic_add` |
+| duplicate key across resolver instances | `Different_instances_with_same_runtime_key_across_resolvers_fail_closed` |
+| fully loaded evaluation closure | `All_required_references_loaded_and_tracked_pass` |
+| exact ObjectSet/navigation closure | `Evaluation_closure_uses_exact_ObjectSet_and_navigation_metadata` |
+| policy activation | `Validate_ignores_materialization_only_discovery`, `RecalculateAndValidate_activates_materialization_discovery`, and `Enforced_invariant_uses_discovery_in_Validate` cover each active save policy |
+| supported direct-navigation substitution | `Supported_direct_navigation_with_exact_resolver_can_replace_navigation_complete_scope` |
+| unsupported obligation fail-closed | `Supported_and_unsupported_navigation_on_same_set_remain_fail_closed`, `Upstream_derived_navigation_requirement_is_preserved`, and `All_active_navigation_obligations_require_exact_resolvers` |
+| relation/projected coverage non-substitution | `RelationSourceCoverage_is_never_substituted_by_DiscoverConsumers`, `RelationTargetCoverage_is_never_substituted_by_DiscoverConsumers`, and `ProjectedConsumerCoverage_is_never_substituted_by_DiscoverConsumers` |
+| retargeted away | `Retargeted_away_consumer_is_excluded` |
+| retargeted in | `Retargeted_in_registered_consumer_is_included` |
+| known tracked Deleted exclusion | `Tracked_Deleted_consumer_is_excluded` |
+| unknown Modified/Deleted fail-closed | `Unknown_existing_Modified_consumer_fails_closed` and `Unknown_existing_Deleted_consumer_fails_closed` |
+| batching per navigation | `Two_changed_members_same_target_same_navigation_one_resolver_call` and `Source_and_Target_changes_one_call_per_navigation` |
+| target input dedupe | `Same_target_reference_is_deduplicated_within_batch` |
+| wrong ObjectSet resolver | `Wrong_exact_ObjectSet_mapping_fails` and `Same_CLR_type_in_two_ObjectSets_does_not_cross_satisfy_resolver` |
+| missing resolver | `Missing_required_resolver_fails_before_sql` |
+| safe superset filtering | `Safe_resolver_superset_is_filtered` |
+| AsNoTracking/detached failure | `AsNoTracking_or_detached_return_fails` and `Non_null_detached_required_reference_fails_before_sql` |
+| SQL failure rollback | `Discovery_SQL_failure_restores_runtime_and_framework_materialization` |
+| same-context retry | `Discovery_SQL_failure_can_retry_with_same_DbContext` |
+| cancellation | `Discovery_cancellation_before_durability_leaves_runtime_and_materialization_unchanged` |
+| manual UoW discovery | `Manual_UoW_discovery_plan_is_live_state_neutral_until_database_commit` and `Manual_UoW_discovery_rejects_stale_plan_after_database_commit` |
+| later open-world discovery | `Later_open_world_save_reruns_consumer_resolver` |
