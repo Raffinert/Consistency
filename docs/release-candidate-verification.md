@@ -186,23 +186,24 @@ Verified implementation head: `e3d050fa0fe6a62422da1ce261f4183bf66e347e`
 
 Remote CI and release-candidate workflows remain pending for this implementation head.
 
-## Post-`ccfb24f` external-consumer-discovery gap closeout
+## External consumer discovery final verified baseline
 
 Verification date: 2026-09-17
 
-Verified implementation head before closeout documentation: `ed383a919ca0a41fe75a2c00a59de265de4cbf5a`
+Verified feature baseline: `197913a329f6de006798d89b4bfb3eb428de99e9`
 
-- CI run: [35216322587](https://github.com/Raffinert/Consistency/actions/runs/35216322587) — success
-  (2026-09-17 11:33:35–11:38:53 UTC).
+- CI run: [35216826855](https://github.com/Raffinert/Consistency/actions/runs/35216826855) / #288 — success.
 - Core tests: 319 passed on .NET 8 and 319 passed on .NET 10.
 - EF Core and SQLite tests: 176 passed on .NET 10.
 - Both existing samples and the dependency-maintenance dogfood sample passed.
 - Formatting verification, package creation, fresh packed consumers, and artifact upload passed.
 - Public API baselines remained unchanged; the only new assembly access is internal test visibility.
 
-This run verifies relation-right structural admission snapshot/rebasing without semantic add output, exact
-ObjectSet-aware discovery identity and closure, policy/scope substitution boundaries, ChangeTracker overlay
-and batching behavior, SQL-failure rollback, cancellation, retry, and manual persistence UoW discovery.
+This exact-head run verifies the complete repository pipeline: restore, build, Core .NET 8 and .NET 10 tests,
+EF .NET 10 tests, samples/dogfood, format verification, pack, packed-package smoke tests, and artifact upload.
+The baseline verifies relation-right structural admission snapshot/rebasing without semantic add output,
+exact ObjectSet-aware discovery identity and closure, policy/scope substitution boundaries, ChangeTracker
+overlay and batching behavior, SQL-failure rollback, cancellation, retry, and manual persistence UoW discovery.
 No package was published, and no tag or GitHub release was created.
 
 ## Dependency-maintenance dogfooding example (local-only)

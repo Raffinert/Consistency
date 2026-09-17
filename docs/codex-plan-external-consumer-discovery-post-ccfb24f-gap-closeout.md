@@ -1,6 +1,12 @@
 # Codex implementation plan — post-`ccfb24f` external-consumer-discovery gap closeout
 
-Status: **ACTIVE FOLLOW-UP PLAN**
+Status: **COMPLETED**
+
+Completion: Tasks 237–241 implemented and proved the remaining contracts, Task 242 recorded the
+requirement-to-test audit and release evidence, and Task 243 is satisfied by verified feature baseline
+`197913a329f6de006798d89b4bfb3eb428de99e9` and exact-head CI run #288 / `35216826855`. Any later commit
+created solely to clean documentation is not a new implementation baseline and does not require writing
+its own SHA back into this document.
 
 Verified remote baseline: `ccfb24fd485488d5680271545232e7ed6f26f031`
 

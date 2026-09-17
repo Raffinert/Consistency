@@ -1,6 +1,11 @@
 # Codex implementation plan — external consumer discovery final documentation closeout
 
-Status: **ACTIVE DOCS-ONLY CLOSEOUT PLAN**
+Status: **COMPLETED**
+
+Completion: Tasks 244–246 closed the release evidence, roadmap state, and prior plan status using verified
+feature baseline `197913a329f6de006798d89b4bfb3eb428de99e9` and exact-head CI run #288 / `35216826855`.
+The documentation-only closeout commit is reported externally and is not written back here, avoiding a
+self-referential SHA sequence.
 
 Baseline repository head reviewed: `197913a329f6de006798d89b4bfb3eb428de99e9`
 
