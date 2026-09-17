@@ -2,7 +2,11 @@
 
 Status: **ACTIVE RELEASE-PREP PLAN**
 
-Baseline reviewed for this plan: `e0e23bda398871bfd46c6e920917c31506d27504`
+Baseline reviewed for this plan: `163d57a78bbdb49df22f42337d6c253b6147e005`
+
+The plan was authored at `e0e23bda398871bfd46c6e920917c31506d27504`. Intervening commits add or update
+documentation and make the dependency-maintenance sample explicitly asynchronous; no library, test, public
+API, package, or runtime behavior changed. The RC verification must therefore run against the current head.
 
 Target release: **`0.1.0-rc.1`**
 
