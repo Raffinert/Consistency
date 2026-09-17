@@ -12,12 +12,12 @@ RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 1m), "maximum 
 RequireEqual(null, UnitRateCalculator.Calculate(decimal.MaxValue, 0.1m), "division overflow");
 
 await using var connection = new SqliteConnection("Data Source=:memory:");
-connection.Open();
+await connection.OpenAsync();
 var options = new DbContextOptionsBuilder<DependencyMaintenanceContext>()
     .UseSqlite(connection)
     .Options;
 await using var context = new DependencyMaintenanceContext(options);
-context.Database.EnsureCreated();
+await context.Database.EnsureCreatedAsync();
 
 var sourceA = new SourceItem { Id = 1, UnitValue = 12m };
 var sourceB = new SourceItem { Id = 2, UnitValue = 30m };
@@ -28,7 +28,7 @@ var associationB = new Association { Id = 101, SourceItem = sourceA, TargetItem 
 associationA.UnitRate = UnitRateCalculator.Calculate(sourceA.UnitValue, targetA.UnitValue);
 associationB.UnitRate = UnitRateCalculator.Calculate(sourceA.UnitValue, targetB.UnitValue);
 context.AddRange(sourceA, sourceB, targetA, targetB, associationA, associationB);
-context.SaveChanges();
+await context.SaveChangesAsync();
 
 var builder = new ConsistencyModelBuilder();
 
@@ -58,13 +58,13 @@ var expectedVersion = 0L;
 
 // A shared source mutation fans out to both associations.
 sourceA.UnitValue = 20m;
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 5m), (associationB, 4.0m));
 
 // A target mutation remains selective to its consumers.
 targetA.UnitValue = 10m;
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 2m), (associationB, 4.0m));
 
@@ -72,23 +72,23 @@ SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
 associationB.SourceItem = sourceB;
 context.ChangeTracker.DetectChanges();
 RequireEqual(sourceB.Id, associationB.SourceItemId, "relationship fixup");
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 2m), (associationB, 6m));
 
 sourceA.UnitValue = 25m;
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 2.5m), (associationB, 6m));
 
 sourceB.UnitValue = null;
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 2.5m), (associationB, null));
 
 sourceB.UnitValue = 30m;
 targetB.UnitValue = 0m;
-SaveAndVerify(context, runtime, mappings, saveOptions, unitRate,
+await SaveAndVerifyAsync(context, runtime, mappings, saveOptions, unitRate,
     expectedVersion: ++expectedVersion,
     (associationA, 2.5m), (associationB, null));
 
@@ -110,7 +110,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
         .Options;
     await using (var seed = new DependencyMaintenanceContext(options))
     {
-        seed.Database.EnsureCreated();
+        await seed.Database.EnsureCreatedAsync();
         var source = new SourceItem { Id = 50, UnitValue = 100m };
         var targetA = new TargetItem { Id = 60, UnitValue = 50m };
         var targetB = new TargetItem { Id = 61, UnitValue = 25m };
@@ -122,7 +122,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
         second.UnitRate = UnitRateCalculator.Calculate(source.UnitValue, targetB.UnitValue);
         third.UnitRate = UnitRateCalculator.Calculate(source.UnitValue, targetC.UnitValue);
         seed.AddRange(source, targetA, targetB, targetC, first, second, third);
-        seed.SaveChanges();
+        await seed.SaveChangesAsync();
     }
 
     await using var context = new DependencyMaintenanceContext(options);
@@ -189,7 +189,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
     }
 }
 
-static void SaveAndVerify(
+static async Task SaveAndVerifyAsync(
     DependencyMaintenanceContext context,
     ConsistencyRuntime runtime,
     ConsistencyEfCoreMappings mappings,
@@ -198,14 +198,14 @@ static void SaveAndVerify(
     long expectedVersion,
     params (Association Association, decimal? Expected)[] expected)
 {
-    context.SaveChangesConsistently(runtime, mappings, options);
+    await context.SaveChangesConsistentlyAsync(runtime, mappings, options);
     RequireEqual(expectedVersion, runtime.Version, "runtime version");
 
     foreach (var (association, value) in expected)
     {
         RequireEqual(value, association.UnitRate, $"tracked UnitRate for {association.Id}");
         RequireEqual(value, runtime.Get(unitRate, association), $"runtime UnitRate for {association.Id}");
-        using var verification = new DependencyMaintenanceContext(context.Database.GetDbConnection());
+        await using var verification = new DependencyMaintenanceContext(context.Database.GetDbConnection());
         var persisted = verification.Set<Association>().AsNoTracking().Single(x => x.Id == association.Id);
         RequireEqual(value, persisted.UnitRate, $"persisted UnitRate for {association.Id}");
     }
