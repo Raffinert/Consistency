@@ -20,6 +20,8 @@ This skill is intentionally consumer-only.
 
 If the current repository is `Raffinert/Consistency` itself and the task asks to change runtime/compiler/adapter internals, do not use this skill as an implementation guide. Use the library's contributor/architecture documentation instead.
 
+All examples in this skill are deliberately domain-neutral. Rename the neutral types to match the consumer application's actual ubiquitous language.
+
 ---
 
 # 1. Mental model
@@ -77,17 +79,17 @@ First inspect the downstream repository and identify:
 
 Write down the dependency chain before coding.
 
-Example:
+Neutral example:
 
 ```text
-InvoiceLine.UnitPrice
-PurchaseOrderLine.UnitPrice
+SourceItem.Value
+TargetItem.Value
         ↓
-PurchaseOrderInvoiceLine.PriceRate
+Association.CombinedValue
         ↓
-UnitRate
+NormalizedValue
         ↓
-link validity invariant
+validity invariant
 ```
 
 If you cannot state the dependency chain clearly, do not guess the Raffinert configuration yet.
@@ -103,7 +105,7 @@ Use this decision order.
 Create an `ObjectSet<T>` for objects whose identity/lifecycle or derived/invariant state Raffinert owns.
 
 ```csharp
-var lines = model.Objects<Line>()
+var records = model.Objects<Record>()
     .Key(x => x.Id);
 ```
 
@@ -111,15 +113,15 @@ Use a stable application key.
 
 Do not use a mutable semantic field as the Raffinert identity.
 
-Do not create unnecessary object sets merely because a nested navigation target is read. A tracked nested target can supply scalar dependency changes without being its own mapped Raffinert set unless its lifecycle/own consistency state needs to be modeled.
+Do not create unnecessary object sets merely because a nested navigation target is read. A tracked nested target can supply scalar dependency changes without being its own mapped Raffinert set unless its lifecycle or own consistency state needs to be modeled.
 
 ## 3.2 Source-local derived value
 
 If the value depends only on properties reachable from the source and no set/relation aggregation is required:
 
 ```csharp
-var gross = model.Derived(lines)
-    .Compute(line => line.Quantity * line.UnitPrice);
+var total = model.Derived(records)
+    .Compute(record => record.Quantity * record.UnitValue);
 ```
 
 Prefer an analyzable expression when practical.
@@ -129,14 +131,19 @@ Prefer an analyzable expression when practical.
 When a source depends on a set of matching objects, define the relation explicitly.
 
 ```csharp
-var matches = model.Relation(orderLines, receipts)
-    .Where((line, receipt) => line.OrderNumber == receipt.OrderNumber &&
-                              line.LineNumber == receipt.LineNumber);
+var containers = model.Objects<Container>()
+    .Key(x => x.Id);
 
-var received = model.Derived(orderLines)
-    .Using(matches)
+var contributions = model.Objects<Contribution>()
+    .Key(x => x.Id);
+
+var contributionsForContainer = model.Relation(containers, contributions)
+    .Where((container, contribution) => container.Id == contribution.ContainerId);
+
+var usedCapacity = model.Derived(containers)
+    .Using(contributionsForContainer)
     .Incrementally()
-    .Compute((line, related) => related.Sum(x => x.Quantity));
+    .Compute((container, related) => related.Sum(x => x.Amount));
 ```
 
 The relation predicate is semantic authority. Do not duplicate the matching rule in application services after introducing the relation.
@@ -146,22 +153,24 @@ The relation predicate is semantic authority. Do not duplicate the matching rule
 When one derived value depends on another:
 
 ```csharp
-var remaining = model.Derived(orderLines)
-    .Using(received)
-    .Compute((line, value) => line.OrderedQuantity - value);
+var remainingCapacity = model.Derived(containers)
+    .Using(usedCapacity)
+    .Compute((container, used) => container.Capacity - used);
 ```
 
-Do not manually recompute `remaining` after `received` changes.
+Do not manually recompute `remainingCapacity` after `usedCapacity` changes.
 
 ## 3.5 Projected upstream dependency
 
 When a source consumes a derived value belonging to a referenced object:
 
 ```csharp
-var allocationValid = model.Derived(allocations)
-    .Using(a => a.OrderLine, remaining)
-    .Compute((allocation, remainingQuantity) =>
-        allocation.Quantity <= remainingQuantity);
+var assignments = model.Objects<Assignment>()
+    .Key(x => x.Id);
+
+var assignmentValid = model.Derived(assignments)
+    .Using(x => x.Container, remainingCapacity)
+    .Compute((assignment, remaining) => assignment.Amount <= remaining);
 ```
 
 Treat projected dependencies as requiring authoritative consumer coverage. `DiscoverConsumers` does not substitute projected-consumer completeness in the current supported version.
@@ -171,12 +180,12 @@ Treat projected dependencies as requiring authoritative consumer coverage. `Disc
 If the computation must call opaque/application code that Raffinert cannot analyze, declare every hidden source-member dependency explicitly:
 
 ```csharp
-var unitRate = model.Derived(associations)
-    .DependsOn(x => x.Source.UnitValue)
-    .DependsOn(x => x.Target.UnitValue)
-    .Compute(x => UnitRateCalculator.Calculate(
-        x.Source.UnitValue,
-        x.Target.UnitValue));
+var combinedValue = model.Derived(associations)
+    .DependsOn(x => x.Source.Value)
+    .DependsOn(x => x.Target.Value)
+    .Compute(x => ValueCalculator.Calculate(
+        x.Source.Value,
+        x.Target.Value));
 ```
 
 `DependsOn(...)` is a correctness assertion by the application author.
@@ -193,9 +202,9 @@ Rules:
 Use an invariant when a correctness rule consumes direct or derived state.
 
 ```csharp
-var enoughQuantity = model.Invariant(lines)
-    .Using(availableQuantity)
-    .Must((line, available) => line.Quantity <= available);
+var capacityValid = model.Invariant(containers)
+    .Using(remainingCapacity)
+    .Must((container, remaining) => remaining >= 0);
 ```
 
 An invariant does not automatically block SQL. EF persistence blocks only invariants explicitly configured with `.Enforce(...)`.
@@ -207,13 +216,13 @@ If subtractive or destructive changes make stale state unsafe, configure impact 
 Example shape:
 
 ```csharp
-var fulfilled = model.Derived(orderLines)
-    .Using(fulfillments)
+var usedCapacity = model.Derived(containers)
+    .Using(contributionsForContainer)
     .Impact(policy => policy
         .MembershipAdded(DependencySeverity.Dirty)
         .MembershipRemoved(DependencySeverity.Invalid)
         .ItemChanged(DependencySeverity.Invalid))
-    .Compute((line, related) => related.Sum(x => x.Quantity));
+    .Compute((container, related) => related.Sum(x => x.Amount));
 ```
 
 Use `Invalid` only when the stale value must not be relied upon before repair/recomputation.
@@ -230,7 +239,7 @@ Conceptual shape:
 public sealed class ConsistencyDefinition
 {
     public ObjectSet<Association> Associations { get; }
-    public Derived<Association, decimal?> UnitRate { get; }
+    public Derived<Association, decimal?> CombinedValue { get; }
     public CompiledConsistencyModel Compiled { get; }
     public ConsistencyEfCoreMappings EfMappings { get; }
 
@@ -241,18 +250,18 @@ public sealed class ConsistencyDefinition
         Associations = model.Objects<Association>()
             .Key(x => x.Id);
 
-        UnitRate = model.Derived(Associations)
-            .DependsOn(x => x.Source.UnitValue)
-            .DependsOn(x => x.Target.UnitValue)
-            .Compute(x => UnitRateCalculator.Calculate(
-                x.Source.UnitValue,
-                x.Target.UnitValue));
+        CombinedValue = model.Derived(Associations)
+            .DependsOn(x => x.Source.Value)
+            .DependsOn(x => x.Target.Value)
+            .Compute(x => ValueCalculator.Calculate(
+                x.Source.Value,
+                x.Target.Value));
 
         Compiled = model.Build();
 
         EfMappings = new ConsistencyEfCoreMappings()
             .Map(Associations)
-            .Materialize(UnitRate, x => x.UnitRate);
+            .Materialize(CombinedValue, x => x.CombinedValue);
     }
 }
 ```
@@ -273,8 +282,8 @@ Use `ConsistencyEfCoreMappings` for persistence policy.
 
 ```csharp
 var mappings = new ConsistencyEfCoreMappings()
-    .Map(lines)
-    .Map(allocations);
+    .Map(containers)
+    .Map(contributions);
 ```
 
 `Map(set)` means:
@@ -290,7 +299,7 @@ Never treat `Map(...)` as completeness proof.
 ## 5.2 Enforce invariant
 
 ```csharp
-mappings.Enforce(enoughQuantity);
+mappings.Enforce(capacityValid);
 ```
 
 Only explicitly enforced invariant violations block persistence.
@@ -298,7 +307,7 @@ Only explicitly enforced invariant violations block persistence.
 ## 5.3 Materialize derived value
 
 ```csharp
-mappings.Materialize(availableQuantity, x => x.AvailableQuantity);
+mappings.Materialize(combinedValue, x => x.CombinedValue);
 ```
 
 A materialized property is a persisted **sink-only mirror**.
@@ -335,10 +344,27 @@ Use it only when the application genuinely knows that every relevant object in t
 
 Use targeted external consumer discovery when:
 
-- a derived/invariant reads a direct reference path such as `Association.Source.UnitValue`;
-- `Source.UnitValue` can change while some `Association` consumers are not loaded;
+- a derived/invariant reads a direct reference path such as `Association.Source.Value`;
+- `Source.Value` can change while some `Association` consumers are not loaded;
 - the application can query every authoritative `Association` whose `Source` is one of the changed targets;
 - the path is a supported direct non-collection EF reference navigation.
+
+Neutral domain:
+
+```csharp
+public sealed class Association
+{
+    public Guid Id { get; set; }
+
+    public Guid SourceId { get; set; }
+    public required SourceItem Source { get; set; }
+
+    public Guid TargetId { get; set; }
+    public required TargetItem Target { get; set; }
+
+    public decimal? CombinedValue { get; set; }
+}
+```
 
 Example:
 
@@ -545,15 +571,15 @@ all mutation paths
 
 ## Step 2 — design the Raffinert graph on paper
 
-Produce a compact chain such as:
+Produce a compact neutral chain such as:
 
 ```text
-PO Line.UnitPrice
-InvoiceLine.UnitPrice
+SourceItem.Value
+TargetItem.Value
         ↓
-Association.PriceRate
+Association.CombinedValue
         ↓
-UnitRate
+NormalizedValue
         ↓
 Invariant
 ```
@@ -585,7 +611,7 @@ If neither is possible, do not generate unsafe code. Report the unsupported boun
 
 ## Step 4 — implement declarations
 
-Add/extend the application's composition code with:
+Add or extend the application's composition code with:
 
 ```text
 ObjectSet declarations
@@ -614,6 +640,7 @@ After Raffinert covers the rule and tests prove it, delete old code that manuall
 collects changed IDs
 queries affected consumers
 unions tracked consumers
+loads missing references
 recalculates mirrors
 invalidates dependent state
 ```
@@ -658,7 +685,7 @@ Do not use `AsNoTracking()` inside the discovery resolver itself.
 
 # 14. Anti-patterns — do not generate these
 
-Never solve an integration problem by doing any of the following without a proven domain reason:
+Never solve an integration problem by doing any of the following without a proven application reason:
 
 ```text
 scope.Complete(set) just to silence an exception
@@ -721,7 +748,7 @@ Before reporting the task complete, answer all of these from the actual code:
 [ ] Does every relevant save path go through a correct Raffinert persistence boundary?
 [ ] Are database-side invisible mutation paths accounted for?
 [ ] Does failure before DB durability leave runtime uncommitted?
-[ ] Do tests include unloaded consumers when production can have unloaded consumers?
+[ ] Do tests include unloaded consumers when the application can have unloaded consumers?
 [ ] Is persisted state verified independently after success?
 ```
 
@@ -733,7 +760,7 @@ If any answer is unknown, the implementation is not complete.
 
 Use these when a concrete pattern is needed:
 
-- `references/recipes.md` — consumer code recipes for common modeling/persistence cases.
+- `references/recipes.md` — domain-neutral consumer code recipes for common modeling/persistence cases.
 - `references/verification.md` — test and review checklist for generated integrations.
 
 Prefer these consumer recipes over copying Raffinert's internal test seams or internal runtime types.
