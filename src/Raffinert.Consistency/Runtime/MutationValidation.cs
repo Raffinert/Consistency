@@ -15,7 +15,8 @@ public sealed partial class ConsistencyRuntime
         var lifecycle = mutations.Where(mutation => mutation is ObjectAdded or ObjectRemoved).ToArray();
         var coverageAdmissions = mutations.OfType<CoverageAdmission>().ToArray();
         var simulations = new Dictionary<IObjectSetDefinition, ObjectSetSimulation>();
-        foreach (var mutation in lifecycle.Cast<RuntimeMutation>().Concat(coverageAdmissions))
+        var structuralMutations = MutationCollections.BuildStructuralMutations(lifecycle, coverageAdmissions);
+        foreach (var mutation in structuralMutations)
         {
             var set = mutation switch
             {
@@ -37,7 +38,6 @@ public sealed partial class ConsistencyRuntime
                 simulation.Remove(((ObjectRemoved)mutation).Instance);
         }
 
-        var structuralMutations = lifecycle.Cast<RuntimeMutation>().Concat(coverageAdmissions).ToArray();
         var structuralTargets = structuralMutations.Select(mutation => mutation switch
         {
             ObjectAdded added => new SetInstance(added.Set, added.Instance),
@@ -76,7 +76,7 @@ public sealed partial class ConsistencyRuntime
                 MutationOriginKind.CollectionChanged, change.Set, change.Owner, change.Member,
                 null, null, change.Kind, change.Item)))
             .ToArray();
-        return new ValidatedMutationBatch(lifecycle, coverageAdmissions, changes, provenance);
+        return new ValidatedMutationBatch(lifecycle, coverageAdmissions, structuralMutations, changes, provenance);
     }
 
     private PropertyChange ValidateBatchChange(
@@ -297,9 +297,18 @@ public sealed partial class ConsistencyRuntime
     private sealed record ValidatedMutationBatch(
         IReadOnlyList<RuntimeMutation> LifecycleMutations,
         IReadOnlyList<CoverageAdmission> CoverageAdmissions,
+        IReadOnlyList<RuntimeMutation> StructuralMutations,
         IReadOnlyList<PropertyChange> Changes,
         IReadOnlyList<NormalizedMutationProvenance> Provenance);
 
+}
+
+internal static class MutationCollections
+{
+    internal static IReadOnlyList<RuntimeMutation> BuildStructuralMutations(
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<CoverageAdmission> coverageAdmissions) =>
+        coverageAdmissions.Cast<RuntimeMutation>().Concat(lifecycleMutations).ToArray();
 }
 
 internal sealed record NormalizedMutationProvenance(

@@ -167,7 +167,7 @@ internal sealed class DependencyGraphRuntime
 
     public object CaptureState(
         ResolvedChangeImpact impact,
-        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<RuntimeMutation> structuralMutations,
         IReadOnlyList<PropertyChange> changes,
         object? previousState = null)
     {
@@ -189,7 +189,7 @@ internal sealed class DependencyGraphRuntime
             derivedSources[node].UnionWith(impact.GetAffectedRoots(node.Relation, node.Relation.LeftSet));
             var rights = impact.GetAffectedRoots(node.Relation, node.Relation.RightSet)
                 .Concat(ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes))
-                .Concat(lifecycleMutations.Select(mutation => mutation switch
+                .Concat(structuralMutations.Select(mutation => mutation switch
                 {
                     IAddedMutation added when ReferenceEquals(added.Set, node.Relation.RightSet) => added.Instance,
                     ObjectRemoved removed when ReferenceEquals(removed.Set, node.Relation.RightSet) =>
@@ -248,7 +248,7 @@ internal sealed class DependencyGraphRuntime
 
         void AddLifecycleSources(IObjectSetDefinition set, HashSet<object> sources)
         {
-            foreach (var mutation in lifecycleMutations)
+            foreach (var mutation in structuralMutations)
                 switch (mutation)
                 {
                     case IAddedMutation added when ReferenceEquals(added.Set, set):

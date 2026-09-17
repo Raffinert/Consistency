@@ -628,6 +628,7 @@ public sealed partial class ConsistencyRuntime
             Version,
             batch.LifecycleMutations,
             batch.CoverageAdmissions,
+            batch.StructuralMutations,
             batch.Changes,
             batch.Provenance,
             batch.Changes.Select(PreparedDomainAssumption.Capture).ToArray());

@@ -1,2 +1,1 @@
 #nullable enable
-Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings.DiscoverConsumers<TRoot, TTarget>(Raffinert.Consistency.ObjectSet<TRoot!>! roots, System.Linq.Expressions.Expression<System.Func<TRoot!, TTarget?>!>! navigation, System.Func<Microsoft.EntityFrameworkCore.DbContext!, System.Collections.Generic.IReadOnlyCollection<TTarget!>!, System.Linq.IQueryable<TRoot!>!>! query) -> Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings!

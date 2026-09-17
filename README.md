@@ -368,6 +368,13 @@ operation graph; the host supplies the authoritative EF queries.
 See the [dogfooding explanation](docs/anemic-model-dependency-maintenance-example.md) and run the
 [dependency-maintenance sample](samples/Raffinert.Consistency.DependencyMaintenanceSample).
 
+`DiscoverConsumers` provides operation-scoped targeted consumer coverage; it does not make an object set complete.
+The resolver owns query completeness and must load every reference required to evaluate the discovered consumer.
+Raffinert does not invent queries or `Include` paths. Unsupported navigation shapes remain fail-closed and require
+`ConsistencyScope.Complete(set)`. `CoverageAdmission` is structural baseline knowledge, not a domain
+`ObjectAdded`; invisible database mutations and query concurrency remain host/database responsibilities and may
+require later reconciliation, rebuild, or publication.
+
 ## Exact vs conservative propagation
 
 Reusable calculation methods can hide source dependencies from expression analysis. For source-derived values,

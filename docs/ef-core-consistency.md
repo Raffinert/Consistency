@@ -92,6 +92,14 @@ When `Product.Price` changes, reverse navigation must discover every consuming l
 does not need completeness merely for that path; the risk is a missing line owner, so `lines` receives
 `NavigationConsumerCoverage`.
 
+For an eligible direct reference-navigation dependency, `DiscoverConsumers` is an operation-scoped, targeted
+alternative to completing the consumer set. It does not make that object set complete, and the resolver remains
+responsible for returning a complete query result and loading every reference needed for evaluation. Raffinert does
+not generate queries or `Include` paths; unsupported navigation shapes remain fail-closed and require
+`ConsistencyScope.Complete(set)`. Discovered existing roots are recorded as structural `CoverageAdmission`, not
+domain `ObjectAdded` mutations. Database/query isolation and concurrency remain host responsibilities, and database
+changes invisible to EF or Raffinert require later reconciliation, rebuild, or publication.
+
 ## Materialization contract
 
 A materialized target is a persisted mirror, never an input to the consistency graph. Configuration rejects

@@ -489,6 +489,7 @@ public sealed class PreparedMutation
         long baseVersion,
         IReadOnlyList<RuntimeMutation> lifecycleMutations,
         IReadOnlyList<CoverageAdmission> coverageAdmissions,
+        IReadOnlyList<RuntimeMutation> structuralMutations,
         IReadOnlyList<PropertyChange> changes,
         IReadOnlyList<NormalizedMutationProvenance> provenance,
         IReadOnlyList<PreparedDomainAssumption> domainAssumptions)
@@ -497,6 +498,7 @@ public sealed class PreparedMutation
         BaseVersion = baseVersion;
         LifecycleMutations = lifecycleMutations;
         CoverageAdmissions = coverageAdmissions;
+        StructuralMutations = structuralMutations;
         Changes = changes;
         Provenance = provenance;
         DomainAssumptions = domainAssumptions;
@@ -505,8 +507,7 @@ public sealed class PreparedMutation
     internal ConsistencyRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
     internal IReadOnlyList<CoverageAdmission> CoverageAdmissions { get; }
-    internal IReadOnlyList<RuntimeMutation> StructuralMutations =>
-        CoverageAdmissions.Cast<RuntimeMutation>().Concat(LifecycleMutations).ToArray();
+    internal IReadOnlyList<RuntimeMutation> StructuralMutations { get; }
     internal IReadOnlyList<PropertyChange> Changes { get; }
     internal IReadOnlyList<NormalizedMutationProvenance> Provenance { get; }
     internal IReadOnlyList<PreparedDomainAssumption> DomainAssumptions { get; }
@@ -535,7 +536,7 @@ public sealed class PreparedMutation
             assumption.Validate();
 
         var simulated = new Dictionary<IObjectSetDefinition, PreparedSetState>();
-        foreach (var mutation in LifecycleMutations.Cast<RuntimeMutation>().Concat(CoverageAdmissions))
+        foreach (var mutation in StructuralMutations)
         {
             var set = mutation switch
             {

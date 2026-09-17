@@ -110,8 +110,9 @@ reject ambient/external transactions where applicable and fail closed when a sem
 is store-generated and therefore not final before SQL. Those
 cases require an application-owned transaction and policy-aware persistence unit, with runtime commit only
 after database commit. The adapter never auto-loads missing graph state. Cross-object enforcement and materialization
-require the host to seed complete runtime coverage and declare it with `ConsistencyScope`; `Map(...)` alone
-is change translation, not coverage proof. Full operational details are in
+require either complete runtime coverage declared with `ConsistencyScope` or a host-owned targeted
+`DiscoverConsumers` resolver for the supported direct-navigation case; `Map(...)` alone is change translation,
+not coverage proof. Full operational details are in
 [EF Core consistency](ef-core-consistency.md).
 
 Scope completeness proves runtime data coverage, not mutation coverage for SQL-side effects. Before SQL, the

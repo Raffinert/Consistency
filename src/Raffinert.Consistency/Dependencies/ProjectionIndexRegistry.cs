@@ -95,13 +95,13 @@ internal sealed class ProjectionIndexRegistry
     }
 
     public void ValidateFinalState(
-        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<RuntimeMutation> structuralMutations,
         IReadOnlyList<PropertyChange> changes)
     {
-        var view = new FinalSetMembershipView(_sets, lifecycleMutations);
+        var view = new FinalSetMembershipView(_sets, structuralMutations);
         foreach (var entry in _entries)
         {
-            var touchedDownstreams = lifecycleMutations
+            var touchedDownstreams = structuralMutations
                 .OfType<IAddedMutation>()
                 .Where(value => ReferenceEquals(value.Set, entry.DownstreamSet))
                 .Select(value => value.Instance)
@@ -109,7 +109,7 @@ internal sealed class ProjectionIndexRegistry
                         ReferenceEquals(value.Set, entry.DownstreamSet) &&
                         value.Member == entry.SelectorMember)
                     .Select(value => value.Instance))
-                .Concat(lifecycleMutations.OfType<CoverageAdmission>()
+                .Concat(structuralMutations.OfType<CoverageAdmission>()
                     .Where(value => ReferenceEquals(value.Set, entry.DownstreamSet))
                     .Select(value => value.Instance))
                 .Distinct(ReferenceEqualityComparer.Instance);
@@ -120,7 +120,7 @@ internal sealed class ProjectionIndexRegistry
                 ValidateTarget(entry, entry.Input.Project(source), view);
             }
 
-            foreach (var removed in lifecycleMutations.OfType<ObjectRemoved>()
+            foreach (var removed in structuralMutations.OfType<ObjectRemoved>()
                          .Where(value => ReferenceEquals(value.Set, entry.Input.UpstreamSet)))
             {
                 if (!entry.TargetToDownstreams.TryGetValue(removed.Instance, out var downstreams))
@@ -145,10 +145,10 @@ internal sealed class ProjectionIndexRegistry
     }
 
     public object CaptureState(
-        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        IReadOnlyList<RuntimeMutation> structuralMutations,
         IReadOnlyList<PropertyChange> changes) => _entries.Select(entry => new EntryPatchState(
             entry,
-            entry.CaptureSources(lifecycleMutations.Select(mutation => mutation switch
+            entry.CaptureSources(structuralMutations.Select(mutation => mutation switch
                 {
                     IAddedMutation added when ReferenceEquals(added.Set, entry.DownstreamSet) => added.Instance,
                     CoverageAdmission admission when ReferenceEquals(admission.Set, entry.DownstreamSet) => admission.Instance,
