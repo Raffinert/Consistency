@@ -1,5 +1,6 @@
 # Roadmaps
 
+- **ACTIVE RELEASE-PREP PLAN — Tasks 247–255:** prepare the already feature-frozen implementation for a truthful, reproducible, public `0.1.0-rc.1` package release. This wave is release-metadata/verification/publication work only and explicitly forbids runtime, test, API, or architecture changes: [Tasks 247–255](../codex-plan-0.1.0-rc.1-release-preparation.md)
 - Tasks 237–243 completed the external consumer discovery structural-admission, scope, overlay, durability, and manual-UoW closeout. The verified feature baseline is `197913a329f6de006798d89b4bfb3eb428de99e9`, with exact-head GitHub Actions CI run 288 (`35216826855`) successful: [Tasks 237–243](../codex-plan-external-consumer-discovery-post-ccfb24f-gap-closeout.md)
 - Tasks 220–228 implemented the broader external-consumer-discovery structural-admission and verification wave at `e3d050fa0fe6a62422da1ce261f4183bf66e347e`, reached remote `main` with green CI at `ccfb24fd485488d5680271545232e7ed6f26f031`, and were completed by the narrower Tasks 237–243 gap closeout: [Tasks 220–228](../codex-plan-external-consumer-discovery-post-96c076d-verification-and-closeout.md)
 - Tasks 211–219 remain the superseded structural-admission implementation wave; the post-`96c076d` follow-up was the broader proof/closeout wave and is now superseded by the completed gap work plus docs-only Tasks 244–246.
