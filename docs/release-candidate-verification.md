@@ -166,6 +166,26 @@ Verified implementation head: `9a5fc06ab8344635552e11946c3631fbc9cb62b2`
 
 Remote CI and release-candidate workflows were intentionally not queried or waited on for this closeout.
 
+## Post-`96c076d` structural-admission verification (local-only)
+
+Verification date: 2026-09-17
+
+Verified implementation head: `e3d050fa0fe6a62422da1ce261f4183bf66e347e`
+
+- Core tests: 315 passed on .NET 8 and 315 passed on .NET 10.
+- EF Core and SQLite tests: 154 passed on .NET 10.
+- Order-fulfillment and EF Core samples passed.
+- The dependency-maintenance sample passed after an isolated rebuild against the implementation head.
+- Formatting verification passed.
+- The prescribed solution build reached all projects but could not finish because stale
+  `Raffinert.Consistency.DependencyMaintenanceSample` processes held that sample's output DLLs; those
+  processes could not be terminated from the current session. The affected sample was rebuilt successfully
+  into an isolated output directory instead.
+- The closeout plan remains active pending the exact final-SHA CI run; no package was published and no tag or
+  GitHub release was created.
+
+Remote CI and release-candidate workflows remain pending for this implementation head.
+
 ## Dependency-maintenance dogfooding example (local-only)
 
 Verification date: 2026-09-16
