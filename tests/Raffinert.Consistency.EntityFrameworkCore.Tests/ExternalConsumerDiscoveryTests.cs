@@ -48,6 +48,28 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(0, calls.Value);
     }
 
+    [Fact]
+    public async Task Same_unloaded_root_returned_by_two_navigation_resolvers_is_admitted_once()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var target = context.Targets.Single(x => x.Id == 2);
+        var sourceCalls = new Counter();
+        var targetCalls = new Counter();
+        var (runtime, mappings, derived) = fixture.CreateModel(known, sourceCalls, targetCalls);
+
+        known.Source.UnitValue = 120m;
+        target.UnitValue = 30m;
+        await context.SaveChangesConsistentlyAsync(runtime, mappings);
+
+        Assert.Equal(1, sourceCalls.Value);
+        Assert.Equal(1, targetCalls.Value);
+        Assert.Equal(3, context.Associations.Count());
+        Assert.Equal(4m, runtime.Get(derived, context.Associations.Single(x => x.Id == 2)));
+    }
+
     private sealed class DiscoveryFixture : IDisposable
     {
         private readonly SqliteConnection _connection;
@@ -86,7 +108,7 @@ public sealed class ExternalConsumerDiscoveryTests
             .UseSqlite(_connection).Options);
 
         internal (ConsistencyRuntime Runtime, ConsistencyEfCoreMappings Mappings, Derived<DiscoveryAssociation, decimal> Derived)
-            CreateModel(DiscoveryAssociation known, Counter calls)
+            CreateModel(DiscoveryAssociation known, Counter calls, Counter? targetCalls = null)
         {
             var builder = new ConsistencyModelBuilder();
             var associations = builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
@@ -105,6 +127,8 @@ public sealed class ExternalConsumerDiscoveryTests
                 })
                 .DiscoverConsumers(associations, x => x.Target, (db, targets) =>
                 {
+                    if (targetCalls is not null)
+                        targetCalls.Value++;
                     var ids = targets.Select(x => x.Id).ToArray();
                     return db.Set<DiscoveryAssociation>().Where(x => ids.Contains(x.TargetId))
                         .Include(x => x.Source).Include(x => x.Target);
@@ -118,6 +142,7 @@ public sealed class ExternalConsumerDiscoveryTests
     private sealed class DiscoveryContext(DbContextOptions<DiscoveryContext> options) : DbContext(options)
     {
         public DbSet<DiscoveryAssociation> Associations => Set<DiscoveryAssociation>();
+        public DbSet<DiscoveryTarget> Targets => Set<DiscoveryTarget>();
         protected override void OnModelCreating(ModelBuilder model)
         {
             model.Entity<DiscoveryAssociation>().HasOne(x => x.Source).WithMany().HasForeignKey(x => x.SourceId);

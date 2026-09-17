@@ -505,6 +505,8 @@ public sealed class PreparedMutation
     internal ConsistencyRuntime Runtime { get; }
     internal IReadOnlyList<RuntimeMutation> LifecycleMutations { get; }
     internal IReadOnlyList<CoverageAdmission> CoverageAdmissions { get; }
+    internal IReadOnlyList<RuntimeMutation> StructuralMutations =>
+        CoverageAdmissions.Cast<RuntimeMutation>().Concat(LifecycleMutations).ToArray();
     internal IReadOnlyList<PropertyChange> Changes { get; }
     internal IReadOnlyList<NormalizedMutationProvenance> Provenance { get; }
     internal IReadOnlyList<PreparedDomainAssumption> DomainAssumptions { get; }

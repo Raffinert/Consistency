@@ -145,14 +145,14 @@ internal static class ExternalConsumerDiscovery
                 continue;
             if (entry.State == EntityState.Added || runtime.IsRegistered(request.RootSet, root))
                 continue;
-            if (admissions.Any(value => value is IAddedMutation added &&
-                    ReferenceEquals(added.Set, request.RootSet) &&
-                    ReferenceEquals(added.Instance, root)))
+            if (admissions.Any(value => value is CoverageAdmission admission &&
+                    ReferenceEquals(admission.Set, request.RootSet) &&
+                    ReferenceEquals(admission.Instance, root)))
                 continue;
             var key = request.RootSet.ReadKey(root) ?? throw new InvalidOperationException("Object keys cannot be null.");
             if (runtime.HasRegisteredKey(request.RootSet, root) ||
                 keys.Values.Any(value => Equals(value, key)) ||
-                admissions.OfType<IAddedMutation>().Any(value =>
+                admissions.OfType<CoverageAdmission>().Any(value =>
                     ReferenceEquals(value.Set, request.RootSet) &&
                     Equals(request.RootSet.ReadKey(value.Instance), key)))
                 throw new InvalidOperationException("A consumer resolver returned duplicate runtime keys.");
@@ -173,8 +173,17 @@ internal static class ExternalConsumerDiscovery
         foreach (var descriptor in mappings.ActiveConsumerDescriptors(runtime, saveBehavior)
                      .Where(value => ReferenceEquals(value.RootSet, rootSet)))
         {
+            var resolver = mappings.ConsumerResolvers.SingleOrDefault(value => value.Matches(descriptor));
+            if (resolver?.EfNavigation is null)
+                throw new InvalidOperationException("A discovered consumer is missing validated EF navigation metadata.");
+            var navigationEntry = context.Entry(root).Navigation(resolver.EfNavigation.Name);
             var target = MemberReader.Read(descriptor.Navigation, root);
-            if (target is null) continue;
+            if (target is null)
+            {
+                if (!navigationEntry.IsLoaded)
+                    throw new InvalidOperationException("A discovered consumer is missing a tracked evaluation reference.");
+                continue;
+            }
             if (context.Entry(target).State == EntityState.Detached)
                 throw new InvalidOperationException("A discovered consumer is missing a tracked evaluation reference.");
         }

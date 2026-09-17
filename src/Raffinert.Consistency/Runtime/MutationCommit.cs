@@ -141,6 +141,7 @@ public sealed partial class ConsistencyRuntime
         var projectionChanged = structuralMutations.Any(mutation => mutation switch
             {
                 IAddedMutation added => _projections.IsDownstreamSet(added.Set),
+                CoverageAdmission admission => _projections.IsDownstreamSet(admission.Set),
                 ObjectRemoved removed => _projections.IsDownstreamSet(removed.Set),
                 _ => false
             }) || changes.Any(change => change.Set is not null &&
@@ -163,11 +164,17 @@ public sealed partial class ConsistencyRuntime
                     case IAddedMutation added when ReferenceEquals(added.Set, relation.LeftSet):
                         touchedLefts.Add(added.Instance);
                         break;
+                    case CoverageAdmission admission when ReferenceEquals(admission.Set, relation.LeftSet):
+                        touchedLefts.Add(admission.Instance);
+                        break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.LeftSet):
                         touchedLefts.Add(removed.Instance);
                         break;
                     case IAddedMutation added when ReferenceEquals(added.Set, relation.RightSet):
                         touchedRights.Add(added.Instance);
+                        break;
+                    case CoverageAdmission admission when ReferenceEquals(admission.Set, relation.RightSet):
+                        touchedRights.Add(admission.Instance);
                         break;
                     case ObjectRemoved removed when ReferenceEquals(removed.Set, relation.RightSet):
                         touchedRights.Add(removed.Instance);
@@ -200,7 +207,7 @@ public sealed partial class ConsistencyRuntime
         relationStates,
         navigationChanged ? _navigation.CaptureTouchedState(
             touchedNavigationRoots, touchedNavigationOwners, scopeSource?.Navigation) : null,
-        projectionChanged ? _projections.CaptureState(lifecycleMutations, changes) : null,
+        projectionChanged ? _projections.CaptureState(structuralMutations, changes) : null,
         _dependencyGraph.CaptureState(impact, structuralMutations, changes, scopeSource?.Dependencies),
         new RuntimeScalarState(
             LastRelationImpacts,
@@ -529,11 +536,11 @@ public sealed partial class ConsistencyRuntime
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)
     {
-        var needsValidation = prepared.LifecycleMutations.Count > 0 || prepared.Changes.Any(change =>
+        var needsValidation = prepared.StructuralMutations.Count > 0 || prepared.Changes.Any(change =>
             change.Set is not null && _projections.IsSelectorChange(change.Set, change.Member));
         if (!needsValidation)
             return;
-        _projections.ValidateFinalState(prepared.LifecycleMutations, prepared.Changes);
+        _projections.ValidateFinalState(prepared.StructuralMutations, prepared.Changes);
     }
 
     private RuntimeApplyResult CreateDetailedResult(

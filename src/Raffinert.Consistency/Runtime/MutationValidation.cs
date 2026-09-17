@@ -37,7 +37,8 @@ public sealed partial class ConsistencyRuntime
                 simulation.Remove(((ObjectRemoved)mutation).Instance);
         }
 
-        var lifecycleTargets = lifecycle.Select(mutation => mutation switch
+        var structuralMutations = lifecycle.Cast<RuntimeMutation>().Concat(coverageAdmissions).ToArray();
+        var structuralTargets = structuralMutations.Select(mutation => mutation switch
         {
             ObjectAdded added => new SetInstance(added.Set, added.Instance),
             CoverageAdmission admission => new SetInstance(admission.Set, admission.Instance),
@@ -45,18 +46,18 @@ public sealed partial class ConsistencyRuntime
             _ => throw new InvalidOperationException("Unsupported lifecycle mutation.")
         }).ToHashSet();
         var properties = NormalizeChanges(mutations.OfType<PropertyChange>()
-            .Select(change => ValidateBatchChange(change, lifecycleTargets))
+            .Select(change => ValidateBatchChange(change, structuralTargets))
             .ToArray());
         var normalizedCollections = NormalizeCollectionChanges(mutations.OfType<CollectionChange>().ToArray());
         var collections = normalizedCollections
-            .Select(change => IsLifecycleTarget(change.Set, change.Owner, lifecycleTargets)
+            .Select(change => IsLifecycleTarget(change.Set, change.Owner, structuralTargets)
                 ? new PropertyChange(change.Set, change.Owner, change.Member, null, null)
                 : ValidateCollectionChange(change))
             .ToArray();
         var changes = properties
             .Concat(collections)
             .Where(change => change.Set is null ||
-                !lifecycleTargets.Contains(new SetInstance(change.Set, change.Instance)))
+                !structuralTargets.Contains(new SetInstance(change.Set, change.Instance)))
             .ToArray();
         if (validationMode == ChangeValidationMode.StrictNewValue)
             ValidateCurrentValues(properties);
@@ -80,9 +81,9 @@ public sealed partial class ConsistencyRuntime
 
     private PropertyChange ValidateBatchChange(
         PropertyChange change,
-        IReadOnlySet<SetInstance> lifecycleTargets)
+        IReadOnlySet<SetInstance> structuralTargets)
     {
-        if (change.Set is not null && IsLifecycleTarget(change.Set, change.Instance, lifecycleTargets))
+        if (change.Set is not null && IsLifecycleTarget(change.Set, change.Instance, structuralTargets))
         {
             GetSet(change.Set);
             return change;
@@ -93,8 +94,8 @@ public sealed partial class ConsistencyRuntime
     private static bool IsLifecycleTarget(
         IObjectSetDefinition? set,
         object instance,
-        IReadOnlySet<SetInstance> lifecycleTargets) =>
-        set is not null && lifecycleTargets.Contains(new SetInstance(set, instance));
+        IReadOnlySet<SetInstance> structuralTargets) =>
+        set is not null && structuralTargets.Contains(new SetInstance(set, instance));
 
     private static IReadOnlyList<CollectionChange> NormalizeCollectionChanges(
         IReadOnlyList<CollectionChange> changes)
