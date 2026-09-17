@@ -1,0 +1,231 @@
+namespace Raffinert.Consistency.Tests;
+
+public sealed class CompiledDependencyGraphTests
+{
+    [Fact]
+    public void Compiled_graph_assigns_upstream_before_downstream_topological_order()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var first = model.Derived(sources).Compute(source => source.Value).Named("first");
+        var second = model.Derived(sources).Using(first).Compute((_, value) => value + 1).Named("second");
+        var third = model.Derived(sources).Using(second).Compute((_, value) => value + 1).Named("third");
+
+        var graph = Compile([first, second, third]);
+
+        Assert.True(Position(graph, first) < Position(graph, second));
+        Assert.True(Position(graph, second) < Position(graph, third));
+    }
+
+    [Fact]
+    public void Compiled_graph_places_invariant_after_all_of_its_upstream_derived_nodes()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var first = model.Derived(sources).Compute(source => source.Value).Named("first");
+        var second = model.Derived(sources).Using(first).Compute((_, value) => value + 1).Named("second");
+        var invariant = model.Invariant(sources).Using(first, second)
+            .Must((_, left, right) => left < right).Named("ordered");
+
+        var graph = Compile([first, second], [invariant]);
+
+        Assert.True(Position(graph, first) < Position(graph, invariant));
+        Assert.True(Position(graph, second) < Position(graph, invariant));
+    }
+
+    [Fact]
+    public void Compiled_graph_deduplicates_duplicate_logical_edges()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var upstream = model.Derived(sources).Compute(source => source.Value);
+        var downstream = model.Derived(sources).Using(upstream, upstream)
+            .Compute((_, left, right) => left + right);
+
+        var graph = Compile([upstream, downstream]);
+        var from = Node(graph, upstream).Id;
+        var to = Node(graph, downstream).Id;
+
+        Assert.Single(graph.Edges, edge => edge.FromNodeId == from && edge.ToNodeId == to);
+    }
+
+    [Fact]
+    public void Compiled_graph_topological_order_is_deterministic_for_same_model()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value);
+        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
+        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
+        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+
+        var firstCompilation = Compile([root, left, right, join]);
+        var secondCompilation = Compile([root, left, right, join]);
+
+        Assert.Equal(
+            firstCompilation.Nodes.Select(node => (node.Definition, node.TopologicalOrder)),
+            secondCompilation.Nodes.Select(node => (node.Definition, node.TopologicalOrder)));
+    }
+
+    [Fact]
+    public void Compiled_graph_preserves_diamond_structure_without_duplicate_downstream_edges()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value);
+        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
+        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
+        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+
+        var graph = Compile([root, left, right, join]);
+        var rootId = Node(graph, root).Id;
+        var leftId = Node(graph, left).Id;
+        var rightId = Node(graph, right).Id;
+        var joinId = Node(graph, join).Id;
+
+        Assert.Equal(
+            [leftId, rightId],
+            graph.Edges.Where(edge => edge.FromNodeId == rootId).Select(edge => edge.ToNodeId).Order());
+        Assert.Single(graph.Edges, edge => edge.FromNodeId == leftId && edge.ToNodeId == joinId);
+        Assert.Single(graph.Edges, edge => edge.FromNodeId == rightId && edge.ToNodeId == joinId);
+    }
+
+    [Fact]
+    public void Deep_derived_chain_propagates_in_topological_order_without_registration_order_dependency()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var chain = new List<Derived<Source, int>>
+        {
+            model.Derived(sources).Compute(source => source.Value).Named("a0")
+        };
+        for (var index = 1; index < 12; index++)
+        {
+            var upstream = chain[^1];
+            chain.Add(model.Derived(sources).Using(upstream)
+                .Compute((_, value) => value + 1).Named($"a{index}"));
+        }
+        var invariant = model.Invariant(sources).Using(chain[^1])
+            .Must((source, value) => value == source.Value + 11).Named("chain-invariant");
+        var source = new Source { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        Assert.Equal(12, runtime.Get(chain[^1], source));
+        Assert.True(runtime.Evaluate(invariant, source));
+
+        source.Value = 7;
+        runtime.Apply(Change.Property(sources, source, value => value.Value, 1, 7));
+
+        Assert.All(chain, derived => Assert.NotEqual(DerivedValueState.Fresh, runtime.GetState(derived, source)));
+        Assert.Equal(18, runtime.Get(chain[^1], source));
+        Assert.All(chain, derived => Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, source)));
+        Assert.True(runtime.Evaluate(invariant, source));
+    }
+
+    [Fact]
+    public void Projected_upstream_chain_maps_sources_across_sets_through_multiple_DAG_levels()
+    {
+        var model = new ConsistencyModelBuilder();
+        var roots = model.Objects<Root>().Key(root => root.Id);
+        var middles = model.Objects<Middle>().Key(middle => middle.Id);
+        var leaves = model.Objects<Leaf>().Key(leaf => leaf.Id);
+        var rootValue = model.Derived(roots)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Compute(root => root.Value);
+        var middleValue = model.Derived(middles).Using(middle => middle.Root, rootValue)
+            .Compute((_, value) => value + 1);
+        var leafValue = model.Derived(leaves).Using(leaf => leaf.Middle, middleValue)
+            .Compute((_, value) => value + 1);
+        var firstRoot = new Root { Value = 1 };
+        var secondRoot = new Root { Value = 10 };
+        var firstMiddle = new Middle { Root = firstRoot };
+        var secondMiddle = new Middle { Root = secondRoot };
+        var firstLeaf = new Leaf { Middle = firstMiddle };
+        var secondLeaf = new Leaf { Middle = secondMiddle };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(leaves, [secondLeaf, firstLeaf]);
+            seed.Add(middles, [secondMiddle, firstMiddle]);
+            seed.Add(roots, [secondRoot, firstRoot]);
+        });
+        Assert.Equal(3, runtime.Get(leafValue, firstLeaf));
+        Assert.Equal(12, runtime.Get(leafValue, secondLeaf));
+
+        firstRoot.Value = 2;
+        runtime.Apply(Change.Property(roots, firstRoot, root => root.Value, 1, 2));
+
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(middleValue, firstMiddle));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(leafValue, firstLeaf));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(middleValue, secondMiddle));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(leafValue, secondLeaf));
+        Assert.Equal(4, runtime.Get(leafValue, firstLeaf));
+    }
+
+    [Fact]
+    public void Diamond_downstream_source_is_propagated_once_semantically()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value).Named("root");
+        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1).Named("left");
+        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2).Named("right");
+        var join = model.Derived(sources).Using(left, right)
+            .Compute((_, first, second) => first + second).Named("join");
+        model.Invariant(sources).Using(join).Must((_, value) => value < 100)
+            .ScheduleRepairWith(_ => { }).Named("limit");
+        var source = new Source { Value = 1 };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        _ = runtime.Get(join, source);
+        source.Value = 2;
+
+        var result = runtime.ApplyDetailed(
+            MutationSet.Create(Change.Property(sources, source, value => value.Value, 1, 2)),
+            RuntimeImpactDetailLevel.Causal).Result;
+
+        var joinImpact = result.DerivedImpacts.Single(impact => impact.DefinitionKey == "join");
+        var joinSource = Assert.Single(joinImpact.Sources);
+        Assert.Equal(
+            ["left", "right"],
+            joinSource.Causes.OfType<UpstreamDerivedCause>()
+                .Select(cause => cause.DefinitionKey).Order(StringComparer.Ordinal));
+        Assert.Single(result.RepairRequests);
+    }
+
+    private static CompiledDependencyGraph Compile(
+        IReadOnlyList<Derived<Source, int>> derived,
+        IReadOnlyList<Invariant<Source>>? invariants = null) => CompiledDependencyGraph.Compile(
+        derived.Select(value => value.Definition).ToArray(),
+        invariants?.Select(value => value.Definition).ToArray() ?? []);
+
+    private static CompiledDependencyNode Node<T>(CompiledDependencyGraph graph, Derived<Source, T> derived) =>
+        graph.Nodes.Single(node => ReferenceEquals(node.Definition, derived.Definition));
+
+    private static int Position<T>(CompiledDependencyGraph graph, Derived<Source, T> derived) =>
+        Node(graph, derived).TopologicalOrder;
+
+    private static int Position(CompiledDependencyGraph graph, Invariant<Source> invariant) =>
+        graph.Nodes.Single(node => ReferenceEquals(node.Definition, invariant.Definition)).TopologicalOrder;
+
+    private sealed class Source
+    {
+        public Guid Id { get; init; } = Guid.NewGuid();
+        public int Value { get; set; }
+    }
+
+    private sealed class Root
+    {
+        public Guid Id { get; init; } = Guid.NewGuid();
+        public int Value { get; set; }
+    }
+
+    private sealed class Middle
+    {
+        public Guid Id { get; init; } = Guid.NewGuid();
+        public required Root Root { get; init; }
+    }
+
+    private sealed class Leaf
+    {
+        public Guid Id { get; init; } = Guid.NewGuid();
+        public required Middle Middle { get; init; }
+    }
+}
