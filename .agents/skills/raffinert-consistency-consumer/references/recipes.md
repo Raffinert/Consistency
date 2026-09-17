@@ -2,7 +2,7 @@
 
 These are downstream-application patterns. Adapt names and DI composition to the consumer repository.
 
-Do not copy internal Raffinert runtime/test types into application code.
+All examples are deliberately domain-neutral. Do not copy internal Raffinert runtime/test types into application code.
 
 ---
 
@@ -13,17 +13,17 @@ Use when a persisted value depends only on properties of the same source object.
 ```csharp
 var model = new ConsistencyModelBuilder();
 
-var lines = model.Objects<InvoiceLine>()
+var records = model.Objects<Record>()
     .Key(x => x.Id);
 
-var lineAmount = model.Derived(lines)
-    .Compute(x => x.Quantity * x.UnitPrice);
+var total = model.Derived(records)
+    .Compute(x => x.Quantity * x.UnitValue);
 
 var compiled = model.Build();
 
 var mappings = new ConsistencyEfCoreMappings()
-    .Map(lines)
-    .Materialize(lineAmount, x => x.LineAmount);
+    .Map(records)
+    .Materialize(total, x => x.Total);
 ```
 
 Typical save:
@@ -53,124 +53,122 @@ verify persisted value from separate DbContext
 Use when a root depends on all matching items.
 
 ```csharp
-var orderLines = model.Objects<OrderLine>()
+var containers = model.Objects<Container>()
     .Key(x => x.Id);
 
-var receipts = model.Objects<ReceiptLine>()
+var contributions = model.Objects<Contribution>()
     .Key(x => x.Id);
 
-var matchingReceipts = model.Relation(orderLines, receipts)
-    .Where((line, receipt) =>
-        line.PurchaseOrderNumber == receipt.PurchaseOrderNumber &&
-        line.LineNumber == receipt.PurchaseOrderLineNumber);
+var contributionsForContainer = model.Relation(containers, contributions)
+    .Where((container, contribution) => container.Id == contribution.ContainerId);
 
-var receivedQuantity = model.Derived(orderLines)
-    .Using(matchingReceipts)
+var usedCapacity = model.Derived(containers)
+    .Using(contributionsForContainer)
     .Incrementally()
-    .Compute((line, matches) => matches.Sum(x => x.Quantity));
+    .Compute((container, matches) => matches.Sum(x => x.Amount));
 ```
 
-For authoritative EF materialization/enforcement, both relation sets must be genuinely complete for the operation:
+For authoritative EF materialization or enforcement, both relation sets must be genuinely complete for the operation:
 
 ```csharp
 var scope = new ConsistencyScope()
-    .Complete(orderLines)
-    .Complete(receipts);
+    .Complete(containers)
+    .Complete(contributions);
 ```
 
-Do not attempt to replace relation-source/target completeness with `DiscoverConsumers`.
+Do not attempt to replace relation-source or relation-target completeness with `DiscoverConsumers`.
 
 ---
 
-## Recipe 3 — PriceRate / direct-reference consumer discovery
+## Recipe 3 — direct-reference consumer discovery
 
-Use when the derived root is an association/link and its inputs live on referenced objects that may change while some links are unloaded.
+Use when the derived root is an association and its inputs live on referenced objects that may change while some associations are unloaded.
 
-Domain:
+Neutral domain:
 
 ```csharp
-public sealed class PurchaseOrderInvoiceLine
+public sealed class Association
 {
     public Guid Id { get; set; }
 
-    public Guid InvoiceLineId { get; set; }
-    public required InvoiceLine InvoiceLine { get; set; }
+    public Guid SourceId { get; set; }
+    public required SourceItem Source { get; set; }
 
-    public Guid PurchaseOrderLineId { get; set; }
-    public required PurchaseOrderLine PurchaseOrderLine { get; set; }
+    public Guid TargetId { get; set; }
+    public required TargetItem Target { get; set; }
 
-    public decimal? PriceRate { get; set; }
+    public decimal? CombinedValue { get; set; }
 }
 ```
 
 Declaration:
 
 ```csharp
-var links = model.Objects<PurchaseOrderInvoiceLine>()
+var associations = model.Objects<Association>()
     .Key(x => x.Id);
 
-var priceRate = model.Derived(links)
-    .DependsOn(x => x.InvoiceLine.UnitPrice)
-    .DependsOn(x => x.PurchaseOrderLine.UnitPrice)
-    .Compute(x => PriceRateCalculator.Calculate(
-        x.InvoiceLine.UnitPrice,
-        x.PurchaseOrderLine.UnitPrice));
+var combinedValue = model.Derived(associations)
+    .DependsOn(x => x.Source.Value)
+    .DependsOn(x => x.Target.Value)
+    .Compute(x => ValueCalculator.Calculate(
+        x.Source.Value,
+        x.Target.Value));
 ```
 
 EF policy:
 
 ```csharp
 var mappings = new ConsistencyEfCoreMappings()
-    .Map(links)
-    .Materialize(priceRate, x => x.PriceRate)
+    .Map(associations)
+    .Materialize(combinedValue, x => x.CombinedValue)
     .DiscoverConsumers(
-        links,
-        x => x.InvoiceLine,
-        (db, invoiceLines) =>
+        associations,
+        x => x.Source,
+        (db, sources) =>
         {
-            var ids = invoiceLines.Select(x => x.Id).ToArray();
+            var ids = sources.Select(x => x.Id).ToArray();
 
-            return db.Set<PurchaseOrderInvoiceLine>()
-                .Where(x => ids.Contains(x.InvoiceLineId))
-                .Include(x => x.InvoiceLine)
-                .Include(x => x.PurchaseOrderLine);
+            return db.Set<Association>()
+                .Where(x => ids.Contains(x.SourceId))
+                .Include(x => x.Source)
+                .Include(x => x.Target);
         })
     .DiscoverConsumers(
-        links,
-        x => x.PurchaseOrderLine,
-        (db, poLines) =>
+        associations,
+        x => x.Target,
+        (db, targets) =>
         {
-            var ids = poLines.Select(x => x.Id).ToArray();
+            var ids = targets.Select(x => x.Id).ToArray();
 
-            return db.Set<PurchaseOrderInvoiceLine>()
-                .Where(x => ids.Contains(x.PurchaseOrderLineId))
-                .Include(x => x.InvoiceLine)
-                .Include(x => x.PurchaseOrderLine);
+            return db.Set<Association>()
+                .Where(x => ids.Contains(x.TargetId))
+                .Include(x => x.Source)
+                .Include(x => x.Target);
         });
 ```
 
 Why both Includes?
 
-Because discovery of a root by `PurchaseOrderLine` is not enough. `PriceRateCalculator` also reads `InvoiceLine.UnitPrice`; the discovered link must be evaluation-complete.
+Because discovering a root through `Source` is not enough when the calculation also reads `Target.Value`; every discovered association must be evaluation-complete.
 
 Acceptance test:
 
 ```text
 DB:
-    Link A -> PO1 + IL1
-    Link B -> PO1 + IL2
-    Link C -> PO1 + IL3
+    Association A -> Source S + Target 1
+    Association B -> Source S + Target 2
+    Association C -> Source S + Target 3
 
 initial tracked/runtime:
-    only Link A
+    only Association A
 
 mutation:
-    PO1.UnitPrice changes
+    Source S.Value changes
 
 expected:
-    one PO resolver call
+    one Source resolver call
     B/C discovered
-    A/B/C rates recomputed
+    A/B/C combined values recomputed
     one runtime version increment
     persisted values correct in separate verification context
 ```
@@ -182,18 +180,18 @@ expected:
 Use when the calculator is application code and cannot be analyzed safely as an expression.
 
 ```csharp
-var unitRate = model.Derived(links)
-    .DependsOn(x => x.InvoiceLine.UnitPrice)
-    .DependsOn(x => x.PurchaseOrderLine.UnitPrice)
-    .Compute(x => UnitRateCalculator.Calculate(
-        x.InvoiceLine.UnitPrice,
-        x.PurchaseOrderLine.UnitPrice));
+var combinedValue = model.Derived(associations)
+    .DependsOn(x => x.Source.Value)
+    .DependsOn(x => x.Target.Value)
+    .Compute(x => ValueCalculator.Calculate(
+        x.Source.Value,
+        x.Target.Value));
 ```
 
 Bad:
 
 ```csharp
-var unitRate = model.Derived(links)
+var combinedValue = model.Derived(associations)
     .Compute(x => _calculator.Calculate(x));
 ```
 
@@ -206,51 +204,50 @@ every hidden source-state input used by opaque code
     -> explicit DependsOn member path
 ```
 
-External services/current time/randomness/database lookups are not repaired by `DependsOn`; keep derived calculations deterministic from modeled state.
+External services, current time, randomness, and database lookups are not repaired by `DependsOn`; keep derived calculations deterministic from modeled state.
 
 ---
 
 ## Recipe 5 — derived chain
 
 ```csharp
-var priceRate = model.Derived(links)
-    .DependsOn(x => x.InvoiceLine.UnitPrice)
-    .DependsOn(x => x.PurchaseOrderLine.UnitPrice)
-    .Compute(x => PriceRateCalculator.Calculate(
-        x.InvoiceLine.UnitPrice,
-        x.PurchaseOrderLine.UnitPrice));
+var combinedValue = model.Derived(associations)
+    .DependsOn(x => x.Source.Value)
+    .DependsOn(x => x.Target.Value)
+    .Compute(x => ValueCalculator.Calculate(
+        x.Source.Value,
+        x.Target.Value));
 
-var unitRate = model.Derived(links)
-    .Using(priceRate)
-    .Compute((link, rate) => UnitRateCalculator.FromPriceRate(rate));
+var normalizedValue = model.Derived(associations)
+    .Using(combinedValue)
+    .Compute((association, value) => Normalizer.Normalize(value));
 ```
 
 Do not repeat the original property dependencies in every downstream calculation unless that downstream calculation truly reads them directly.
 
-Let the dependency DAG propagate through `priceRate`.
+Let the dependency DAG propagate through `combinedValue`.
 
 ---
 
 ## Recipe 6 — invariant that blocks persistence
 
 ```csharp
-var remaining = model.Derived(lines)
-    .Using(received)
-    .Compute((line, receivedQuantity) =>
-        line.OrderedQuantity - receivedQuantity);
+var remainingCapacity = model.Derived(containers)
+    .Using(usedCapacity)
+    .Compute((container, used) => container.Capacity - used);
 
-var quantityValid = model.Invariant(lines)
-    .Using(remaining)
-    .Must((line, remainingQuantity) => remainingQuantity >= 0);
+var capacityValid = model.Invariant(containers)
+    .Using(remainingCapacity)
+    .Must((container, remaining) => remaining >= 0);
 
 var mappings = new ConsistencyEfCoreMappings()
-    .Map(lines)
-    .Enforce(quantityValid);
+    .Map(containers)
+    .Enforce(capacityValid);
 ```
 
 Use `.Enforce(...)` only when violation must block SQL.
 
-If the domain permits temporary inconsistency and wants later repair, model policy/repair instead of making every violation a persistence blocker.
+If the application permits temporary inconsistency and wants later repair, model policy/repair instead of making every violation a persistence blocker.
 
 ---
 
@@ -259,21 +256,21 @@ If the domain permits temporary inconsistency and wants later repair, model poli
 Good:
 
 ```text
-Quantity + UnitPrice
+Quantity + UnitValue
     ↓
 Derived Total
     ↓
-TotalMirror persisted
+Total mirror persisted
 ```
 
 Bad:
 
 ```text
-Quantity + UnitPrice
+Quantity + UnitValue
     ↓
-TotalMirror persisted
+Total mirror persisted
     ↓
-other Raffinert computation reads TotalMirror
+other Raffinert computation reads the persisted mirror
 ```
 
 The mirror is persistence/output state, not the dependency graph's semantic input.
@@ -281,9 +278,9 @@ The mirror is persistence/output state, not the dependency graph's semantic inpu
 If another computation needs total, depend on the `Derived` handle:
 
 ```csharp
-var tax = model.Derived(lines)
+var adjustedTotal = model.Derived(records)
     .Using(total)
-    .Compute((line, totalValue) => totalValue * line.TaxRate);
+    .Compute((record, totalValue) => totalValue * record.Multiplier);
 ```
 
 ---
@@ -324,12 +321,12 @@ A `DiscoverConsumers` resolver needed only by a materialization should not run i
 
 ## Recipe 9 — targeted discovery is not completeness
 
-Suppose DB has one million associations and PO line 42 has three consumers.
+Suppose the database contains many associations and one changed `SourceItem` has only three consumers.
 
 A discovery resolver may load exactly those three consumers:
 
 ```csharp
-.Where(x => poLineIds.Contains(x.PurchaseOrderLineId))
+.Where(x => sourceIds.Contains(x.SourceId))
 ```
 
 After that, do **not** claim:
@@ -338,30 +335,30 @@ After that, do **not** claim:
 scope.Complete(associations);
 ```
 
-The operation has targeted consumer coverage for the changed PO lines. It does not have whole-set coverage.
+The operation has targeted consumer coverage for the requested sources. It does not have whole-set coverage.
 
 ---
 
 ## Recipe 10 — safe resolver superset
 
-This is allowed when convenient:
+A resolver may return a safe authoritative superset when convenient:
 
 ```csharp
 mappings.DiscoverConsumers(
-    links,
-    x => x.PurchaseOrderLine,
-    (db, poLines) =>
+    associations,
+    x => x.Source,
+    (db, sources) =>
     {
-        var organizationIds = poLines.Select(x => x.OrganizationId).Distinct().ToArray();
+        var partitionIds = sources.Select(x => x.PartitionId).Distinct().ToArray();
 
-        return db.Set<PurchaseOrderInvoiceLine>()
-            .Where(x => organizationIds.Contains(x.OrganizationId))
-            .Include(x => x.InvoiceLine)
-            .Include(x => x.PurchaseOrderLine);
+        return db.Set<Association>()
+            .Where(x => partitionIds.Contains(x.PartitionId))
+            .Include(x => x.Source)
+            .Include(x => x.Target);
     });
 ```
 
-provided the result is an authoritative **superset** and current tracked navigation state can filter it safely.
+This is valid only when the result is an authoritative **superset** for all requested targets and current tracked navigation state can filter it safely.
 
 Under-fetch is never safe.
 
@@ -372,18 +369,18 @@ Under-fetch is never safe.
 Database state:
 
 ```text
-Link X -> PO1
+Association X -> Source A
 ```
 
 Tracked current state before save:
 
 ```text
-Link X -> PO2
+Association X -> Source B
 ```
 
-If PO1 changes, a DB query may still return X. Current tracked state must exclude it from PO1's effective consumers.
+If Source A changes, a database query may still return X. Current tracked state must exclude it from Source A's effective consumers.
 
-If PO2 changes, X may not yet appear in the DB query for PO2. If X is already tracked/known, current tracked state must include it.
+If Source B changes, X may not yet appear in the database query for Source B. If X is already tracked/known, current tracked state must include it.
 
 Do not write custom reconciliation around the resolver unless the application has a scenario Raffinert does not support.
 
@@ -394,19 +391,19 @@ Do not write custom reconciliation around the resolver unless the application ha
 Use only when the application can genuinely establish authoritative whole-set coverage.
 
 ```csharp
-var allLinks = await db.Links
+var allAssociations = await db.Associations
     .Include(x => x.Source)
     .Include(x => x.Target)
     .ToListAsync(cancellationToken);
 
 var runtime = compiled.CreateRuntime(seed =>
-    seed.Add(links, allLinks));
+    seed.Add(associations, allAssociations));
 
 var scope = new ConsistencyScope()
-    .Complete(links);
+    .Complete(associations);
 ```
 
-This is appropriate for small bounded aggregates/import batches/test fixtures.
+This is appropriate for small bounded aggregates, complete import batches, and test fixtures.
 
 It is usually not appropriate to load a huge application table merely to make Raffinert work.
 
@@ -442,7 +439,7 @@ work.CommitAfterDatabaseCommit();
 work.Dispatch();
 ```
 
-Do not install the runtime plan before DB commit.
+Do not install the runtime plan before database commit.
 
 ---
 
@@ -452,23 +449,22 @@ Before:
 
 ```text
 ChangeTracker.DetectChanges
-collect changed PO IDs
-collect changed invoice IDs
-query affected links
-union tracked links
-load endpoints
-calculate PriceRate
-write mirror
+collect changed referenced-object IDs
+query affected associations
+union tracked associations
+load missing references
+calculate derived value
+write persisted mirror
 ```
 
 After:
 
 ```text
-DependsOn(Link.InvoiceLine.UnitPrice)
-DependsOn(Link.PurchaseOrderLine.UnitPrice)
-Materialize(PriceRate)
-DiscoverConsumers(Link.InvoiceLine)
-DiscoverConsumers(Link.PurchaseOrderLine)
+DependsOn(Association.Source.Value)
+DependsOn(Association.Target.Value)
+Materialize(CombinedValue)
+DiscoverConsumers(Association.Source)
+DiscoverConsumers(Association.Target)
 SaveChangesConsistently
 ```
 
