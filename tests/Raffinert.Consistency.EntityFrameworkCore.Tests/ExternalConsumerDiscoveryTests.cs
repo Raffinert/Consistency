@@ -149,6 +149,35 @@ public sealed class ExternalConsumerDiscoveryTests
     }
 
     [Fact]
+    public async Task Discovery_SQL_failure_restores_runtime_and_framework_materialization()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var (runtime, mappings, derived) = fixture.CreateModel(known, calls);
+        Assert.Equal(10m, runtime.Get(derived, known));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, known));
+        known.Source.UnitValue = 120m;
+        context.FailSaveChanges = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            context.SaveChangesConsistentlyAsync(runtime, mappings));
+
+        var discovered = context.Associations.Local.Single(x => x.Id == 2);
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(0, runtime.Version);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, known));
+        Assert.Equal(10m, runtime.Get(derived, known));
+        Assert.Equal(5m, discovered.UnitRate);
+        Assert.False(context.Entry(discovered).Property(x => x.UnitRate).IsModified);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+        Assert.Equal(EntityState.Modified, context.Entry(known.Source).State);
+    }
+
+    [Fact]
     public async Task Discovery_planning_failure_does_not_install_structural_state()
     {
         using var fixture = DiscoveryFixture.Create();
@@ -195,6 +224,9 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(0, runtime.Version);
         Assert.Equal(0, context.SaveChangesInvocations);
         Assert.Equal(5m, context.Associations.Single(x => x.Id == 2).UnitRate);
+        Assert.False(context.Entry(context.Associations.Local.Single(x => x.Id == 2))
+            .Property(x => x.UnitRate).IsModified);
+        Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
         Assert.False(runtime.IsRegistered(fixture.Associations.Definition,
             context.Associations.Single(x => x.Id == 2)));
     }
@@ -995,6 +1027,66 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(0, context.SaveChangesInvocations);
         Assert.Equal(0, runtime.Version);
         Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
+    }
+
+    [Fact]
+    public void Manual_UoW_discovery_plan_is_live_state_neutral_until_database_commit()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var (runtime, mappings, derived) = fixture.CreateModel(known, calls);
+        known.Source.UnitValue = 120m;
+        var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
+
+        var plan = Assert.IsType<PreparedImpactPlan>(work.PrepareAndPlan());
+        var discovered = context.Associations.Local.Single(x => x.Id == 2);
+
+        Assert.Equal(1, calls.Value);
+        Assert.Equal(0, runtime.Version);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.Equal(6m, discovered.UnitRate);
+        Assert.True(context.Entry(discovered).Property(x => x.UnitRate).IsModified);
+        Assert.Contains(plan.DerivedEvaluations, evaluation =>
+            ReferenceEquals(evaluation.Source, discovered) && Equals(evaluation.Value, 6m));
+
+        using var transaction = context.Database.BeginTransaction();
+        context.SaveChanges();
+        transaction.Commit();
+        _ = work.CommitAfterDatabaseCommit();
+        work.Dispatch();
+
+        Assert.Equal(1, runtime.Version);
+        Assert.True(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.Equal(6m, runtime.Get(derived, discovered));
+        Assert.Equal(6m, fixture.CreateContext().Associations.AsNoTracking().Single(x => x.Id == 2).UnitRate);
+    }
+
+    [Fact]
+    public void Manual_UoW_discovery_rejects_stale_plan_after_database_commit()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls);
+        known.Source.UnitValue = 120m;
+        var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
+        _ = work.PrepareAndPlan();
+        var discovered = context.Associations.Local.Single(x => x.Id == 2);
+        context.SaveChanges();
+        runtime.Apply(Change.Property(known.Source, x => x.UnitValue, 120m, 121m));
+
+        var error = Assert.Throws<ConsistencyRuntimeSynchronizationException>(() =>
+            work.CommitAfterDatabaseCommit());
+
+        Assert.IsType<InvalidOperationException>(error.InnerException);
+        Assert.Equal(1, error.RuntimeVersion);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.Equal(1, runtime.Version);
     }
 
     private static (ConsistencyRuntime Runtime, ConsistencyEfCoreMappings Mappings,
