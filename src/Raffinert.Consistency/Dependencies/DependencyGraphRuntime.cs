@@ -192,6 +192,8 @@ internal sealed class DependencyGraphRuntime
                 .Concat(structuralMutations.Select(mutation => mutation switch
                 {
                     IAddedMutation added when ReferenceEquals(added.Set, node.Relation.RightSet) => added.Instance,
+                    CoverageAdmission admission when ReferenceEquals(admission.Set, node.Relation.RightSet) =>
+                        admission.Instance,
                     ObjectRemoved removed when ReferenceEquals(removed.Set, node.Relation.RightSet) =>
                         removed.Instance,
                     _ => null
@@ -391,6 +393,36 @@ internal sealed class DependencyGraphRuntime
             invariantUpstreamEvidence ?? []);
     }
 
+    public void RebaseCoverageAdmissions(
+        IReadOnlyDictionary<IRelationDefinition, RelationDelta> relationDeltas)
+    {
+        var currentDerived = new HashSet<DerivedNode>(_previousDerived);
+        foreach (var pair in relationDeltas)
+        {
+            if (!_derivedByRelation.TryGetValue(pair.Key, out var nodes))
+                continue;
+            currentDerived.UnionWith(nodes);
+            foreach (var node in nodes)
+                node.Rebase(pair.Value.AffectedLefts.Where(_sets[node.Definition.SourceSet].Contains));
+        }
+        ExpandDownstream(currentDerived);
+        foreach (var node in _derivedNodes)
+            if (currentDerived.Contains(node) && _upstreamsByDerived.TryGetValue(node, out var upstreams))
+                node.ApplyInherited(upstreams, _projections, null);
+
+        var currentInvariants = new HashSet<InvariantNode>(_previousInvariants);
+        foreach (var derived in currentDerived)
+            if (_invariantsByDerived.TryGetValue(derived, out var nodes))
+                currentInvariants.UnionWith(nodes);
+        var discardedPolicyActions = new RuntimePolicyActions();
+        foreach (var node in _invariantNodes)
+            if (currentInvariants.Contains(node))
+                node.ApplyInherited(discardedPolicyActions, null);
+
+        _previousDerived = currentDerived;
+        _previousInvariants = currentInvariants;
+    }
+
     private static IEnumerable<TNode> Candidates<TNode>(
         IReadOnlyList<PropertyChange> changes,
         IReadOnlyDictionary<MemberInfo, IReadOnlyList<TNode>> adjacency) =>
@@ -564,6 +596,16 @@ internal sealed class DependencyGraphRuntime
                 State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
             if (DirtySources.Count > 0)
                 State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
+        }
+
+        public void Rebase(IEnumerable<object> sources)
+        {
+            var newlyDirty = NewSet(sources);
+            newlyDirty.ExceptWith(InvalidSources);
+            newlyDirty.ExceptWith(DirtySources);
+            DirtySources.UnionWith(newlyDirty);
+            if (newlyDirty.Count > 0)
+                State.ApplyImpact(newlyDirty, DependencyImpactKind.Dirty);
         }
 
         public void ApplyInherited(

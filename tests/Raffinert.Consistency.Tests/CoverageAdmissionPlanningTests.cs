@@ -52,6 +52,83 @@ public sealed class CoverageAdmissionPlanningTests
     }
 
     [Fact]
+    public void Coverage_admission_on_relation_right_captures_affected_left_dependency_state()
+    {
+        var scenario = CreateRelationDependencyScenario(includeInvariant: false);
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(
+            new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
+
+        var helperCount = scenario.Runtime.CaptureDependencyPatchEntryCount(prepared);
+        var plan = scenario.Runtime.PlanDetailed(prepared);
+        var forwardScope = scenario.Runtime.GetForwardPatchScopeCounts(plan);
+
+        Assert.Equal(1, helperCount);
+        Assert.Equal(1, forwardScope.DependencyEntries);
+    }
+
+    [Fact]
+    public void Coverage_admission_on_relation_right_planning_restores_primed_derived_state()
+    {
+        var scenario = CreateRelationDependencyScenario(includeInvariant: false);
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
+        var before = scenario.Runtime.Diagnostics;
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(
+            new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
+
+        _ = scenario.Runtime.PlanDetailed(prepared);
+
+        Assert.Equal(0, scenario.Runtime.Version);
+        Assert.False(scenario.Runtime.IsRegistered(scenario.Rights.Definition, scenario.Right));
+        Assert.False(scenario.Runtime.HasMaterializedPair(scenario.Relation, scenario.Left, scenario.Right));
+        Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(before.DerivedFullRecomputations,
+            scenario.Runtime.Diagnostics.DerivedFullRecomputations);
+    }
+
+    [Fact]
+    public void Coverage_admission_on_relation_right_exact_install_rebases_derived_without_semantic_add()
+    {
+        var scenario = CreateRelationDependencyScenario(includeInvariant: false);
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(
+            new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
+        var plan = scenario.Runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
+
+        var result = scenario.Runtime.Commit(plan);
+
+        Assert.Equal(1, scenario.Runtime.Version);
+        Assert.True(scenario.Runtime.IsRegistered(scenario.Rights.Definition, scenario.Right));
+        Assert.True(scenario.Runtime.HasMaterializedPair(scenario.Relation, scenario.Left, scenario.Right));
+        Assert.Equal(DerivedValueState.Dirty, scenario.Runtime.GetState(scenario.Count, scenario.Left));
+        Assert.Equal(1, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Empty(result.RelationImpacts);
+        Assert.DoesNotContain(result.MutationOrigins, origin => origin.Kind == MutationOriginKind.ObjectAdded);
+    }
+
+    [Fact]
+    public void Coverage_admission_on_relation_right_planning_restores_primed_invariant_state()
+    {
+        var scenario = CreateRelationDependencyScenario(includeInvariant: true);
+        var invariant = Assert.IsType<Invariant<Left>>(scenario.Invariant);
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.True(scenario.Runtime.Evaluate(invariant, scenario.Left));
+        Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(invariant, scenario.Left));
+        var prepared = scenario.Runtime.Prepare(MutationSet.Create(
+            new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
+
+        _ = scenario.Runtime.PlanDetailed(prepared);
+
+        Assert.Equal(0, scenario.Runtime.Version);
+        Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
+        Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(invariant, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.True(scenario.Runtime.Evaluate(invariant, scenario.Left));
+    }
+
+    [Fact]
     public void Coverage_admission_forward_patch_install_failure_restores_relation_state()
     {
         var scenario = CreateRelationScenario(admitRight: true);
@@ -199,6 +276,22 @@ public sealed class CoverageAdmissionPlanningTests
         return new RelationScenario(runtime, lefts, rights, relation, left, right);
     }
 
+    private static RelationDependencyScenario CreateRelationDependencyScenario(bool includeInvariant)
+    {
+        var model = new ConsistencyModelBuilder();
+        var lefts = model.Objects<Left>().Key(value => value.Id);
+        var rights = model.Objects<Right>().Key(value => value.Id);
+        var relation = model.Relation(lefts, rights).Where((left, right) => left.Code == right.Code);
+        var count = model.Derived(lefts).Using(relation).Compute((_, matches) => matches.Count);
+        var invariant = includeInvariant
+            ? model.Invariant(lefts).Using(count).Must((_, value) => value >= 0)
+            : null;
+        var left = new Left { Code = "shared" };
+        var right = new Right { Code = "shared" };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(lefts, [left]));
+        return new RelationDependencyScenario(runtime, lefts, rights, relation, count, invariant, left, right);
+    }
+
     private static ProjectionScenario CreateProjectionScenario()
     {
         var model = new ConsistencyModelBuilder();
@@ -217,6 +310,16 @@ public sealed class CoverageAdmissionPlanningTests
         ObjectSet<Left> Lefts,
         ObjectSet<Right> Rights,
         Relation<Left, Right> Relation,
+        Left Left,
+        Right Right);
+
+    private sealed record RelationDependencyScenario(
+        ConsistencyRuntime Runtime,
+        ObjectSet<Left> Lefts,
+        ObjectSet<Right> Rights,
+        Relation<Left, Right> Relation,
+        Derived<Left, int> Count,
+        Invariant<Left>? Invariant,
         Left Left,
         Right Right);
 

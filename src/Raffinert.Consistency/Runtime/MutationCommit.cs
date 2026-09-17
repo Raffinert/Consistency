@@ -391,8 +391,9 @@ public sealed partial class ConsistencyRuntime
         bool captureCausalEvidence)
     {
         var relationDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        var coverageAdmissionDeltas = new Dictionary<IRelationDefinition, RelationDelta>();
         foreach (var admission in coverageAdmissions)
-            CommitCoverageAdmission(admission);
+            CommitCoverageAdmission(admission, coverageAdmissionDeltas);
         foreach (var mutation in lifecycleMutations)
         {
             if (mutation is IAddedMutation added)
@@ -423,6 +424,7 @@ public sealed partial class ConsistencyRuntime
         var policyActions = new RuntimePolicyActions();
         var dependencyPropagation = _dependencyGraph.ApplyChangeImpacts(
             relationImpacts, changes, policyActions, captureCausalEvidence);
+        _dependencyGraph.RebaseCoverageAdmissions(coverageAdmissionDeltas);
         var publicImpact = impact.ToPublic();
         _reindexedRoots += publicImpact.Access.ReindexedRoots;
         _affectedSources += dependencyPropagation.DerivedImpacts
@@ -865,7 +867,9 @@ public sealed partial class ConsistencyRuntime
             MergeDelta(deltas, pair.Key, pair.Value.AddLeft(mutation.Instance));
     }
 
-    private void CommitCoverageAdmission(CoverageAdmission admission)
+    private void CommitCoverageAdmission(
+        CoverageAdmission admission,
+        IDictionary<IRelationDefinition, RelationDelta> deltas)
     {
         var state = GetSet(admission.Set);
         state.Add(admission.Instance);
@@ -873,9 +877,9 @@ public sealed partial class ConsistencyRuntime
         _navigation.AddRoot(admission.Set, admission.Instance);
         _projections.AddRoot(admission.Set, admission.Instance);
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.RightSet, admission.Set)))
-            _ = pair.Value.AddRight(admission.Instance);
+            MergeDelta(deltas, pair.Key, pair.Value.AddRight(admission.Instance));
         foreach (var pair in _relations.Where(pair => ReferenceEquals(pair.Value.LeftSet, admission.Set)))
-            _ = pair.Value.AddLeft(admission.Instance);
+            MergeDelta(deltas, pair.Key, pair.Value.AddLeft(admission.Instance));
     }
 
     private void CommitRemove(
