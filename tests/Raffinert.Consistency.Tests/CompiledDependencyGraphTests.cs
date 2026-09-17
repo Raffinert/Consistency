@@ -317,6 +317,27 @@ public sealed class CompiledDependencyGraphTests
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(projected, secondMiddle));
     }
 
+    [Fact]
+    public void DebugView_preserves_compiled_dependency_DAG_nodes_order_and_edges()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var root = model.Derived(sources).Compute(source => source.Value);
+        var downstream = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
+        model.Invariant(sources).Using(downstream).Must((_, value) => value >= 0);
+
+        var debugView = model.Build().DebugView;
+        var dagLines = debugView[(debugView.IndexOf("Dependency DAG:", StringComparison.Ordinal))..]
+            .Split(Environment.NewLine);
+
+        Assert.Equal("Dependency DAG:", dagLines[0]);
+        Assert.Equal(3, dagLines.Count(line => line.TrimStart().StartsWith("[", StringComparison.Ordinal)));
+        Assert.Contains(dagLines, line => line.Contains("[0] Derived:", StringComparison.Ordinal));
+        Assert.Contains(dagLines, line => line.Contains("[1] Derived:", StringComparison.Ordinal));
+        Assert.Contains(dagLines, line => line.Contains("[2] Invariant:", StringComparison.Ordinal));
+        Assert.Equal(2, dagLines.Count(line => line.TrimStart().StartsWith("Edge:", StringComparison.Ordinal)));
+    }
+
     private static CompiledDependencyGraph Compile(
         IReadOnlyList<Derived<Source, int>> derived,
         IReadOnlyList<Invariant<Source>>? invariants = null) => CompiledDependencyGraph.Compile(
