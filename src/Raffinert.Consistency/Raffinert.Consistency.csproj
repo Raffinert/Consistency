@@ -15,7 +15,7 @@
     <RepositoryUrl>https://github.com/Raffinert/Consistency</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>See CHANGELOG.md for alpha release notes.</PackageReleaseNotes>
+    <PackageReleaseNotes>See CHANGELOG.md for release notes.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>

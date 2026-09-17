@@ -22,7 +22,7 @@ severe the impact is**, and **what work must happen next**.
 > You declare domain relationships. Raffinert.Consistency derives the consistency machinery.
 
 The dependency-free core targets .NET 8 and .NET 10. The EF Core adapter targets .NET 10 / EF Core 10.
-The project is currently experimental and alpha-oriented.
+The project is pre-1.0 and currently available as a release candidate. APIs may still change before 1.0.
 
 ## Why?
 
@@ -450,6 +450,7 @@ The detailed edge-case contracts live in the architecture documentation rather t
 
 ## Project status
 
-Raffinert.Consistency is experimental. The core behavior suite runs on .NET 8 and .NET 10; the EF Core
+Raffinert.Consistency is pre-1.0 and currently available as a release candidate. The core behavior suite runs
+on .NET 8 and .NET 10; the EF Core
 integration suite targets .NET 10. CI restores, builds, tests, formats, packs, and validates the public API
 and package metadata. Main-branch CI produces package artifacts but does not publish them automatically.
