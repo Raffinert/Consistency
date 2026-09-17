@@ -1,7 +1,8 @@
 # Roadmaps
 
-- **Active hardening plan:** make external consumer discovery release-safe by proving active-policy applicability, exact coverage substitution, EF evaluation closure, structural coverage admission, ChangeTracker overlay, and failure/retry semantics: [Tasks 192–201](../codex-plan-external-consumer-discovery-hardening-and-proof.md)
-- Implemented mutation-driven external consumer discovery for direct reference-navigation dependencies at `b57b4ba98922abbb61c2a86bcdc3b81adf377897`; CI for that implementation commit is green, but release hardening/proof continues in Tasks 192–201: [Tasks 182–191](../codex-plan-external-consumer-discovery-and-incomplete-graph-resolution.md)
+- **Active completion plan:** finish external consumer discovery hardening by separating structural coverage admission from domain addition, completing EF evaluation-closure checks, proving the full policy/scope/overlay/failure matrix, and closing release evidence: [Tasks 202–210](../codex-plan-external-consumer-discovery-hardening-completion.md)
+- Tasks 192–201 were **partially implemented** at `730de44756aeced16af8b7bb011ab9e2ed4e0374`; that exact commit has green GitHub Actions CI and includes useful policy/scope/EF-metadata/materialization-rollback hardening, but it leaves structural `CoverageAdmission` semantics, full evaluation closure, and most required regression proof incomplete. Superseded by Tasks 202–210: [Tasks 192–201](../codex-plan-external-consumer-discovery-hardening-and-proof.md)
+- Implemented mutation-driven external consumer discovery for direct reference-navigation dependencies at `b57b4ba98922abbb61c2a86bcdc3b81adf377897`; CI for that implementation commit is green, with later hardening continued by Tasks 192–210: [Tasks 182–191](../codex-plan-external-consumer-discovery-and-incomplete-graph-resolution.md)
 - Completed domain-neutral executable dogfooding example for dependency maintenance in an anemic EF model with local
   proof at `8da58b4` (remote pipelines intentionally not checked):
   [Tasks 167–173](../codex-plan-anemic-dependency-maintenance-dogfooding-example.md)
@@ -14,8 +15,8 @@
 - Completed generated UPDATE value safety and policy-aware capture of unmapped nested dependency targets with
   local and remote release proof at `5623971a98d222c90cf388dc3c0eb23724fbc75e`:
   [Tasks 152–158](../codex-plan-generated-update-values-and-unmapped-dependency-capture.md)
-- Completed generated-value/fixup safety and object-set-scoped persistence member metadata with local and
-  remote release proof at `7140d712fe6fcb2c314ba8364ef29fe5a21b23e6`:
+- Completed generated-value/fixup safety and object-set-scoped persistence member metadata with local and remote
+  release proof at `7140d712fe6fcb2c314ba8364ef29fe5a21b23e6`:
   [Tasks 145–151](../codex-plan-generated-value-fixup-and-set-scoped-policy-safety.md)
 - Completed authoritative scope coverage for reverse-navigation consumers and policy-aware manual/generated-key
   EF persistence with local and remote release proof at `fdf8c010917c07c0ea57737a7dc2b0bbdbd96dee`:
