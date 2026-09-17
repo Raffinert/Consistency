@@ -1,12 +1,14 @@
 # Raffinert.Consistency 0.1.0-rc.1 release preparation
 
-Status: **ACTIVE RELEASE-PREP PLAN**
+Status: **ACTIVE RELEASE-PREP PLAN — RESTARTED AFTER DAG HARDENING**
 
-Baseline reviewed for this plan: `163d57a78bbdb49df22f42337d6c253b6147e005`
+Current release-preparation baseline: `dddb1d819b7136b16061153715b69db63b68bf83`
 
-The plan was authored at `e0e23bda398871bfd46c6e920917c31506d27504`. Intervening commits add or update
-documentation and make the dependency-maintenance sample explicitly asynchronous; no library, test, public
-API, package, or runtime behavior changed. The RC verification must therefore run against the current head.
+The earlier RC proof was completed before Tasks 256–263 changed dependency-DAG runtime internals. Its package
+artifacts, smoke tests, and CI evidence must not be reused. Restart every release verification gate from the
+post-DAG implementation SHA above. The DAG wave made no public API change and exact-head CI #313 / run
+`35245686551` succeeded, but this does not replace the release-candidate workflow and package-consumer proof
+required by this plan.
 
 Target release: **`0.1.0-rc.1`**
 

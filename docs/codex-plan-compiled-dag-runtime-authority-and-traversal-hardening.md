@@ -1,14 +1,141 @@
 # Codex implementation plan — compiled DAG runtime authority and traversal hardening
 
-Status: **ACTIVE IMPLEMENTATION PLAN**
+Status: **COMPLETE**
 
 Verified starting `main` SHA: `b9a5a0e46fad9f8ad42d3b543fc79febfd186172`
 
 Tasks: **256–263**
 
+## Completion record — 2026-09-17
+
+Starting remote SHA: `5308069f4a614e660472b4d44ef54a1bc1875443`
+
+| Task | SHA |
+|---|---|
+| 256 | `4685a1358a3c2eef3554f23261d16c664327d6b4` |
+| 257 | `eda76241695361f1f9d760ecd6f17c15cc791d3b` |
+| 258 | `ed6afb32f15c8f2675639544471c5e04ec4c7070` |
+| 259 | `733ac4c575a19601ecb18843938a0775150994e4` |
+| 260 | `de7f50dadd4918374e61510f993ee41cd8496437` |
+| 261 | `12294c06a7124e999c28a47b7bd38cbf2ec98cec` |
+| 262 | `d28f7537f5678f11b47ad143e37d21b97b378e9e` |
+| 263 / final implementation | `dddb1d819b7136b16061153715b69db63b68bf83` |
+
+Topology reconstruction removed:
+
+```text
+_derivedByUpstream: yes
+_upstreamsByDerived: yes
+_invariantsByDerived: yes
+```
+
+Direct seed indexes preserved:
+
+```text
+_derivedByRelation: yes
+_derivedByMember: yes
+_invariantsByMember: yes
+```
+
+The `CaptureState` fixed-point loop is removed. Compiled derived-to-derived edges are represented by
+`CompiledDependencyEdge(FromNodeId, ToNodeId, Kind, DerivedInput)`, where `DerivedInput` is the exact
+`UpstreamDerivedInput` instance owned by the downstream definition. Derived-to-invariant edges have an
+explicit kind and a null `DerivedInput`. Incoming and outgoing adjacency are compiled once as read-only,
+deterministically ordered lists.
+
+Cycle diagnostics now report a deterministic real witness, for example:
+
+```text
+Dependency cycle detected: A -> B -> C -> A.
+```
+
+Public API diff: none. Both `PublicAPI.Unshipped.txt` files remain empty.
+
+Benchmark source: `benchmarks/Raffinert.Consistency.Benchmarks/DependencyDagBenchmarks.cs`
+
+Benchmark results: `benchmarks/DependencyDag-Results.md`. On the recorded machine, increasing a deep chain
+from 32 to 128 nodes measured 4.02x apply time and 3.82x allocation, consistent with node/edge-proportional
+traversal rather than repeated fixed-point scans.
+
+Required behavior maps to these exact tests:
+
+```text
+Compiled_graph_assigns_upstream_before_downstream_topological_order
+Compiled_graph_places_invariant_after_all_of_its_upstream_derived_nodes
+Compiled_graph_deduplicates_duplicate_logical_edges
+Compiled_graph_topological_order_is_deterministic_for_same_model
+Compiled_graph_preserves_diamond_structure_without_duplicate_downstream_edges
+Compiled_graph_outgoing_adjacency_matches_edges
+Compiled_graph_incoming_adjacency_matches_edges
+Derived_to_derived_edge_retains_exact_upstream_input_metadata
+Derived_to_invariant_edge_has_correct_kind
+Compiled_graph_adjacency_is_duplicate_free
+Runtime_DAG_topology_matches_compiled_graph_for_chain_diamond_and_invariant
+Projected_runtime_edge_uses_compiled_input_metadata
+Deep_derived_chain_propagates_in_topological_order_without_registration_order_dependency
+Projected_upstream_chain_maps_sources_across_sets_through_multiple_DAG_levels
+Diamond_downstream_source_is_propagated_once_semantically
+Capture_state_propagates_deep_chain_in_one_topological_pass
+Capture_state_propagates_diamond_sources_without_duplicate_semantics
+Capture_state_propagates_projected_sources_across_sets
+Capture_state_merges_direct_and_inherited_sources_for_same_downstream_node
+Capture_state_preserves_previous_snapshot_sources_through_downstream_chain
+Causal_evidence_is_identical_for_compiled_DAG_chain_and_diamond_after_topology_refactor
+Compiled_graph_rejects_self_cycle_with_actual_cycle_path
+Compiled_graph_rejects_two_node_cycle_with_actual_cycle_path
+Compiled_graph_reports_one_real_cycle_when_tail_nodes_depend_on_cycle
+Compiled_graph_cycle_message_is_deterministic
+Compiled_graph_cycle_message_prefers_definition_keys
+DebugView_preserves_compiled_dependency_DAG_nodes_order_and_edges
+```
+
+Remaining production uses of `UpstreamDerivedInput` outside `CompiledDependencyGraph` are semantic rather
+than propagation-topology reconstruction:
+
+- `DependencyGraphRuntime` consumes the exact descriptor supplied by compiled incoming edges to perform
+  source mapping and causal propagation.
+- `ProjectionIndexRegistry` builds and queries the reverse projection indexes encoded by projected inputs.
+- `ConsistencyRuntime` validates projected targets and ownership.
+- scope-requirement and external-consumer analysis inspect definition semantics to calculate authoritative
+  data coverage; they do not drive dependency-state propagation or construct runtime adjacency.
+- model diagnostics, DebugView, and causal result rendering describe model/evidence semantics.
+- derived/invariant definitions and runtime states retain their computation/evaluation descriptors.
+
+Local verification:
+
+```text
+restore: PASS
+build: PASS (0 warnings, 0 errors)
+Core net8: PASS (346)
+Core net10: PASS (346)
+EF net10: PASS (176)
+DependencyMaintenanceSample: PASS
+OrderFulfillmentSample: PASS
+EntityFrameworkCore.Sample: PASS
+format: PASS
+package creation and non-publication verifier: PASS (0.1.0-rc.1)
+```
+
+The build used isolated output under `C:\Windows\Temp\Raffinert-dag-dddb1d8` because three stale,
+privileged sample processes held the ordinary DependencyMaintenanceSample output DLLs. The isolated build
+preserved Release configuration and the required `--no-build` test/sample flow.
+
+Remote final SHA: `dddb1d819b7136b16061153715b69db63b68bf83`
+
+Exact GitHub Actions run: [CI #313 / run 35245686551](https://github.com/Raffinert/Consistency/actions/runs/35245686551)
+
+```text
+CI head_sha: dddb1d819b7136b16061153715b69db63b68bf83
+CI status: completed
+CI conclusion: success
+git status --short: empty
+Release-prep baseline reset to final DAG SHA: yes
+```
+
 This plan intentionally re-opens runtime/architecture work **before the first public release**.
 
-The previously active `0.1.0-rc.1` release-preparation wave (Tasks 247–255) is **PAUSED** until this DAG-hardening wave is complete and has exact-head CI proof. After Task 263, release preparation must restart from the new implementation SHA rather than from the pre-DAG baseline.
+The `0.1.0-rc.1` release-preparation wave (Tasks 247–255) was paused during this DAG-hardening work.
+It is now reactivated from the final implementation SHA above; pre-DAG release evidence is obsolete.
 
 The purpose of this wave is not to add a graph framework. Raffinert.Consistency already has a real dependency DAG. The purpose is to make the compiled DAG the authoritative topology used by runtime propagation, remove redundant topology reconstruction, replace an unnecessary fixed-point scan with one topological pass, strengthen cycle diagnostics, and prove that all existing source-scoped, projected, relation-derived, invariant, planning, rollback, and causal behavior remains unchanged.
 
