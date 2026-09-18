@@ -1,26 +1,59 @@
 # Raffinert.Consistency consumer verification checklist
 
-Use this checklist when reviewing AI-generated integration code in a downstream application.
+Use this checklist when reviewing AI-generated integration code in a downstream application using the **0.2 API line**.
 
-The checklist is deliberately strict. A consumer integration can compile and still be incorrect if it lies about coverage or misses unloaded consumers.
+A consumer integration can compile and still be incorrect if it lies about dependency tracking, materialization, authoritative coverage, or persistence ordering.
 
 ---
 
-## 1. Model correctness
+## 1. API-line check
+
+Reject generated code that still uses removed v1 API:
+
+```text
+Using(...)
+Compute(...)
+Incrementally()
+ConsistencyRuntime.Get(...)
+ConsistencyEfCoreMappings.Materialize(...)
+DerivedUsingBuilder
+InvariantUsingBuilder
+```
+
+Expected v2 vocabulary:
+
+```text
+From(...)
+DependsOn(...)
+Select(...)
+Sum / Count / LongCount / Any
+MaterializeTo(...)
+Evaluate(...)
+Materialize(...)
+```
+
+If a generated example contains mixed v1/v2 syntax, fix it before reviewing deeper semantics.
+
+---
+
+## 2. Model correctness
 
 Verify:
 
 ```text
 [ ] Every Raffinert ObjectSet has a stable application key.
-[ ] No mutable semantic field is used as runtime identity.
-[ ] Relations encode the real matching semantics exactly once.
+[ ] No mutable semantic field is used as object-set identity.
+[ ] Same-CLR object sets are not treated as interchangeable.
+[ ] Relations encode matching semantics exactly once.
 [ ] Source-local calculations are source-local in reality.
-[ ] Derived-from-derived edges use Using(...) instead of duplicating orchestration.
-[ ] Projected dependencies use the projected upstream API rather than hidden manual reads.
-[ ] Opaque calculators declare every hidden source-state member with DependsOn(...).
-[ ] DependsOn is not being used to pretend external state is tracked.
+[ ] Derived-from-derived edges use From(handle).
+[ ] Projected dependencies use From(selector, handle).
+[ ] Opaque calculators declare every hidden modeled member with DependsOn(...).
+[ ] DependsOn is not used as a substitute for logical value flow.
+[ ] DependsOn is not used to pretend external state is tracked.
+[ ] Materialized mirror properties are not used as graph inputs.
 [ ] Invariant semantics match the business rule.
-[ ] Dirty vs Invalid severity is intentional where configured.
+[ ] Dirty vs Invalid is intentional where configured.
 ```
 
 Red flags:
@@ -28,38 +61,198 @@ Red flags:
 ```text
 calculator reads DateTime.Now
 calculator queries a database/service
-calculator reads a property not declared or analyzable
+calculator reads undeclared opaque state
 same matching rule repeated in service and relation
+downstream derived value reads a MaterializeTo property instead of From(handle)
 manual setter side effects still maintain the same derived state
 ```
 
 ---
 
-## 2. EF mapping correctness
+## 3. `From` vs `DependsOn`
+
+For every derived definition, classify each dependency.
+
+### `From(...)`
+
+Use for explicit logical value flow:
+
+```csharp
+model.Derived(lines)
+    .From(priceRate)
+    .Select((line, rate) => ...);
+```
+
+The downstream calculator must receive the logical upstream value.
+
+### `DependsOn(...)`
+
+Use for member reads hidden inside ordinary code:
+
+```csharp
+model.Derived(lines)
+    .DependsOn(x => x.Product.Price)
+    .Select(Calculate);
+```
+
+`DependsOn` affects change tracking; it does not add calculator arguments.
+
+Review failure:
+
+```text
+MaterializeTo(x => x.PriceRate)
+...
+DependsOn(x => x.PriceRate)
+```
+
+when the intended dependency is the logical PriceRate node. That must be `From(priceRate)`.
+
+---
+
+## 4. Recognized aggregate check
+
+Preferred relation aggregate declarations use:
+
+```text
+From(relation).Sum(...)
+From(relation).Count()
+From(relation).LongCount()
+From(relation).Any()
+```
 
 Verify:
 
 ```text
-[ ] Map(set) is used for sets whose tracked mutations/lifecycle must be translated.
-[ ] Enforce(invariant) is present only for violations that must block SQL.
-[ ] Materialize(derived, property) targets a direct writable mapped property.
-[ ] Materialized mirror is sink-only.
-[ ] No key/generated/dependency member is reused as a mirror target.
-[ ] Save behavior is intentional: Validate vs RecalculateAndValidate.
+[ ] no Incrementally() appears
+[ ] recognized operator matches intended semantics
+[ ] Impact policy is attached deliberately
+[ ] additive/removal/item-change behavior matches Dirty/Invalid requirements
 ```
 
-Do not accept statements such as:
+For a custom relation calculation, `From(relation).Select(...)` is valid, but do not claim it is a recognized incremental aggregate unless the operator actually is one.
+
+---
+
+## 5. Materialization correctness
+
+Materialization belongs to the Core derived declaration:
+
+```csharp
+var total = model.Derived(records)
+    .Select(...)
+    .MaterializeTo(x => x.Total);
+```
+
+Verify:
 
 ```text
-"Map means all rows are covered"
-"Materialized property is now the source of truth"
+[ ] MaterializeTo targets a direct writable property on the derived source object.
+[ ] TValue and target property type are compatible.
+[ ] Mirror is sink-only.
+[ ] No object-set key uses the mirror.
+[ ] No relation/invariant/DependsOn/projected selector reads the mirror as semantic input.
+[ ] EF mappings do not call removed .Materialize(...).
+```
+
+Do not accept:
+
+```text
+"Materialized property is the source of truth"
+"MaterializeTo means the POCO getter is always current"
 ```
 
 Both are wrong.
 
 ---
 
-## 3. Coverage proof
+## 6. Evaluate vs Materialize
+
+Review runtime calls carefully.
+
+### Logical read
+
+```csharp
+runtime.Evaluate(derived, source);
+```
+
+Must not write the POCO mirror.
+
+### One mirror
+
+```csharp
+runtime.Materialize(derived, source);
+```
+
+Synchronizes the requested configured representation.
+
+### All mirrors on one object
+
+```csharp
+runtime.Materialize(source);
+```
+
+Verify object materialization is being interpreted narrowly:
+
+```text
+all configured materialized representations ON THIS OBJECT
+```
+
+It must not be described as:
+
+```text
+repair whole graph
+materialize dependency objects
+materialize downstream objects
+```
+
+If application code directly reads a mirror, establish where materialization/freshness is guaranteed first.
+
+---
+
+## 7. Invariant correctness
+
+Expected value-flow form:
+
+```csharp
+model.Invariant(set)
+    .From(derived)
+    .Must(...);
+```
+
+Verify:
+
+```text
+[ ] Must is the real business truth condition.
+[ ] EF Enforce is used only when violation must block SQL.
+[ ] Repair/reaction remains separate from materialization.
+[ ] Materialize does not silently dispatch repair.
+```
+
+---
+
+## 8. EF mapping correctness
+
+Verify:
+
+```text
+[ ] Map(set) is used for sets whose tracked mutations/lifecycle must be translated.
+[ ] Enforce(invariant) is present only for violations that must block SQL.
+[ ] Core MaterializeTo descriptors are used for mirrors.
+[ ] Save behavior is intentional: Validate vs RecalculateAndValidate.
+```
+
+Do not accept:
+
+```text
+"Map means all rows are covered"
+"EF mappings own materialization definitions"
+```
+
+Both are wrong in the 0.2 API model.
+
+---
+
+## 9. Coverage proof
 
 For every active cross-object dependency, write down the proof strategy.
 
@@ -71,14 +264,14 @@ If code uses:
 scope.Complete(set);
 ```
 
-require an explicit explanation of why the whole set is authoritative in that operation.
+require an explicit explanation of why the entire set is authoritative in that operation.
 
 Valid examples:
 
 ```text
 small bounded aggregate loaded completely
-import batch contains the entire consistency partition represented by this set
-runtime was seeded with the entire set and mutations are serialized inside the same boundary
+complete import batch for the represented consistency partition
+runtime seeded with the complete set and writes serialized inside one owner boundary
 ```
 
 Invalid explanations:
@@ -86,8 +279,7 @@ Invalid explanations:
 ```text
 "otherwise Raffinert throws"
 "Map(set) was configured"
-"the handler usually loads all of them"
-"we only need these rows most of the time"
+"handler usually loads all of them"
 ```
 
 ### Targeted direct-reference proof
@@ -99,31 +291,29 @@ exact Raffinert ObjectSet
 exact direct non-collection EF navigation
 tracked query
 batched target set
-complete authoritative query
-all evaluation-required references loaded
+authoritative query
+all references required for evaluation loaded
 ```
 
-Do not treat targeted discovery as whole-set completeness.
+Targeted discovery is not whole-set completeness.
 
 ---
 
-## 4. Discovery resolver review
+## 10. Discovery resolver review
 
-For every resolver, inspect the actual query.
-
-Example checklist:
+For every resolver:
 
 ```text
-[ ] The WHERE clause can return every persisted consumer for every requested target.
-[ ] Target IDs are batched in one query shape.
-[ ] Tenant/org/dataset/security filters match the real authoritative boundary.
+[ ] WHERE can return every persisted consumer for every requested target.
+[ ] Target IDs are batched.
+[ ] Tenant/org/dataset/security filters match the authoritative boundary.
 [ ] Soft-delete semantics are deliberate.
-[ ] The query is tracked.
-[ ] No AsNoTracking is present.
-[ ] The discovery navigation is included/loaded where needed.
-[ ] Other direct references used by active formulas are also included/loaded.
-[ ] The query does not under-fetch because of pagination/Take/First/etc.
-[ ] The query does not assume database relationship state overrides current tracked retargeting.
+[ ] Query is tracked.
+[ ] No AsNoTracking root is returned.
+[ ] Discovery navigation is loaded where needed.
+[ ] Other references used by active formulas are loaded too.
+[ ] No Take/First/paging under-fetch can occur.
+[ ] Query does not assume database relationship state beats current tracked retargeting.
 ```
 
 Safe:
@@ -135,17 +325,17 @@ resolver returns an authoritative superset
 Unsafe:
 
 ```text
-resolver returns only the roots currently visible in a UI page
-resolver returns Top(100)
-resolver applies a business filter unrelated to authoritative consistency
-resolver loads Source but formula also reads unloaded Target
+resolver returns current UI page
+resolver returns Top(N)
+resolver filters out valid consumers for convenience
+resolver loads Source while formula also needs unloaded Target
 ```
 
 ---
 
-## 5. Unsupported shapes remain fail-closed
+## 11. Unsupported shapes remain fail-closed
 
-Verify AI-generated code did not invent support for:
+Verify generated code did not invent support for:
 
 ```text
 multi-hop external consumer discovery
@@ -159,21 +349,15 @@ automatic lazy-loading correctness
 automatic host-query completeness proof
 ```
 
-If one of these is required, the generated implementation must either:
+If required, use genuine `Complete(set)` coverage, redesign the consistency boundary, or report the scenario as unsupported.
 
-```text
-provide genuine Complete(set) coverage
-redesign the consistency boundary
-or explicitly report the feature as unsupported
-```
-
-It must not weaken the contract silently.
+Do not weaken the contract silently.
 
 ---
 
-## 6. Persistence ordering
+## 12. Persistence ordering
 
-Ordinary stable-key flow should look like:
+Ordinary flow:
 
 ```text
 POCO changes
@@ -193,142 +377,142 @@ exact runtime install
 dispatch
 ```
 
-Check that no application code commits Raffinert runtime state before SQL durability.
+Runtime state must not be committed before SQL durability.
 
-For manual UoW:
+Manual UoW:
 
 ```text
 CaptureConsistencyUnitOfWork
 transaction begins
 optional save for required generated semantic values
 PrepareAndPlan
-persist outbox/durable policy work
+persist durable repair/outbox work
 final SaveChanges
 transaction commit
 CommitAfterDatabaseCommit
 Dispatch
 ```
 
-Reject code that does:
-
-```text
-PrepareAndPlan
-CommitAfterDatabaseCommit
-SaveChanges
-```
-
-or any equivalent runtime-before-database ordering.
+Reject any runtime-before-database ordering.
 
 ---
 
-## 7. Runtime lifetime/concurrency
+## 13. Runtime lifetime/concurrency
 
 Raffinert runtime is mutable and not thread-safe.
 
 Verify:
 
 ```text
-[ ] Runtime ownership/lifetime corresponds to an isolated consistency boundary.
-[ ] One runtime is not casually registered as an application-wide singleton used concurrently.
-[ ] If runtime is long-lived, application has an explicit serialization/partition model.
-[ ] Runtime seeding/coverage strategy is clear.
-[ ] Cross-process database writers are accounted for.
+[ ] Runtime ownership corresponds to a defined consistency boundary.
+[ ] Runtime is not casually registered as a concurrently used application singleton.
+[ ] Long-lived runtime has explicit serialization/partitioning.
+[ ] Seeding/rebuild strategy is clear.
+[ ] Cross-process writers are accounted for.
 ```
 
-If the agent cannot explain runtime ownership, it should not finalize DI registration.
+If runtime ownership cannot be explained, do not approve DI registration.
 
 ---
 
-## 8. Invisible database mutations
+## 14. Invisible database mutations
 
-Search the consumer repository for relevant usage of:
+Search for:
 
 ```text
 ExecuteUpdate
 ExecuteDelete
-FromSql / raw SQL mutation
+raw SQL mutation
 bulk update/delete libraries
-stored procedures that mutate managed state
-database triggers
-Cascade / SetNull delete behavior
-message consumers or other processes writing the same rows
+stored procedures
+triggers
+Cascade / SetNull database effects
+other services/processes writing the same rows
 ```
 
-If these can change Raffinert-relevant state without tracked mutation evidence, require a documented strategy:
+If they can change modeled state without tracked evidence, require a strategy:
 
 ```text
 exact mutation publication
 reconciliation
 runtime rebuild/reseed
-serialized owner process
-or explicit exclusion from the authoritative boundary
+single serialized owner
+explicit exclusion from the authoritative boundary
 ```
 
 Do not assume ChangeTracker sees database-side effects.
 
 ---
 
-## 9. Required consumer tests
+## 15. Required consumer tests
 
-Choose tests based on the real application shape.
+Choose tests based on the real integration.
 
-### Basic formula
+### Logical value flow
 
 ```text
-[ ] changing each declared input changes the derived result correctly
-[ ] unrelated change does not alter the result
+[ ] changing every declared input changes the value correctly
+[ ] unrelated change does not
+[ ] From(handle) consumes current logical value even when mirror is stale
+```
+
+### Materialization
+
+```text
+[ ] Evaluate does not write mirror
+[ ] targeted Materialize writes only requested mirror
+[ ] object Materialize writes all applicable mirrors on requested source
+[ ] Fresh logical cache can restore corrupt mirror without recomputation
+[ ] materialization does not dispatch repair
+```
+
+### Relation aggregate
+
+```text
+[ ] Sum/Count/LongCount/Any expected values
+[ ] membership add/remove/item change follows configured severity
 ```
 
 ### Direct-reference open-world discovery
 
 ```text
-[ ] runtime starts with only one known root
-[ ] DB contains additional consumers
+[ ] runtime starts with only one/subset of roots
+[ ] DB has additional consumers
 [ ] changed target discovers unloaded consumers
-[ ] all affected consumers get correct derived values
-[ ] resolver called once per navigation obligation, not once per root
-[ ] runtime version increments once after successful save
-[ ] persisted values verified from a separate context
+[ ] all affected roots receive correct values/mirrors
+[ ] resolver called per navigation obligation, not per root
+[ ] persisted values verified from fresh DbContext
 ```
 
 ### Retargeting
 
 ```text
-[ ] consumer retargeted away is excluded from old target
-[ ] consumer retargeted in is included for new target
-```
-
-### Evaluation closure
-
-```text
-[ ] missing required sibling navigation fails before SQL
-[ ] loaded optional null succeeds where formula supports null
-[ ] unloaded null fails
-[ ] detached required reference fails
+[ ] consumer retargeted away excluded from old target
+[ ] consumer retargeted in included for new target
 ```
 
 ### Persistence policy
 
 ```text
 [ ] Validate enforces invariants but does not write mirrors
-[ ] RecalculateAndValidate writes mirrors
+[ ] RecalculateAndValidate writes affected mirrors
 [ ] enforced violation blocks SQL
 ```
 
 ### Failure
 
 ```text
-[ ] resolver/planning failure leaves runtime version unchanged
+[ ] resolver/planning failure leaves runtime uncommitted
 [ ] SQL failure leaves runtime plan uninstalled
-[ ] framework-owned mirror writes are restored as documented
-[ ] retry behavior is tested if the application intends to reuse the same context
+[ ] framework-owned mirror writes restore as documented
+[ ] retry behavior tested if same context is reused
 ```
 
 ---
 
-## 10. Independent persisted-state verification
+## 16. Independent persisted-state verification
 
-After a successful integration test, prefer a fresh DbContext:
+After a successful integration test, prefer a fresh `DbContext`:
 
 ```csharp
 await using var verification = CreateDbContext();
@@ -337,36 +521,37 @@ var persisted = await verification.Set<Association>()
     .AsNoTracking()
     .SingleAsync(x => x.Id == id);
 
-Assert.Equal(expected, persisted.UnitRate);
+Assert.Equal(expected, persisted.CombinedValue);
 ```
 
-This is stronger than asserting only the already-tracked object.
+This proves database state, not merely the already-tracked POCO.
 
-Do not confuse this with the discovery resolver: the resolver itself must remain tracked.
+The discovery resolver itself must still use tracked entities.
 
 ---
 
-## 11. Migration review
+## 17. Migration review
 
-When replacing an existing manual maintenance service, ensure the PR explains what old orchestration is replaced.
+When replacing a manual maintenance service, explain what orchestration disappears.
 
 Typical before:
 
 ```text
 collect changed endpoint IDs
-query affected link rows
+query affected root rows
 union tracked rows
 load missing endpoints
 recalculate
-persist mirror
+write mirror
 ```
 
 Typical after:
 
 ```text
-declared DependsOn/direct dependency
-DiscoverConsumers
-Materialize
+DependsOn / From declarations
+Select / recognized aggregate
+MaterializeTo
+DiscoverConsumers where needed
 consistent save boundary
 ```
 
@@ -374,29 +559,32 @@ Do not remove manual orchestration until parity tests demonstrate:
 
 ```text
 same affected rows
-same calculation results
+same logical calculation
 same null/zero/error semantics
-same persistence behavior
+same persisted outcomes
 correct unloaded-consumer behavior
 ```
 
 ---
 
-## 12. Final AI reviewer output
+## 18. Final reviewer output
 
-A reviewing agent should summarize the integration using this structure:
+A reviewing agent should summarize:
 
 ```text
 Consistency graph
-    <inputs -> derived -> invariant chain>
+    <inputs -> DependsOn/From -> derived -> invariant>
 
 Runtime-owned ObjectSets
     <sets and keys>
 
+Materialized mirrors
+    <Derived -> MaterializeTo property>
+
 EF policy
     mapped sets:
     enforced invariants:
-    materialized mirrors:
+    discovery resolvers:
 
 Coverage strategy
     Complete(...): <why valid>
@@ -404,6 +592,9 @@ Coverage strategy
 
 Save boundary
     <convenience or manual UoW>
+
+Runtime ownership
+    <lifetime + synchronization>
 
 Invisible mutation boundary
     <raw SQL/triggers/other writers and mitigation>
@@ -415,4 +606,4 @@ Unsupported/out-of-scope behavior
     <anything intentionally not handled>
 ```
 
-If the reviewer cannot fill out one of these sections from the code, request correction before approving the generated integration.
+If the reviewer cannot fill these sections from the code, request correction before approving the integration.
