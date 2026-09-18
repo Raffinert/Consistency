@@ -271,7 +271,7 @@ public sealed class ApiV2ProductionTests
     }
 
     [Fact]
-    public void Recognized_aggregates_match_old_incremental_syntax()
+    public void Recognized_aggregates_preserve_incremental_plans_states_and_values()
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
@@ -284,138 +284,110 @@ public sealed class ApiV2ProductionTests
             .MembershipRemoved(DependencySeverity.Invalid)
             .ItemChanged(DependencySeverity.Invalid);
 
-        var oldSum = model.Derived(lines).Using(relation).Impact(Impact).Incrementally()
-            .Compute((_, matches) => matches.Sum(x => x.Quantity));
-        var newSum = model.Derived(lines).From(relation).Impact(Impact).Sum(x => x.Quantity);
-        var oldCount = model.Derived(lines).Using(relation).Impact(Impact).Incrementally()
-            .Compute((_, matches) => matches.Count);
-        var newCount = model.Derived(lines).From(relation).Impact(Impact).Count();
-        var oldLongCount = model.Derived(lines).Using(relation).Impact(Impact).Incrementally()
-            .Compute((_, matches) => matches.LongCount());
-        var newLongCount = model.Derived(lines).From(relation).Impact(Impact).LongCount();
-        var oldAny = model.Derived(lines).Using(relation).Impact(Impact).Incrementally()
-            .Compute((_, matches) => matches.Any());
-        var newAny = model.Derived(lines).From(relation).Impact(Impact).Any();
+        var sum = model.Derived(lines).From(relation).Impact(Impact).Sum(x => x.Quantity);
+        var count = model.Derived(lines).From(relation).Impact(Impact).Count();
+        var longCount = model.Derived(lines).From(relation).Impact(Impact).LongCount();
+        var any = model.Derived(lines).From(relation).Impact(Impact).Any();
         var compiled = model.Build();
         var line = new PurchaseOrderLine { Id = 1 };
         var first = new GoodsReceipt { Id = 1, PurchaseOrderLineId = 1, Quantity = 4m };
         var runtime = compiled.CreateRuntime(seed => seed.Add(lines, [line]).Add(receipts, [first]));
 
-        AssertParity();
+        AssertValues(4m, 1, 1L, true);
         var added = new GoodsReceipt { Id = 2, PurchaseOrderLineId = 1, Quantity = 2m };
         runtime.Add(receipts, added);
-        Assert.Equal(runtime.GetState(oldSum, line), runtime.GetState(newSum, line));
-        AssertParity();
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(sum, line));
+        AssertValues(6m, 2, 2L, true);
 
         added.Quantity = 3m;
         runtime.Apply(Change.Property(receipts, added, x => x.Quantity, 2m, 3m));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(newSum, line));
-        Assert.Equal(runtime.GetState(oldSum, line), runtime.GetState(newSum, line));
-        AssertParity();
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(sum, line));
+        AssertValues(7m, 2, 2L, true);
 
         added.Quantity = 1m;
         runtime.Apply(Change.Property(receipts, added, x => x.Quantity, 3m, 1m));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(newSum, line));
-        Assert.Equal(runtime.GetState(oldSum, line), runtime.GetState(newSum, line));
-        AssertParity();
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(sum, line));
+        AssertValues(5m, 2, 2L, true);
 
         added.Cancelled = true;
         runtime.Apply(Change.Property(receipts, added, x => x.Cancelled, false, true));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(newSum, line));
-        Assert.Equal(runtime.GetState(oldSum, line), runtime.GetState(newSum, line));
-        AssertParity();
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(sum, line));
+        AssertValues(4m, 1, 1L, true);
 
         Assert.All(compiled.Diagnostics.DerivedValues, value =>
             Assert.StartsWith("Incremental", value.ComputationPlan, StringComparison.Ordinal));
 
-        void AssertParity()
+        void AssertValues(decimal expectedSum, int expectedCount, long expectedLongCount, bool expectedAny)
         {
-            Assert.Equal(runtime.Evaluate(oldSum, line), runtime.Evaluate(newSum, line));
-            Assert.Equal(runtime.Evaluate(oldCount, line), runtime.Evaluate(newCount, line));
-            Assert.Equal(runtime.Evaluate(oldLongCount, line), runtime.Evaluate(newLongCount, line));
-            Assert.Equal(runtime.Evaluate(oldAny, line), runtime.Evaluate(newAny, line));
+            Assert.Equal(expectedSum, runtime.Evaluate(sum, line));
+            Assert.Equal(expectedCount, runtime.Evaluate(count, line));
+            Assert.Equal(expectedLongCount, runtime.Evaluate(longCount, line));
+            Assert.Equal(expectedAny, runtime.Evaluate(any, line));
         }
     }
 
     [Fact]
-    public void Direct_transitive_and_projected_v2_values_match_legacy_declarations()
+    public void Direct_transitive_and_projected_values_preserve_state_and_results()
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
         var links = model.Objects<ProjectionLink>().Key(x => x.Id);
-        var oldDirect = model.Derived(lines)
-            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(x => x.Price * 2m);
-        var newDirect = model.Derived(lines)
+        var direct = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
             .Select(x => x.Price * 2m);
-        var oldMultiple = model.Derived(lines)
-            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(x => x.Price + x.OrderedQuantity);
-        var newMultiple = model.Derived(lines)
+        var multiple = model.Derived(lines)
             .DependsOn(x => x.Price, x => x.OrderedQuantity)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
             .Select(x => x.Price + x.OrderedQuantity);
-        var oldTransitive = model.Derived(lines).Using(oldDirect)
-            .Compute((_, value) => value + 1m);
-        var newTransitive = model.Derived(lines).From(newDirect)
+        var transitive = model.Derived(lines).From(direct)
             .Select((_, value) => value + 1m);
-        var oldProjected = model.Derived(links).Using(x => x.PurchaseOrderLine, oldTransitive)
-            .Compute((_, value) => value);
-        var newProjected = model.Derived(links).From(x => x.PurchaseOrderLine, newTransitive)
+        var projected = model.Derived(links).From(x => x.PurchaseOrderLine, transitive)
             .Select((_, value) => value);
         var line = new PurchaseOrderLine { Id = 1, Price = 5m, OrderedQuantity = 8m };
         var link = new ProjectionLink { Id = 1, PurchaseOrderLine = line };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]).Add(links, [link]));
 
-        AssertParity();
+        AssertValues(10m, 13m, 11m, 11m);
         line.Price = 4m;
         runtime.Apply(Change.Property(lines, line, x => x.Price, 5m, 4m));
-        Assert.Equal(runtime.GetState(oldDirect, line), runtime.GetState(newDirect, line));
-        Assert.Equal(runtime.GetState(oldMultiple, line), runtime.GetState(newMultiple, line));
-        Assert.Equal(runtime.GetState(oldTransitive, line), runtime.GetState(newTransitive, line));
-        Assert.Equal(runtime.GetState(oldProjected, link), runtime.GetState(newProjected, link));
-        AssertParity();
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(direct, line));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(multiple, line));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(transitive, line));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(projected, link));
+        AssertValues(8m, 12m, 9m, 9m);
 
-        void AssertParity()
+        void AssertValues(decimal directValue, decimal multipleValue, decimal transitiveValue, decimal projectedValue)
         {
-            Assert.Equal(runtime.Evaluate(oldDirect, line), runtime.Evaluate(newDirect, line));
-            Assert.Equal(runtime.Evaluate(oldMultiple, line), runtime.Evaluate(newMultiple, line));
-            Assert.Equal(runtime.Evaluate(oldTransitive, line), runtime.Evaluate(newTransitive, line));
-            Assert.Equal(runtime.Evaluate(oldProjected, link), runtime.Evaluate(newProjected, link));
+            Assert.Equal(directValue, runtime.Evaluate(direct, line));
+            Assert.Equal(multipleValue, runtime.Evaluate(multiple, line));
+            Assert.Equal(transitiveValue, runtime.Evaluate(transitive, line));
+            Assert.Equal(projectedValue, runtime.Evaluate(projected, link));
         }
     }
 
     [Fact]
-    public void V2_invariant_facade_matches_old_value_flow_and_repair_behavior()
+    public void Invariant_value_flow_preserves_exactly_once_repair_behavior()
     {
-        var oldRepairs = new List<PurchaseOrderLine>();
-        var newRepairs = new List<PurchaseOrderLine>();
+        var repairs = new List<PurchaseOrderLine>();
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<PurchaseOrderLine>().Key(x => x.Id);
-        var oldValue = model.Derived(lines)
-            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(x => x.Price > 0m);
-        var newValue = model.Derived(lines)
+        var value = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
             .Select(x => x.Price > 0m);
-        var oldInvariant = model.Invariant(lines).Using(oldValue)
-            .Must((_, valid) => valid).ScheduleRepairWith(oldRepairs.Add);
-        var newInvariant = model.Invariant(lines).From(newValue)
-            .Must((_, valid) => valid).ScheduleRepairWith(newRepairs.Add);
+        var invariant = model.Invariant(lines).From(value)
+            .Must((_, valid) => valid).ScheduleRepairWith(repairs.Add);
         var line = new PurchaseOrderLine { Id = 1, Price = 10m };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
-        Assert.True(runtime.Evaluate(oldInvariant, line));
-        Assert.True(runtime.Evaluate(newInvariant, line));
+        Assert.True(runtime.Evaluate(invariant, line));
 
         line.Price = 0m;
         var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(lines, line, x => x.Price, 10m, 0m)));
-        Assert.Equal(runtime.GetState(oldInvariant, line), runtime.GetState(newInvariant, line));
-        Assert.Equal(2, application.Result.RepairRequests.Count);
+        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, line));
+        Assert.Single(application.Result.RepairRequests);
         application.Dispatch.Invoke();
-        Assert.Equal([line], oldRepairs);
-        Assert.Equal([line], newRepairs);
+        Assert.Throws<InvalidOperationException>(application.Dispatch.Invoke);
+        Assert.Equal([line], repairs);
     }
 
     private sealed record Fixture(

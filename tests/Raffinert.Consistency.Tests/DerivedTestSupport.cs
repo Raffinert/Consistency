@@ -15,7 +15,7 @@ public sealed partial class DerivedStateTests
         sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        derived = model.Derived(sources).Using(relation).Compute(computation);
+        derived = model.Derived(sources).From(relation).Select(computation);
         return model;
     }
 
@@ -32,7 +32,7 @@ public sealed partial class DerivedStateTests
         var item = Item("A", quantity: 2m);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(2m, runtime.Get(derived, source));
+        Assert.Equal(2m, runtime.Evaluate(derived, source));
         return new QuantityScenario(runtime, sources, items, derived, source, item);
     }
 

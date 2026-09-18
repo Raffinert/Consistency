@@ -150,8 +150,8 @@ public sealed class PlannedInvariantEvaluationTests
         var repairs = new List<Item>();
         var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Key(x => x.Id);
-        var value = model.Derived(items).Compute(x => x.Value);
-        var invariant = model.Invariant(items).Using(value).Must((_, current) => current >= 0)
+        var value = model.Derived(items).Select(x => x.Value);
+        var invariant = model.Invariant(items).From(value).Must((_, current) => current >= 0)
             .ScheduleRepairWith(repairs.Add);
         var item = new Item { Id = 1, Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
@@ -172,8 +172,8 @@ public sealed class PlannedInvariantEvaluationTests
     {
         var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Key(x => x.Id);
-        var value = model.Derived(items).Compute(x => x.Value);
-        var invariant = model.Invariant(items).Using(value)
+        var value = model.Derived(items).Select(x => x.Value);
+        var invariant = model.Invariant(items).From(value)
             .Must((item, current) => !item.Enabled || current >= 0).Named("enabled-positive");
         var item = new Item { Id = 1, Value = -1, Enabled = false };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
@@ -214,8 +214,8 @@ public sealed class PlannedInvariantEvaluationTests
     {
         var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Named("items").Key(x => x.Id);
-        var value = model.Derived(items).Compute(x => x.Value).Named("value");
-        var invariant = model.Invariant(items).Using(value).Must((source, current) =>
+        var value = model.Derived(items).Select(x => x.Value).Named("value");
+        var invariant = model.Invariant(items).From(value).Must((source, current) =>
             Evaluate(source, current, onEvaluate)).AllowIncompleteDependencies().Named("positive-invariant");
         var first = new Item { Id = 1, Value = 1 };
         var second = new Item { Id = 2, Value = 1 };

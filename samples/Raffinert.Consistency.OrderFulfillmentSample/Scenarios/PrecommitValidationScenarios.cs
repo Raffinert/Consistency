@@ -24,11 +24,11 @@ internal static class PrecommitValidationScenarios
         var allocations = model.Objects<Allocation>().Named("guard-allocations").Key(x => x.Id);
         var relation = model.Relation(requests, allocations)
             .Where((request, allocation) => request.Id == allocation.RequestLineId && !allocation.IsDeleted).Named("guard-active-allocations");
-        var count = model.Derived(requests).Using(relation).Incrementally()
-            .Compute((_, rows) => rows.Count()).Named("guard-active-allocation-count");
-        var valid = model.Derived(requests).Using(count)
-            .Compute((request, active) => !request.IsDeleted || active == 0).Named("guard-orphan-result");
-        var orphanInvariant = model.Invariant(requests).Using(valid).Must((_, result) => result).Named("guard-orphan-invariant");
+        var count = model.Derived(requests).From(relation)
+            .Count().Named("guard-active-allocation-count");
+        var valid = model.Derived(requests).From(count)
+            .Select((request, active) => !request.IsDeleted || active == 0).Named("guard-orphan-result");
+        var orphanInvariant = model.Invariant(requests).From(valid).Must((_, result) => result).Named("guard-orphan-invariant");
         var request = new RequestLine();
         var line = new OrderLine();
         var allocation = new Allocation { RequestLineId = request.Id, OrderLineId = line.Id, OrderLine = line };
@@ -63,11 +63,11 @@ internal static class PrecommitValidationScenarios
         var allocations = model.Objects<Allocation>().Named("guard-quantity-allocations").Key(x => x.Id);
         var allocationFulfillments = model.Objects<AllocationFulfillment>().Named("guard-allocation-fulfillments").Key(x => x.Id);
         var relation = model.Relation(allocations, allocationFulfillments).Where((allocation, allocationFulfillment) => allocation.Id == allocationFulfillment.AllocationId && !allocationFulfillment.IsDeleted).Named("guard-allocation-active-fulfillments");
-        var sum = model.Derived(allocations).Using(relation).Incrementally().Compute((_, rows) => rows.Sum(x => x.Quantity)).Named("guard-fulfillment-sum");
-        var result = model.Derived(allocations).Using(sum).Compute((allocation, total) =>
+        var sum = model.Derived(allocations).From(relation).Sum(x => x.Quantity).Named("guard-fulfillment-sum");
+        var result = model.Derived(allocations).From(sum).Select((allocation, total) =>
             allocation.FulfillmentMode == FulfillmentMode.Unknown ? RuleEvaluation.Unknown :
             allocation.FulfillmentMode == FulfillmentMode.Disabled || allocation.AllocatedQuantity == total ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("guard-allocation-balance");
-        _ = model.Invariant(allocations).Using(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-allocation-balance-invariant");
+        _ = model.Invariant(allocations).From(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-allocation-balance-invariant");
         var line = new OrderLine();
         var allocation = new Allocation { RequestLineId = Guid.NewGuid(), OrderLineId = line.Id, OrderLine = line, AllocatedQuantity = 5 };
         var allocationFulfillment = new AllocationFulfillment { AllocationId = allocation.Id, Allocation = allocation, FulfillmentId = 1, Quantity = 5 };
@@ -104,7 +104,7 @@ internal static class PrecommitValidationScenarios
         var toUnknown = Plan(runtime, MutationSet.Create(Change.Property(allocations, allocation, x => x.AllocatedQuantity, 4m, 3m),
             Change.Property(allocations, allocation, x => x.FulfillmentMode, FulfillmentMode.Enabled, FulfillmentMode.Unknown)));
         runner.Check("B-P8 inconsistent Enabled to Unknown", RuleEvaluation.Valid, Decision(toUnknown)); runtime.Commit(toUnknown);
-        runner.Check("B-P8 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Get(result, allocation));
+        runner.Check("B-P8 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Evaluate(result, allocation));
         allocation.FulfillmentMode = FulfillmentMode.Enabled;
         var enabled = Plan(runtime, MutationSet.Create(Change.Property(allocations, allocation, x => x.FulfillmentMode, FulfillmentMode.Unknown, FulfillmentMode.Enabled)));
         runner.Check("B-P9 inconsistent Unknown to Enabled rejected", RuleEvaluation.Violation, Decision(enabled));
@@ -115,11 +115,11 @@ internal static class PrecommitValidationScenarios
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<OrderLine>().Named("guard-conservation-lines").Key(x => x.Id);
         var rows = model.Objects<FulfillmentBalance>().Named("guard-fulfillment-balances").Key(x => x.Id);
-        var result = model.Derived(rows).Compute(row =>
+        var result = model.Derived(rows).Select(row =>
             row.FulfillmentMode == FulfillmentMode.Unknown || row.OrderLine.IsServiceLine == null ? RuleEvaluation.Unknown :
             row.FulfillmentMode == FulfillmentMode.Disabled || row.OrderLine.IsServiceLine == true ? RuleEvaluation.Valid :
             row.AvailableQuantity + row.AllocatedQuantity + row.ProcessedQuantity == row.TotalQuantity ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("guard-fulfillment-balance");
-        _ = model.Invariant(rows).Using(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-fulfillment-balance-invariant");
+        _ = model.Invariant(rows).From(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-fulfillment-balance-invariant");
         var line = new OrderLine { IsServiceLine = false };
         var row = new FulfillmentBalance { OrderLineId = line.Id, OrderLine = line, FulfillmentId = 2, TotalQuantity = 10, AvailableQuantity = 4, AllocatedQuantity = 6 };
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(rows, [row]); });
@@ -139,14 +139,14 @@ internal static class PrecommitValidationScenarios
         line.IsServiceLine = null;
         var unresolved = Plan(runtime, MutationSet.Create(Change.Property(lines, line, x => x.IsServiceLine, true, null)));
         runner.Check("C-P4 unresolved service status is non-blocking", RuleEvaluation.Valid, Decision(unresolved)); runtime.Commit(unresolved);
-        runner.Check("C-P4 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Get(result, row));
+        runner.Check("C-P4 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Evaluate(result, row));
         line.IsServiceLine = false;
         var normal = Plan(runtime, MutationSet.Create(Change.Property(lines, line, x => x.IsServiceLine, null, false)));
         runner.Check("C-P5 unresolved to normal exposes violation", RuleEvaluation.Violation, Decision(normal));
         line.IsServiceLine = null; row.FulfillmentMode = FulfillmentMode.Unknown; // reconcile rejected line change
         var fulfillmentUnknown = Plan(runtime, MutationSet.Create(Change.Property(rows, row, x => x.FulfillmentMode, FulfillmentMode.Enabled, FulfillmentMode.Unknown)));
         runner.Check("C-P6 unknown fulfillment is non-blocking", RuleEvaluation.Valid, Decision(fulfillmentUnknown)); runtime.Commit(fulfillmentUnknown);
-        runner.Check("C-P6 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Get(result, row));
+        runner.Check("C-P6 domain result remains Unknown", RuleEvaluation.Unknown, runtime.Evaluate(result, row));
         row.FulfillmentMode = FulfillmentMode.Enabled; line.IsServiceLine = false;
         var fulfillmentEnabled = Plan(runtime, MutationSet.Create(Change.Property(rows, row, x => x.FulfillmentMode, FulfillmentMode.Unknown, FulfillmentMode.Enabled),
             Change.Property(lines, line, x => x.IsServiceLine, null, false)));
@@ -160,11 +160,11 @@ internal static class PrecommitValidationScenarios
         var fulfillmentBalances = model.Objects<FulfillmentBalance>().Named("guard-fulfillment-balances").Key(x => x.Id);
         var relation = model.Relation(allocationFulfillments, fulfillmentBalances).Where((allocationFulfillment, row) =>
             allocationFulfillment.Allocation.OrderLineId == row.OrderLineId && allocationFulfillment.FulfillmentId == row.FulfillmentId).Named("guard-matching-fulfillment-balance");
-        var count = model.Derived(allocationFulfillments).Using(relation).Incrementally().Compute((_, rows) => rows.Count()).Named("guard-matching-fulfillment-balance-count");
-        var result = model.Derived(allocationFulfillments).Using(count).Compute((allocationFulfillment, matches) =>
+        var count = model.Derived(allocationFulfillments).From(relation).Count().Named("guard-matching-fulfillment-balance-count");
+        var result = model.Derived(allocationFulfillments).From(count).Select((allocationFulfillment, matches) =>
             allocationFulfillment.Allocation.FulfillmentMode == FulfillmentMode.Unknown ? RuleEvaluation.Unknown :
             allocationFulfillment.Allocation.FulfillmentMode == FulfillmentMode.Disabled || allocationFulfillment.IsDeleted || matches > 0 ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("guard-allocation-fulfillment-existence");
-        _ = model.Invariant(allocationFulfillments).Using(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-allocation-fulfillment-existence-invariant");
+        _ = model.Invariant(allocationFulfillments).From(result).Must((_, value) => value != RuleEvaluation.Violation).Named("guard-allocation-fulfillment-existence-invariant");
         var line = new OrderLine();
         var allocation = new Allocation { RequestLineId = Guid.NewGuid(), OrderLineId = line.Id, OrderLine = line };
         var allocationFulfillment = new AllocationFulfillment { AllocationId = allocation.Id, Allocation = allocation, FulfillmentId = 3, Quantity = 1 };

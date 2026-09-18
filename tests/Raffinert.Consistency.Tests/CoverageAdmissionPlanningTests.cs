@@ -55,7 +55,7 @@ public sealed class CoverageAdmissionPlanningTests
     public void Coverage_admission_on_relation_right_captures_affected_left_dependency_state()
     {
         var scenario = CreateRelationDependencyScenario(includeInvariant: false);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(
             new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
 
@@ -71,7 +71,7 @@ public sealed class CoverageAdmissionPlanningTests
     public void Coverage_admission_on_relation_right_planning_restores_primed_derived_state()
     {
         var scenario = CreateRelationDependencyScenario(includeInvariant: false);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
         var before = scenario.Runtime.Diagnostics;
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(
@@ -83,7 +83,7 @@ public sealed class CoverageAdmissionPlanningTests
         Assert.False(scenario.Runtime.IsRegistered(scenario.Rights.Definition, scenario.Right));
         Assert.False(scenario.Runtime.HasMaterializedPair(scenario.Relation, scenario.Left, scenario.Right));
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         Assert.Equal(before.DerivedFullRecomputations,
             scenario.Runtime.Diagnostics.DerivedFullRecomputations);
     }
@@ -92,7 +92,7 @@ public sealed class CoverageAdmissionPlanningTests
     public void Coverage_admission_on_relation_right_exact_install_rebases_derived_without_semantic_add()
     {
         var scenario = CreateRelationDependencyScenario(includeInvariant: false);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(
             new CoverageAdmission(scenario.Rights.Definition, scenario.Right)));
         var plan = scenario.Runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal);
@@ -103,7 +103,7 @@ public sealed class CoverageAdmissionPlanningTests
         Assert.True(scenario.Runtime.IsRegistered(scenario.Rights.Definition, scenario.Right));
         Assert.True(scenario.Runtime.HasMaterializedPair(scenario.Relation, scenario.Left, scenario.Right));
         Assert.Equal(DerivedValueState.Dirty, scenario.Runtime.GetState(scenario.Count, scenario.Left));
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         Assert.Empty(result.RelationImpacts);
         Assert.DoesNotContain(result.MutationOrigins, origin => origin.Kind == MutationOriginKind.ObjectAdded);
     }
@@ -113,7 +113,7 @@ public sealed class CoverageAdmissionPlanningTests
     {
         var scenario = CreateRelationDependencyScenario(includeInvariant: true);
         var invariant = Assert.IsType<Invariant<Left>>(scenario.Invariant);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         Assert.True(scenario.Runtime.Evaluate(invariant, scenario.Left));
         Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(invariant, scenario.Left));
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(
@@ -124,7 +124,7 @@ public sealed class CoverageAdmissionPlanningTests
         Assert.Equal(0, scenario.Runtime.Version);
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, scenario.Left));
         Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(invariant, scenario.Left));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, scenario.Left));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, scenario.Left));
         Assert.True(scenario.Runtime.Evaluate(invariant, scenario.Left));
     }
 
@@ -206,11 +206,11 @@ public sealed class CoverageAdmissionPlanningTests
     {
         var model = new ConsistencyModelBuilder();
         var consumers = model.Objects<Consumer>().Key(value => value.Id);
-        var mirror = model.Derived(consumers).Compute(value => value.Amount * 2);
+        var mirror = model.Derived(consumers).Select(value => value.Amount * 2);
         var existing = new Consumer { Amount = 3 };
         var discovered = new Consumer { Amount = 7 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(consumers, [existing]));
-        _ = runtime.Get(mirror, existing);
+        _ = runtime.Evaluate(mirror, existing);
 
         var prepared = runtime.Prepare(MutationSet.Create(
             new CoverageAdmission(consumers.Definition, discovered)));
@@ -263,7 +263,7 @@ public sealed class CoverageAdmissionPlanningTests
         var lefts = model.Objects<Left>().Key(value => value.Id);
         var rights = model.Objects<Right>().Key(value => value.Id);
         var relation = model.Relation(lefts, rights).Where((left, right) => left.Code == right.Code);
-        model.Derived(lefts).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(lefts).From(relation).Select((_, matches) => matches.Count);
         var left = new Left { Code = "shared" };
         var right = new Right { Code = "shared" };
         var runtime = model.Build().CreateRuntime(seed =>
@@ -282,9 +282,9 @@ public sealed class CoverageAdmissionPlanningTests
         var lefts = model.Objects<Left>().Key(value => value.Id);
         var rights = model.Objects<Right>().Key(value => value.Id);
         var relation = model.Relation(lefts, rights).Where((left, right) => left.Code == right.Code);
-        var count = model.Derived(lefts).Using(relation).Compute((_, matches) => matches.Count);
+        var count = model.Derived(lefts).From(relation).Select((_, matches) => matches.Count);
         var invariant = includeInvariant
-            ? model.Invariant(lefts).Using(count).Must((_, value) => value >= 0)
+            ? model.Invariant(lefts).From(count).Must((_, value) => value >= 0)
             : null;
         var left = new Left { Code = "shared" };
         var right = new Right { Code = "shared" };
@@ -297,8 +297,8 @@ public sealed class CoverageAdmissionPlanningTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
-        _ = model.Derived(links).Using(value => value.Order, total).Compute((_, current) => current);
+        var total = model.Derived(orders).Select(value => value.Total);
+        _ = model.Derived(links).From(value => value.Order, total).Select((_, current) => current);
         var order = new Order { Total = 11 };
         var link = new Link { Order = order };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(orders, [order]));

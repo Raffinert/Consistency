@@ -54,18 +54,18 @@ public sealed class SourceMemberImpactTests
         var set = model.Objects<Source>().Key(source => source.Id);
         var upstream = model.Derived(set)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(source => source.Rate);
-        var composed = model.Derived(set).Using(upstream)
+            .Select(source => source.Rate);
+        var composed = model.Derived(set).From(upstream)
             .Impact(policy => policy.SourceMemberChanged(
                 source => source.Quantity,
                 (oldValue, newValue) => newValue < oldValue
                     ? DependencySeverity.Invalid
                     : DependencySeverity.Dirty))
-            .Compute((source, rate) => source.Quantity * rate);
+            .Select((source, rate) => source.Quantity * rate);
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Quantity = 10, Rate = 1 };
         runtime.Add(set, source);
-        Assert.Equal(10, runtime.Get(composed, source));
+        Assert.Equal(10, runtime.Evaluate(composed, source));
 
         source.Rate = 2;
         runtime.Apply(Change.Property(set, source, value => value.Rate, 1, 2));
@@ -81,11 +81,11 @@ public sealed class SourceMemberImpactTests
         var value = model.Derived(set)
             .Impact(policy => policy.SourceMemberChanged<int>(
                 source => source.Quantity, (_, _) => throw new DomainException()))
-            .Compute(source => source.Quantity);
+            .Select(source => source.Quantity);
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Quantity = 1 };
         runtime.Add(set, source);
-        Assert.Equal(1, runtime.Get(value, source));
+        Assert.Equal(1, runtime.Evaluate(value, source));
         var version = runtime.Version;
         source.Quantity = 2;
 
@@ -121,12 +121,12 @@ public sealed class SourceMemberImpactTests
                         ? DependencySeverity.Invalid
                         : DependencySeverity.Dirty)
                 .SourceMemberChanged(source => source.Note, (_, _) => DependencySeverity.Invalid))
-            .Compute(source => source.Quantity * source.Rate);
+            .Select(source => source.Quantity * source.Rate);
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
         var source = new Source { Quantity = quantity, Rate = 1 };
         runtime.Add(set, source);
-        Assert.Equal(quantity, runtime.Get(value, source));
+        Assert.Equal(quantity, runtime.Evaluate(value, source));
         return new Scenario(compiled, runtime, set, value, source);
     }
 

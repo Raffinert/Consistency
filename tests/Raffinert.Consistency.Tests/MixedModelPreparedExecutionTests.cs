@@ -60,10 +60,10 @@ public sealed class MixedModelPreparedExecutionTests
             .Impact(policy => policy.SourceMemberChanged(
                 source => source.Value,
                 (_, _) => throw new InjectedFailureException()))
-            .Compute(source => source.Value);
+            .Select(source => source.Value);
         var source = new FailureSource { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(derived, source);
+        _ = runtime.Evaluate(derived, source);
         source.Value = 2;
         var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
             sources, source, value => value.Value, 1, 2)));
@@ -85,8 +85,7 @@ public sealed class MixedModelPreparedExecutionTests
         var sources = model.Objects<FailureSource>().Key(source => source.Id);
         var items = model.Objects<FailureItem>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var total = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((_, matches) => matches.Sum(item => item.Quantity));
+        var total = model.Derived(sources).From(relation).Sum(item => item.Quantity);
         var source = new FailureSource { Code = "A" };
         var existing = new FailureItem { Code = "A", StoredQuantity = 1 };
         var failing = new FailureItem { Code = "A", StoredQuantity = 2, ThrowOnRead = true };
@@ -95,7 +94,7 @@ public sealed class MixedModelPreparedExecutionTests
             seed.Add(sources, [source]);
             seed.Add(items, [existing]);
         });
-        Assert.Equal(1, runtime.Get(total, source));
+        Assert.Equal(1, runtime.Evaluate(total, source));
         var prepared = runtime.Prepare(MutationSet.Create(Change.Add(items, failing)));
 
         Assert.Throws<InjectedFailureException>(() => runtime.PreviewDetailed(prepared));
@@ -112,13 +111,13 @@ public sealed class MixedModelPreparedExecutionTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<FailureSource>().Key(source => source.Id);
-        var value = model.Derived(sources).Compute(source => source.Value);
-        model.Invariant(sources).Using(value).Must((source, current) => EvaluateInvariant(source, current))
+        var value = model.Derived(sources).Select(source => source.Value);
+        model.Invariant(sources).From(value).Must((source, current) => EvaluateInvariant(source, current))
             .ReactWith(InvariantReaction.EvaluateImmediately)
             .AllowIncompleteDependencies();
         var source = new FailureSource { Value = 1, FailEvaluation = true };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(value, source);
+        _ = runtime.Evaluate(value, source);
         source.Value = 2;
         var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
             sources, source, item => item.Value, 1, 2)));
@@ -278,24 +277,23 @@ public sealed class MixedModelPreparedExecutionTests
         var amount = model.Derived(parents)
             .Impact(policy => policy.SourceMemberChanged(parent => parent.Amount, (oldValue, newValue) =>
                 newValue < oldValue ? DependencySeverity.Invalid : DependencySeverity.Dirty))
-            .Compute(parent => parent.Amount).Named("amount");
-        var reserved = model.Derived(parents).Compute(parent => parent.Reserved).Named("reserved");
-        var exactCount = model.Derived(parents).Using(exact).Incrementally()
-            .Compute((_, matches) => matches.Count).Named("exact-count");
-        model.Derived(parents).Using(conservative).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count).Named("conservative-count");
-        model.Derived(parents).Compute(parent => parent.Tags.Sum(tag => tag.Value)).Named("tag-total");
-        var chainB = model.Derived(parents).Using(amount).Compute((_, value) => value + 1).Named("chain-b");
-        var finalChain = model.Derived(parents).Using(chainB).Compute((_, value) => value * 2).Named("chain-c");
-        var diamondLeft = model.Derived(parents).Using(amount).Compute((_, value) => value + 2).Named("diamond-b");
-        var diamondRight = model.Derived(parents).Using(amount).Compute((_, value) => value + 3).Named("diamond-c");
-        var diamond = model.Derived(parents).Using(diamondLeft, diamondRight)
-            .Compute((_, left, right) => left + right).Named("diamond-d");
-        model.Derived(links).Using(link => link.Parent, amount)
-            .Compute((_, value) => value).Named("projected-one");
-        model.Derived(links).Using(link => link.Parent, amount, reserved)
-            .Compute((_, available, used) => available - used).Named("projected-two");
-        var invariant = model.Invariant(parents).Using(finalChain, exactCount)
+            .Select(parent => parent.Amount).Named("amount");
+        var reserved = model.Derived(parents).Select(parent => parent.Reserved).Named("reserved");
+        var exactCount = model.Derived(parents).From(exact).Count().Named("exact-count");
+        model.Derived(parents).From(conservative).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count).Named("conservative-count");
+        model.Derived(parents).Select(parent => parent.Tags.Sum(tag => tag.Value)).Named("tag-total");
+        var chainB = model.Derived(parents).From(amount).Select((_, value) => value + 1).Named("chain-b");
+        var finalChain = model.Derived(parents).From(chainB).Select((_, value) => value * 2).Named("chain-c");
+        var diamondLeft = model.Derived(parents).From(amount).Select((_, value) => value + 2).Named("diamond-b");
+        var diamondRight = model.Derived(parents).From(amount).Select((_, value) => value + 3).Named("diamond-c");
+        var diamond = model.Derived(parents).From(diamondLeft).From(diamondRight)
+            .Select((_, left, right) => left + right).Named("diamond-d");
+        model.Derived(links).From(link => link.Parent, amount)
+            .Select((_, value) => value).Named("projected-one");
+        model.Derived(links).From(link => link.Parent, amount, reserved)
+            .Select((_, available, used) => available - used).Named("projected-two");
+        var invariant = model.Invariant(parents).From(finalChain).From(exactCount)
             .Must((_, chain, count) => chain + count < 25).Named("alpha-invariant")
             .ScheduleRepairWith(_ => { });
 
@@ -342,9 +340,9 @@ public sealed class MixedModelPreparedExecutionTests
             seed.Add(conservativeItems, [firstConservative, secondConservative]);
             seed.Add(links, [link]);
         });
-        _ = runtime.Get(exactCount, first);
-        _ = runtime.Get(finalChain, first);
-        _ = runtime.Get(diamond, first);
+        _ = runtime.Evaluate(exactCount, first);
+        _ = runtime.Evaluate(finalChain, first);
+        _ = runtime.Evaluate(diamond, first);
         _ = runtime.Evaluate(invariant, first);
         return new Scenario(runtime, parents, items, conservativeItems, links, first, second, firstItem,
             firstConservative, secondConservative, link, exactCount, finalChain, diamond, invariant);

@@ -15,13 +15,13 @@ public sealed class AuthoritativeScopeTests
         context.Add(line); context.SaveChanges();
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<ScopeLine>().Key(x => x.Id);
-        var doubled = model.Derived(lines).Compute(x => x.Touch * 2);
-        var valid = model.Invariant(lines).Using(doubled).Must((_, value) => value >= 0);
+        var doubled = model.Derived(lines).Select(x => x.Touch * 2).MaterializeTo(x => x.Mirror);
+        var valid = model.Invariant(lines).From(doubled).Must((_, value) => value >= 0);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
         line.Touch = 3;
 
         context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(lines).Enforce(valid).Materialize(doubled, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(lines).Enforce(valid));
 
         Assert.Equal(6, line.Mirror);
         Assert.Equal(1, runtime.Version);
@@ -74,15 +74,16 @@ public sealed class AuthoritativeScopeTests
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(allocations, [allocation]); });
         line.Touch = 1;
 
-        context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(lines).Map(allocations));
+        context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(lines).Map(allocations),
+            new ConsistencySaveOptions { SaveBehavior = ConsistencySaveBehavior.Validate });
         line.Touch = 2;
         context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(lines).Map(allocations).Materialize(allocated, x => x.Mirror),
+            new ConsistencyEfCoreMappings().Map(lines).Map(allocations),
             new ConsistencySaveOptions { SaveBehavior = ConsistencySaveBehavior.Validate });
 
         line.Touch = 3;
         Assert.Throws<IncompleteConsistencyScopeException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(lines).Map(allocations).Materialize(allocated, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(lines).Map(allocations)));
     }
 
     [Fact]
@@ -99,7 +100,7 @@ public sealed class AuthoritativeScopeTests
         var state = context.Entry(line).State;
 
         Assert.Throws<IncompleteConsistencyScopeException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(lines).Map(allocations).Materialize(allocated, x => x.Mirror)));
+            new ConsistencyEfCoreMappings().Map(lines).Map(allocations)));
 
         Assert.Equal(0, line.MirrorWrites);
         Assert.Equal(0, runtime.Version);
@@ -117,7 +118,7 @@ public sealed class AuthoritativeScopeTests
         context.AddRange(line, allocation); context.SaveChanges();
         var repairs = 0;
         var model = CreateAllocationModel(out var lines, out var allocations, out var allocated, out var first);
-        var second = model.Invariant(lines).Using(allocated).Must((_, value) => value <= 20)
+        var second = model.Invariant(lines).From(allocated).Must((_, value) => value <= 20)
             .ScheduleRepairWith(_ => repairs++);
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(allocations, [allocation]); });
         line.Touch = 1;
@@ -143,9 +144,9 @@ public sealed class AuthoritativeScopeTests
         var allocations = model.Objects<ScopeAllocation>().Key(x => x.Id);
         var fulfillments = model.Objects<ScopeFulfillment>().Key(x => x.Id);
         var relation = model.Relation(lines, fulfillments).Where((left, right) => left.Id == right.LineId);
-        var total = model.Derived(lines).Using(relation).Compute((_, rows) => rows.Sum(x => x.Quantity));
-        var projected = model.Derived(allocations).Using(x => x.Line, total).Compute((_, value) => value);
-        var invariant = model.Invariant(allocations).Using(projected).Must((_, value) => value >= 0);
+        var total = model.Derived(lines).From(relation).Select((_, rows) => rows.Sum(x => x.Quantity));
+        var projected = model.Derived(allocations).From(x => x.Line, total).Select((_, value) => value);
+        var invariant = model.Invariant(allocations).From(projected).Must((_, value) => value >= 0);
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(allocations, [allocation]); seed.Add(fulfillments, [fulfillment]); });
         line.Touch = 1;
 
@@ -163,8 +164,8 @@ public sealed class AuthoritativeScopeTests
         using var database = new ScopeDatabase(); using var context = database.CreateContext();
         var line = new ScopeLine { Id = Guid.NewGuid(), Capacity = 10 }; context.Add(line); context.SaveChanges();
         var first = new ConsistencyModelBuilder(); var lines = first.Objects<ScopeLine>().Key(x => x.Id);
-        var value = first.Derived(lines).Compute(x => x.Capacity);
-        var invariant = first.Invariant(lines).Using(value).Must((_, x) => x >= 0);
+        var value = first.Derived(lines).Select(x => x.Capacity);
+        var invariant = first.Invariant(lines).From(value).Must((_, x) => x >= 0);
         var runtime = first.Build().CreateRuntime(seed => seed.Add(lines, [line]));
         var second = new ConsistencyModelBuilder(); var foreign = second.Objects<ScopeLine>().Key(x => x.Id); _ = second.Build();
         line.Touch = 1;
@@ -230,10 +231,10 @@ public sealed class AuthoritativeScopeTests
         var model = new ConsistencyModelBuilder(); var lines = model.Objects<ScopeLine>().Key(x => x.Id);
         var fulfillments = model.Objects<ScopeFulfillment>().Key(x => x.Id);
         var relation = model.Relation(lines, fulfillments).Where((left, right) => left.Id == right.LineId);
-        var fulfilled = model.Derived(lines).Using(relation).Compute((source, rows) =>
-            rows.Sum(x => x.Quantity) + (source.Touch * 0));
+        var fulfilled = model.Derived(lines).From(relation).Select((source, rows) =>
+            rows.Sum(x => x.Quantity) + (source.Touch * 0)).MaterializeTo(x => x.Mirror);
         var compiled = model.Build();
-        var mappings = new ConsistencyEfCoreMappings().Map(lines).Map(fulfillments).Materialize(fulfilled, x => x.Mirror);
+        var mappings = new ConsistencyEfCoreMappings().Map(lines).Map(fulfillments);
         var partial = compiled.CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(fulfillments, [first]); });
         line.Touch = 1;
 
@@ -253,8 +254,9 @@ public sealed class AuthoritativeScopeTests
         var model = new ConsistencyModelBuilder(); lines = model.Objects<ScopeLine>().Key(x => x.Id);
         allocations = model.Objects<ScopeAllocation>().Key(x => x.Id);
         var relation = model.Relation(lines, allocations).Where((left, right) => left.Id == right.LineId);
-        allocated = model.Derived(lines).Using(relation).Compute((_, rows) => rows.Sum(x => x.Quantity));
-        invariant = model.Invariant(lines).Using(allocated).Must((line, value) => value <= line.Capacity);
+        allocated = model.Derived(lines).From(relation).Select((_, rows) => rows.Sum(x => x.Quantity))
+            .MaterializeTo(x => x.Mirror);
+        invariant = model.Invariant(lines).From(allocated).Must((line, value) => value <= line.Capacity);
         return model;
     }
 

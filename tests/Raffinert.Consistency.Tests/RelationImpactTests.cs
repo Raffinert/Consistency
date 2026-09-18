@@ -10,7 +10,7 @@ public sealed class RelationImpactTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime(policy);
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -33,7 +33,7 @@ public sealed class RelationImpactTests
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime(policy);
         var losing = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var gaining = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };

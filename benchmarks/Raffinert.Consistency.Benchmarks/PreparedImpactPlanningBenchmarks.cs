@@ -64,9 +64,8 @@ public class PreparedImpactPlanningBenchmarks
         var set = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(set, items).Where((source, item) => source.Code == item.Code);
-        var value = model.Derived(set).Compute(source => source.Child.Value + source.Value);
-        var count = model.Derived(set).Using(relation).Incrementally()
-            .Compute((_, matches) => matches.Count);
+        var value = model.Derived(set).Select(source => source.Child.Value + source.Value);
+        var count = model.Derived(set).From(relation).Count();
         var sources = Enumerable.Range(0, population).Select(index => new Source
         {
             Code = index == 0 ? "A" : $"U-{index}",
@@ -84,8 +83,8 @@ public class PreparedImpactPlanningBenchmarks
         });
         foreach (var candidate in sources)
         {
-            _ = runtime.Get(value, candidate);
-            _ = runtime.Get(count, candidate);
+            _ = runtime.Evaluate(value, candidate);
+            _ = runtime.Evaluate(count, candidate);
         }
         return new Scenario(runtime, set, source);
     }
@@ -156,7 +155,7 @@ public class PreparedPatchInstallBenchmarks
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<PatchSource>().Key(source => source.Id);
-        model.Derived(set).Compute(source => source.Value);
+        model.Derived(set).Select(source => source.Value);
         var sources = Enumerable.Range(0, population).Select(_ => new PatchSource()).ToArray();
         var source = sources[0];
         var runtime = model.Build().CreateRuntime(seed => seed.Add(set, sources));
@@ -208,9 +207,8 @@ public class PreparedPatchInstallComponentBenchmarks
         var items = model.Objects<ComponentItem>().Key(item => item.Id);
         var relation = model.Relation(sources, items)
             .Where((source, item) => source.Code == item.Code);
-        var value = model.Derived(sources).Compute(source => source.Value);
-        var count = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((_, matches) => matches.Count);
+        var value = model.Derived(sources).Select(source => source.Value);
+        var count = model.Derived(sources).From(relation).Count();
         var sourcePopulation = Enumerable.Range(0, population).Select(index => new ComponentSource
         {
             Code = index == 0 ? "A" : $"U-{index}"
@@ -225,8 +223,8 @@ public class PreparedPatchInstallComponentBenchmarks
             seed.Add(sources, sourcePopulation);
             seed.Add(items, itemPopulation);
         });
-        _ = runtime.Get(value, source);
-        _ = runtime.Get(count, source);
+        _ = runtime.Evaluate(value, source);
+        _ = runtime.Evaluate(count, source);
         source.Value = 1;
         source.Code = "B";
         var prepared = runtime.Prepare(MutationSet.Create(

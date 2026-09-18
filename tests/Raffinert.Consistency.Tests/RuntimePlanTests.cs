@@ -118,8 +118,8 @@ public sealed partial class RuntimeTests
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count + 1);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count + 1);
         var runtime = model.Build().CreateRuntime();
         runtime.Add(sources, new CodeHolder { Id = Guid.NewGuid(), Code = "A" });
         runtime.Add(sources, new CodeHolder { Id = Guid.NewGuid(), Code = "B" });

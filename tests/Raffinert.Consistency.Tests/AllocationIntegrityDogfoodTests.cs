@@ -9,11 +9,11 @@ public sealed class AllocationIntegrityDogfoodTests
         var allocations = model.Objects<Allocation>().Named("allocations").Key(x => x.Id);
         var allocationFulfillments = model.Objects<AllocationFulfillment>().Named("allocationFulfillments").Key(x => x.Id);
         var links = model.Relation(allocations, allocationFulfillments).Where((allocation, allocationFulfillment) => allocation.Id == allocationFulfillment.AllocationId).Named("allocation-allocationFulfillments");
-        var sum = model.Derived(allocations).Using(links).Incrementally()
-            .Compute((_, rows) => rows.Sum(x => x.Quantity)).Named("allocationFulfillment-sum");
-        var balanced = model.Derived(allocations).Using(sum)
-            .Compute((allocation, total) => allocation.Unknown || allocation.AllocatedQuantity == total).Named("allocation-balanced");
-        var invariant = model.Invariant(allocations).Using(balanced)
+        var sum = model.Derived(allocations).From(links)
+            .Sum(x => x.Quantity).Named("allocationFulfillment-sum");
+        var balanced = model.Derived(allocations).From(sum)
+            .Select((allocation, total) => allocation.Unknown || allocation.AllocatedQuantity == total).Named("allocation-balanced");
+        var invariant = model.Invariant(allocations).From(balanced)
             .Must((_, valid) => valid).Named("allocation-balance-invariant");
         var allocation = new Allocation { AllocatedQuantity = 5 };
         var allocationFulfillment = new AllocationFulfillment { AllocationId = allocation.Id, Quantity = 5 };
@@ -51,9 +51,9 @@ public sealed class AllocationIntegrityDogfoodTests
         var matches = model.Relation(allocationFulfillments, rows).Where((allocationFulfillment, row) =>
             allocationFulfillment.OrderLineId == row.OrderLineId && allocationFulfillment.FulfillmentId == row.FulfillmentId)
             .Named("matching-poallocationFulfillment");
-        var count = model.Derived(allocationFulfillments).Using(matches).Incrementally()
-            .Compute((_, values) => values.Count()).Named("matching-poallocationFulfillment-count");
-        var invariant = model.Invariant(allocationFulfillments).Using(count)
+        var count = model.Derived(allocationFulfillments).From(matches)
+            .Count().Named("matching-poallocationFulfillment-count");
+        var invariant = model.Invariant(allocationFulfillments).From(count)
             .Must((_, value) => value > 0).Named("allocationFulfillment-existence-invariant");
         var lineId = Guid.NewGuid();
         var allocationFulfillment = new AllocationFulfillment { AllocationId = Guid.NewGuid(), OrderLineId = lineId, FulfillmentId = 10 };

@@ -21,12 +21,12 @@ context.SaveChanges();
 
 var builder = new ConsistencyModelBuilder();
 var lines = builder.Objects<OrderLine>().Key(x => x.Id);
-var remaining = builder.Derived(lines).Compute(x => x.OrderedQuantity - x.FulfilledQuantity);
-var nonNegativeRemaining = builder.Invariant(lines).Using(remaining).Must((_, value) => value >= 0);
+var remaining = builder.Derived(lines).Select(x => x.OrderedQuantity - x.FulfilledQuantity)
+    .MaterializeTo(x => x.RemainingQuantity);
+var nonNegativeRemaining = builder.Invariant(lines).From(remaining).Must((_, value) => value >= 0);
 var runtime = builder.Build().CreateRuntime(seed => seed.Add(lines, [line]));
 var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
-    .Materialize(remaining, x => x.RemainingQuantity)
     .Enforce(nonNegativeRemaining);
 
 line.FulfilledQuantity = 12;
@@ -47,11 +47,10 @@ Console.WriteLine($"Persisted RemainingQuantity={persisted.RemainingQuantity}; r
 
 var generatedBuilder = new ConsistencyModelBuilder();
 var generatedOrders = generatedBuilder.Objects<GeneratedOrder>().Key(x => x.Id);
-var doubledAmount = generatedBuilder.Derived(generatedOrders).Compute(x => x.Amount * 2);
+var doubledAmount = generatedBuilder.Derived(generatedOrders).Select(x => x.Amount * 2)
+    .MaterializeTo(x => x.AmountMirror);
 var generatedRuntime = generatedBuilder.Build().CreateRuntime();
-var generatedMappings = new ConsistencyEfCoreMappings()
-    .Map(generatedOrders)
-    .Materialize(doubledAmount, x => x.AmountMirror);
+var generatedMappings = new ConsistencyEfCoreMappings().Map(generatedOrders);
 var generated = new GeneratedOrder { Amount = 7 };
 context.Add(generated);
 var work = context.CaptureConsistencyUnitOfWork(generatedRuntime, generatedMappings);

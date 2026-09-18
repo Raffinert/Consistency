@@ -10,8 +10,8 @@ public sealed class RuntimeSeedTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        var invariant = model.Invariant(sources).Using(count).Must((_, value) => value > 0)
+        var count = model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        var invariant = model.Invariant(sources).From(count).Must((_, value) => value > 0)
             .ScheduleRepairWith(source => callbacks.Add(source.Id));
         var compiled = model.Build();
         var source = new Source { Code = "A" };
@@ -28,7 +28,7 @@ public sealed class RuntimeSeedTests
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
         Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
         Assert.Single(runtime.Related(relation, source));
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
         Assert.True(runtime.Evaluate(invariant, source));
     }
 
@@ -71,8 +71,8 @@ public sealed class RuntimeSeedTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count);
         var compiled = model.Build();
         var source = new Source { Code = "A" };
         var item = new Item { Code = "A" };

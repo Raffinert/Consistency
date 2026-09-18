@@ -27,8 +27,8 @@ public class PropagationPrecisionBenchmarks
             item.Order.Supplier.Country != null &&
             source.Code == item.Order.Supplier.Country.Code &&
             item.Enabled);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Sum(item => item.Quantity));
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Sum(item => item.Quantity));
         _runtime = model.Build().CreateRuntime();
         var retainedSources = Enumerable.Range(0, Size)
             .Select(index => new PrecisionSource { Id = Guid.NewGuid(), Code = $"C-{index % 100}" })

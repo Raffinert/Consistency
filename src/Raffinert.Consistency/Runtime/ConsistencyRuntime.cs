@@ -343,18 +343,6 @@ public sealed partial class ConsistencyRuntime
     internal IReadOnlyCollection<object> GetNavigationOwners(MemberInfo member, object target) =>
         _navigation.GetOwners(member, target);
 
-    public TValue Get<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
-        where TSource : class
-    {
-        ArgumentNullException.ThrowIfNull(derived);
-        ArgumentNullException.ThrowIfNull(source);
-        if (!_derivedStates.TryGetValue(derived.Definition, out var state))
-            throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
-        EnsureRegistered(derived.Definition.SourceSet, source, "source");
-        ValidateProjectedTargets(derived.Definition, source);
-        return (TValue)state.GetValue(source)!;
-    }
-
     public DerivedValueState GetState<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
         where TSource : class
     {

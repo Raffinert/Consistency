@@ -68,8 +68,8 @@ public class EfCoreConsistencyBenchmarks
         {
             var model = new ConsistencyModelBuilder();
             var sources = model.Objects<Source>().Key(x => x.Id);
-            var doubled = model.Derived(sources).Compute(x => x.Value * 2);
-            model.Invariant(sources).Using(doubled).Must((_, value) => value >= 0);
+            var doubled = model.Derived(sources).Select(x => x.Value * 2);
+            model.Invariant(sources).From(doubled).Must((_, value) => value >= 0);
             var values = Enumerable.Range(0, population).Select(i => new Source { Value = i, Mirror = i * 2 }).ToArray();
             var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, values));
             var options = new DbContextOptionsBuilder<BenchmarkContext>()

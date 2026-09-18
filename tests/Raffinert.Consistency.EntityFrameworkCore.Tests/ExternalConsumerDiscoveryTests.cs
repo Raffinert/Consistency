@@ -27,7 +27,7 @@ public sealed class ExternalConsumerDiscoveryTests
         {
             var expected = association.Source.UnitValue / association.Target.UnitValue;
             Assert.Equal(expected, association.UnitRate);
-            Assert.Equal(expected, runtime.Get(derived, association));
+            Assert.Equal(expected, runtime.Evaluate(derived, association));
         }
     }
 
@@ -74,7 +74,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(3, runtime.GetObjectSetInstancesForClrType(typeof(DiscoveryAssociation)).Count);
         Assert.All(context.Associations, association =>
             Assert.True(runtime.IsRegistered(fixture.Associations.Definition, association)));
-        Assert.Equal(4m, runtime.Get(derived, context.Associations.Single(x => x.Id == 2)));
+        Assert.Equal(4m, runtime.Evaluate(derived, context.Associations.Single(x => x.Id == 2)));
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, runtime.Version);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, added));
         Assert.Equal(4.8m, added.UnitRate);
-        Assert.Equal(4.8m, runtime.Get(derived, added));
+        Assert.Equal(4.8m, runtime.Evaluate(derived, added));
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(2, calls.Value);
         Assert.Equal(1, runtime.Version);
         Assert.Equal(6m, discovered.UnitRate);
-        Assert.Equal(6m, runtime.Get(derived, discovered));
+        Assert.Equal(6m, runtime.Evaluate(derived, discovered));
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public sealed class ExternalConsumerDiscoveryTests
             .Single(x => x.Id == 1);
         var calls = new Counter();
         var (runtime, mappings, derived) = fixture.CreateModel(known, calls);
-        Assert.Equal(10m, runtime.Get(derived, known));
+        Assert.Equal(10m, runtime.Evaluate(derived, known));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, known));
         known.Source.UnitValue = 120m;
         context.FailSaveChanges = true;
@@ -170,7 +170,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(0, runtime.Version);
         Assert.False(runtime.IsRegistered(fixture.Associations.Definition, discovered));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, known));
-        Assert.Equal(10m, runtime.Get(derived, known));
+        Assert.Equal(10m, runtime.Evaluate(derived, known));
         Assert.Equal(5m, discovered.UnitRate);
         Assert.False(context.Entry(discovered).Property(x => x.UnitRate).IsModified);
         Assert.True(context.Entry(known.Source).Property(x => x.UnitValue).IsModified);
@@ -257,7 +257,7 @@ public sealed class ExternalConsumerDiscoveryTests
         var discovered = context.Associations.Single(x => x.Id == 4);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, discovered));
         Assert.Equal(5.6m, discovered.UnitRate);
-        Assert.Equal(5.6m, runtime.Get(derived, discovered));
+        Assert.Equal(5.6m, runtime.Evaluate(derived, discovered));
     }
 
     [Fact]
@@ -327,7 +327,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.True(context.Entry(optional).Navigation(nameof(DiscoveryAssociation.Target)).IsLoaded);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, optional));
         Assert.Equal(0m, optional.UnitRate);
-        Assert.Equal(0m, runtime.Get(derived, optional));
+        Assert.Equal(0m, runtime.Evaluate(derived, optional));
     }
 
     [Fact]
@@ -461,7 +461,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, calls.Value);
         Assert.Equal(1, runtime.Version);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, alreadyKnown));
-        Assert.Equal(6m, runtime.Get(derived, alreadyKnown));
+        Assert.Equal(6m, runtime.Evaluate(derived, alreadyKnown));
     }
 
     [Fact]
@@ -550,7 +550,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, runtime.Version);
         Assert.Equal(12m, changed[0].UnitRate);
         Assert.Equal(9m, changed[1].UnitRate);
-        Assert.Equal(9m, runtime.Get(derived, changed[1]));
+        Assert.Equal(9m, runtime.Evaluate(derived, changed[1]));
     }
 
     [Fact]
@@ -573,7 +573,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, runtime.Version);
         Assert.Equal(100m / 12m, known.UnitRate);
         Assert.Equal(4m, second.UnitRate);
-        Assert.Equal(4m, runtime.Get(derived, second));
+        Assert.Equal(4m, runtime.Evaluate(derived, second));
     }
 
     [Fact]
@@ -650,7 +650,7 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.NotEqual(EntityState.Detached, context.Entry(discovered.Target).State);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, discovered));
         Assert.Equal(6m, discovered.UnitRate);
-        Assert.Equal(6m, runtime.Get(derived, discovered));
+        Assert.Equal(6m, runtime.Evaluate(derived, discovered));
         Assert.Equal(6m, context.Associations.AsNoTracking().Single(x => x.Id == 2).UnitRate);
         Assert.Equal(1, runtime.Version);
     }
@@ -667,12 +667,12 @@ public sealed class ExternalConsumerDiscoveryTests
         var secondary = builder.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var derived = builder.Derived(primary)
             .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
-            .Compute(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue);
+            .Select(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = builder.Build().CreateRuntime(seed => seed.Add(primary, [known]));
         var mappings = new ConsistencyEfCoreMappings()
             .Map(primary, entry => entry.Entity.Id <= 2)
             .Map(secondary, entry => entry.Entity.Id > 2)
-            .Materialize(derived, x => x.UnitRate)
+
             .DiscoverConsumers(primary, x => x.Source, (db, sources) =>
             {
                 var ids = sources.Select(x => x.Id).ToArray();
@@ -703,10 +703,10 @@ public sealed class ExternalConsumerDiscoveryTests
         var model = new ConsistencyModelBuilder();
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(associations).DependsOn(x => x.Source.UnitValue)
-            .Compute(x => x.Source.UnitValue);
+            .Select(x => x.Source.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(associations)
-            .Materialize(value, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
 
         Assert.Empty(mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate));
@@ -720,10 +720,10 @@ public sealed class ExternalConsumerDiscoveryTests
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(associations)
             .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Source.Parent!.UnitValue)
-            .Compute(x => x.Source.UnitValue + (x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue));
+            .Select(x => x.Source.UnitValue + (x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue)).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(associations)
-            .Materialize(value, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
 
         var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
@@ -739,12 +739,12 @@ public sealed class ExternalConsumerDiscoveryTests
         var model = new ConsistencyModelBuilder();
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var upstream = model.Derived(associations).DependsOn(x => x.Source.Parent!.UnitValue)
-            .Compute(x => x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue);
-        var downstream = model.Derived(associations).Using(upstream)
-            .Compute((x, value) => x.Source.UnitValue + value);
+            .Select(x => x.Source.Parent == null ? 0m : x.Source.Parent.UnitValue);
+        var downstream = model.Derived(associations).From(upstream)
+            .Select((x, value) => x.Source.UnitValue + value).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(associations)
-            .Materialize(downstream, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
 
         var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
@@ -761,10 +761,10 @@ public sealed class ExternalConsumerDiscoveryTests
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(associations)
             .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue)
-            .Compute(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue);
+            .Select(x => x.Target == null ? 0m : x.Source.UnitValue / x.Target.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(associations)
-            .Materialize(value, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
 
         var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
@@ -781,10 +781,10 @@ public sealed class ExternalConsumerDiscoveryTests
         var required = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var other = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(required).DependsOn(x => x.Source.UnitValue)
-            .Compute(x => x.Source.UnitValue);
+            .Select(x => x.Source.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(required).Map(other)
-            .Materialize(value, x => x.UnitRate)
+
             .DiscoverConsumers(other, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
 
         var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
@@ -824,12 +824,12 @@ public sealed class ExternalConsumerDiscoveryTests
         var model = new ConsistencyModelBuilder();
         var targets = model.Objects<DiscoveryTarget>().Key(x => x.Id);
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
-        var targetValue = model.Derived(targets).Compute(x => x.UnitValue);
-        var projected = model.Derived(associations).Using(x => x.Target, targetValue)
-            .Compute((_, value) => value);
+        var targetValue = model.Derived(targets).Select(x => x.UnitValue);
+        var projected = model.Derived(associations).From(x => x.Target, targetValue)
+            .Select((_, value) => value).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(targets).Map(associations)
-            .Materialize(projected, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Target, (db, _) => db.Set<DiscoveryAssociation>());
 
         var gaps = mappings.GetScopeGaps(runtime, null, ConsistencySaveBehavior.RecalculateAndValidate);
@@ -886,7 +886,7 @@ public sealed class ExternalConsumerDiscoveryTests
 
         Assert.Equal(1, calls.Value);
         Assert.Equal(12m, moved.UnitRate);
-        Assert.Equal(12m, runtime.Get(derived, moved));
+        Assert.Equal(12m, runtime.Evaluate(derived, moved));
         Assert.Equal(1, runtime.Version);
     }
 
@@ -987,11 +987,11 @@ public sealed class ExternalConsumerDiscoveryTests
         var required = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var wrong = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(required).DependsOn(x => x.Source.UnitValue)
-            .Compute(x => x.Source.UnitValue);
+            .Select(x => x.Source.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(required, [known]));
         var mappings = new ConsistencyEfCoreMappings()
             .Map(required, entry => entry.Entity.Id <= 3).Map(wrong, entry => entry.Entity.Id > 3)
-            .Materialize(value, x => x.UnitRate)
+
             .DiscoverConsumers(wrong, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
         known.Source.UnitValue = 120m;
 
@@ -1013,10 +1013,10 @@ public sealed class ExternalConsumerDiscoveryTests
         var model = new ConsistencyModelBuilder();
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var value = model.Derived(associations).DependsOn(x => x.Source.UnitValue)
-            .Compute(x => x.Source.UnitValue);
+            .Select(x => x.Source.UnitValue).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(associations, [known]));
         var mappings = new ConsistencyEfCoreMappings().Map(associations)
-            .Materialize(value, x => x.UnitRate);
+            ;
         known.Source.UnitValue = 120m;
 
         var error = await Assert.ThrowsAsync<IncompleteConsistencyScopeException>(() =>
@@ -1060,7 +1060,7 @@ public sealed class ExternalConsumerDiscoveryTests
 
         Assert.Equal(1, runtime.Version);
         Assert.True(runtime.IsRegistered(fixture.Associations.Definition, discovered));
-        Assert.Equal(6m, runtime.Get(derived, discovered));
+        Assert.Equal(6m, runtime.Evaluate(derived, discovered));
         Assert.Equal(6m, fixture.CreateContext().Associations.AsNoTracking().Single(x => x.Id == 2).UnitRate);
     }
 
@@ -1097,11 +1097,11 @@ public sealed class ExternalConsumerDiscoveryTests
         var associations = model.Objects<DiscoveryAssociation>().Key(x => x.Id);
         var targets = model.Objects<DiscoveryTarget>().Key(x => x.Id);
         var relation = model.Relation(associations, targets).Where((left, right) => left.TargetId == right.Id);
-        var count = model.Derived(associations).Using(relation)
-            .Compute((source, rows) => rows.Count + (source.Source.UnitValue * 0m));
+        var count = model.Derived(associations).From(relation)
+            .Select((source, rows) => rows.Count + (source.Source.UnitValue * 0m)).MaterializeTo(x => x.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(associations).Map(targets)
-            .Materialize(count, x => x.UnitRate)
+
             .DiscoverConsumers(associations, x => x.Source, (db, _) => db.Set<DiscoveryAssociation>());
         return (runtime, mappings, associations, targets);
     }
@@ -1161,16 +1161,16 @@ public sealed class ExternalConsumerDiscoveryTests
                 .DependsOn(x => x.Source.UnitValue).DependsOn(x => x.Target.UnitValue);
             var derived = includeSourceOffset
                 ? derivedBuilder.DependsOn(x => x.Source.Offset)
-                    .Compute(x => x.Target == null ? 0m :
+                    .Select(x => x.Target == null ? 0m :
                         (x.Source.UnitValue + x.Source.Offset) / x.Target.UnitValue)
-                : derivedBuilder.Compute(x => x.Target == null ? 0m :
+                : derivedBuilder.Select(x => x.Target == null ? 0m :
                     x.Source.UnitValue / x.Target.UnitValue);
-            var invariant = builder.Invariant(associations).Using(derived).Must((_, value) => value >= 0m);
+            if (materialize)
+                derived.MaterializeTo(x => x.UnitRate);
+            var invariant = builder.Invariant(associations).From(derived).Must((_, value) => value >= 0m);
             var runtime = builder.Build().CreateRuntime(seed => seed.Add(associations,
                 initialAssociations ?? [known]));
             var mappings = new ConsistencyEfCoreMappings().Map(associations);
-            if (materialize)
-                mappings.Materialize(derived, x => x.UnitRate);
             if (enforceInvariant)
                 mappings.Enforce(invariant);
             mappings.DiscoverConsumers(associations, x => x.Source, (db, sources) =>

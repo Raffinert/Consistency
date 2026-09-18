@@ -7,9 +7,9 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var first = model.Derived(sources).Compute(source => source.Value).Named("first");
-        var second = model.Derived(sources).Using(first).Compute((_, value) => value + 1).Named("second");
-        var third = model.Derived(sources).Using(second).Compute((_, value) => value + 1).Named("third");
+        var first = model.Derived(sources).Select(source => source.Value).Named("first");
+        var second = model.Derived(sources).From(first).Select((_, value) => value + 1).Named("second");
+        var third = model.Derived(sources).From(second).Select((_, value) => value + 1).Named("third");
 
         var graph = Compile([first, second, third]);
 
@@ -22,9 +22,9 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var first = model.Derived(sources).Compute(source => source.Value).Named("first");
-        var second = model.Derived(sources).Using(first).Compute((_, value) => value + 1).Named("second");
-        var invariant = model.Invariant(sources).Using(first, second)
+        var first = model.Derived(sources).Select(source => source.Value).Named("first");
+        var second = model.Derived(sources).From(first).Select((_, value) => value + 1).Named("second");
+        var invariant = model.Invariant(sources).From(first).From(second)
             .Must((_, left, right) => left < right).Named("ordered");
 
         var graph = Compile([first, second], [invariant]);
@@ -38,9 +38,9 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var upstream = model.Derived(sources).Compute(source => source.Value);
-        var downstream = model.Derived(sources).Using(upstream, upstream)
-            .Compute((_, left, right) => left + right);
+        var upstream = model.Derived(sources).Select(source => source.Value);
+        var downstream = model.Derived(sources).From(upstream).From(upstream)
+            .Select((_, left, right) => left + right);
 
         var graph = Compile([upstream, downstream]);
         var from = Node(graph, upstream).Id;
@@ -54,10 +54,10 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
-        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
-        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var left = model.Derived(sources).From(root).Select((_, value) => value + 1);
+        var right = model.Derived(sources).From(root).Select((_, value) => value + 2);
+        var join = model.Derived(sources).From(left).From(right).Select((_, first, second) => first + second);
 
         var firstCompilation = Compile([root, left, right, join]);
         var secondCompilation = Compile([root, left, right, join]);
@@ -72,10 +72,10 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
-        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
-        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var left = model.Derived(sources).From(root).Select((_, value) => value + 1);
+        var right = model.Derived(sources).From(root).Select((_, value) => value + 2);
+        var join = model.Derived(sources).From(left).From(right).Select((_, first, second) => first + second);
 
         var graph = Compile([root, left, right, join]);
         var rootId = Node(graph, root).Id;
@@ -116,9 +116,9 @@ public sealed class CompiledDependencyGraphTests
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
         var middles = model.Objects<Middle>().Key(middle => middle.Id);
-        var rootValue = model.Derived(roots).Compute(root => root.Value);
-        var middleValue = model.Derived(middles).Using(middle => middle.Root, rootValue)
-            .Compute((_, value) => value + 1);
+        var rootValue = model.Derived(roots).Select(root => root.Value);
+        var middleValue = model.Derived(middles).From(middle => middle.Root, rootValue)
+            .Select((_, value) => value + 1);
         var input = Assert.Single(middleValue.Definition.Inputs.OfType<UpstreamDerivedInput>());
 
         var graph = CompiledDependencyGraph.Compile(
@@ -134,8 +134,8 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var value = model.Derived(sources).Compute(source => source.Value);
-        var invariant = model.Invariant(sources).Using(value).Must((_, current) => current >= 0);
+        var value = model.Derived(sources).Select(source => source.Value);
+        var invariant = model.Invariant(sources).From(value).Must((_, current) => current >= 0);
 
         var graph = Compile([value], [invariant]);
         var edge = Assert.Single(graph.Edges);
@@ -149,9 +149,9 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var upstream = model.Derived(sources).Compute(source => source.Value);
-        var downstream = model.Derived(sources).Using(upstream, upstream)
-            .Compute((_, left, right) => left + right);
+        var upstream = model.Derived(sources).Select(source => source.Value);
+        var downstream = model.Derived(sources).From(upstream).From(upstream)
+            .Select((_, left, right) => left + right);
 
         var graph = Compile([upstream, downstream]);
         var upstreamNode = Node(graph, upstream);
@@ -168,26 +168,26 @@ public sealed class CompiledDependencyGraphTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var chain = new List<Derived<Source, int>>
         {
-            model.Derived(sources).Compute(source => source.Value).Named("a0")
+            model.Derived(sources).Select(source => source.Value).Named("a0")
         };
         for (var index = 1; index < 12; index++)
         {
             var upstream = chain[^1];
-            chain.Add(model.Derived(sources).Using(upstream)
-                .Compute((_, value) => value + 1).Named($"a{index}"));
+            chain.Add(model.Derived(sources).From(upstream)
+                .Select((_, value) => value + 1).Named($"a{index}"));
         }
-        var invariant = model.Invariant(sources).Using(chain[^1])
+        var invariant = model.Invariant(sources).From(chain[^1])
             .Must((source, value) => value == source.Value + 11).Named("chain-invariant");
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        Assert.Equal(12, runtime.Get(chain[^1], source));
+        Assert.Equal(12, runtime.Evaluate(chain[^1], source));
         Assert.True(runtime.Evaluate(invariant, source));
 
         source.Value = 7;
         runtime.Apply(Change.Property(sources, source, value => value.Value, 1, 7));
 
         Assert.All(chain, derived => Assert.NotEqual(DerivedValueState.Fresh, runtime.GetState(derived, source)));
-        Assert.Equal(18, runtime.Get(chain[^1], source));
+        Assert.Equal(18, runtime.Evaluate(chain[^1], source));
         Assert.All(chain, derived => Assert.Equal(DerivedValueState.Fresh, runtime.GetState(derived, source)));
         Assert.True(runtime.Evaluate(invariant, source));
     }
@@ -201,11 +201,11 @@ public sealed class CompiledDependencyGraphTests
         var leaves = model.Objects<Leaf>().Key(leaf => leaf.Id);
         var rootValue = model.Derived(roots)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(root => root.Value);
-        var middleValue = model.Derived(middles).Using(middle => middle.Root, rootValue)
-            .Compute((_, value) => value + 1);
-        var leafValue = model.Derived(leaves).Using(leaf => leaf.Middle, middleValue)
-            .Compute((_, value) => value + 1);
+            .Select(root => root.Value);
+        var middleValue = model.Derived(middles).From(middle => middle.Root, rootValue)
+            .Select((_, value) => value + 1);
+        var leafValue = model.Derived(leaves).From(leaf => leaf.Middle, middleValue)
+            .Select((_, value) => value + 1);
         var firstRoot = new Root { Value = 1 };
         var secondRoot = new Root { Value = 10 };
         var firstMiddle = new Middle { Root = firstRoot };
@@ -218,8 +218,8 @@ public sealed class CompiledDependencyGraphTests
             seed.Add(middles, [secondMiddle, firstMiddle]);
             seed.Add(roots, [secondRoot, firstRoot]);
         });
-        Assert.Equal(3, runtime.Get(leafValue, firstLeaf));
-        Assert.Equal(12, runtime.Get(leafValue, secondLeaf));
+        Assert.Equal(3, runtime.Evaluate(leafValue, firstLeaf));
+        Assert.Equal(12, runtime.Evaluate(leafValue, secondLeaf));
 
         firstRoot.Value = 2;
         runtime.Apply(Change.Property(roots, firstRoot, root => root.Value, 1, 2));
@@ -228,7 +228,7 @@ public sealed class CompiledDependencyGraphTests
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(leafValue, firstLeaf));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(middleValue, secondMiddle));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(leafValue, secondLeaf));
-        Assert.Equal(4, runtime.Get(leafValue, firstLeaf));
+        Assert.Equal(4, runtime.Evaluate(leafValue, firstLeaf));
     }
 
     [Fact]
@@ -236,16 +236,16 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value).Named("root");
-        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1).Named("left");
-        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2).Named("right");
-        var join = model.Derived(sources).Using(left, right)
-            .Compute((_, first, second) => first + second).Named("join");
-        model.Invariant(sources).Using(join).Must((_, value) => value < 100)
+        var root = model.Derived(sources).Select(source => source.Value).Named("root");
+        var left = model.Derived(sources).From(root).Select((_, value) => value + 1).Named("left");
+        var right = model.Derived(sources).From(root).Select((_, value) => value + 2).Named("right");
+        var join = model.Derived(sources).From(left).From(right)
+            .Select((_, first, second) => first + second).Named("join");
+        model.Invariant(sources).From(join).Must((_, value) => value < 100)
             .ScheduleRepairWith(_ => { }).Named("limit");
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(join, source);
+        _ = runtime.Evaluate(join, source);
         source.Value = 2;
 
         var result = runtime.ApplyDetailed(
@@ -266,16 +266,16 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value).Named("root");
-        var chain = model.Derived(sources).Using(root).Compute((_, value) => value + 1).Named("chain");
-        var left = model.Derived(sources).Using(chain).Compute((_, value) => value + 2).Named("left");
-        var right = model.Derived(sources).Using(chain).Compute((_, value) => value + 3).Named("right");
-        var join = model.Derived(sources).Using(left, right)
-            .Compute((_, first, second) => first + second).Named("join");
-        model.Invariant(sources).Using(join).Must((_, value) => value >= 0).Named("non-negative");
+        var root = model.Derived(sources).Select(source => source.Value).Named("root");
+        var chain = model.Derived(sources).From(root).Select((_, value) => value + 1).Named("chain");
+        var left = model.Derived(sources).From(chain).Select((_, value) => value + 2).Named("left");
+        var right = model.Derived(sources).From(chain).Select((_, value) => value + 3).Named("right");
+        var join = model.Derived(sources).From(left).From(right)
+            .Select((_, first, second) => first + second).Named("join");
+        model.Invariant(sources).From(join).Must((_, value) => value >= 0).Named("non-negative");
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(join, source);
+        _ = runtime.Evaluate(join, source);
         source.Value = 2;
 
         var result = runtime.ApplyDetailed(MutationSet.Create(
@@ -293,9 +293,9 @@ public sealed class CompiledDependencyGraphTests
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
         var middles = model.Objects<Middle>().Key(middle => middle.Id);
-        var rootValue = model.Derived(roots).Compute(root => root.Value).Named("root");
-        var projected = model.Derived(middles).Using(middle => middle.Root, rootValue)
-            .Compute((_, value) => value + 1).Named("projected");
+        var rootValue = model.Derived(roots).Select(root => root.Value).Named("root");
+        var projected = model.Derived(middles).From(middle => middle.Root, rootValue)
+            .Select((_, value) => value + 1).Named("projected");
         var firstRoot = new Root { Value = 1 };
         var secondRoot = new Root { Value = 10 };
         var firstMiddle = new Middle { Root = firstRoot };
@@ -305,8 +305,8 @@ public sealed class CompiledDependencyGraphTests
             seed.Add(roots, [firstRoot, secondRoot]);
             seed.Add(middles, [firstMiddle, secondMiddle]);
         });
-        _ = runtime.Get(projected, firstMiddle);
-        _ = runtime.Get(projected, secondMiddle);
+        _ = runtime.Evaluate(projected, firstMiddle);
+        _ = runtime.Evaluate(projected, secondMiddle);
         firstRoot.Value = 2;
 
         var result = runtime.ApplyDetailed(MutationSet.Create(
@@ -322,9 +322,9 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var downstream = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
-        model.Invariant(sources).Using(downstream).Must((_, value) => value >= 0);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var downstream = model.Derived(sources).From(root).Select((_, value) => value + 1);
+        model.Invariant(sources).From(downstream).Must((_, value) => value >= 0);
 
         var debugView = model.Build().DebugView;
         var dagLines = debugView[(debugView.IndexOf("Dependency DAG:", StringComparison.Ordinal))..]
@@ -348,10 +348,10 @@ public sealed class CompiledDependencyGraphTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
-        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
-        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var left = model.Derived(sources).From(root).Select((_, value) => value + 1);
+        var right = model.Derived(sources).From(root).Select((_, value) => value + 2);
+        var join = model.Derived(sources).From(left).From(right).Select((_, first, second) => first + second);
         return Compile([root, left, right, join]);
     }
 

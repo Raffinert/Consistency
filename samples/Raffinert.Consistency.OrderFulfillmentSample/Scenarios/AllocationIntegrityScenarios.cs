@@ -30,39 +30,39 @@ internal static class AllocationIntegrityScenarios
             .Where((allocationFulfillment, fulfillmentBalance) => allocationFulfillment.Allocation.OrderLineId == fulfillmentBalance.OrderLineId
                 && allocationFulfillment.FulfillmentId == fulfillmentBalance.FulfillmentId).Named("allocation-fulfillment-matching-balance");
 
-        var activeAllocationCount = model.Derived(requests).Using(activeAllocationsByRequest).Incrementally()
-            .Compute((_, matches) => matches.Count()).Named("active-allocation-count");
-        var deletedRequestIntegrity = model.Derived(requests).Using(activeAllocationCount)
-            .Compute((request, count) => !request.IsDeleted || count == 0).Named("deleted-request-allocation-integrity");
-        var deletedRequestInvariant = model.Invariant(requests).Using(deletedRequestIntegrity)
+        var activeAllocationCount = model.Derived(requests).From(activeAllocationsByRequest)
+            .Count().Named("active-allocation-count");
+        var deletedRequestIntegrity = model.Derived(requests).From(activeAllocationCount)
+            .Select((request, count) => !request.IsDeleted || count == 0).Named("deleted-request-allocation-integrity");
+        var deletedRequestInvariant = model.Invariant(requests).From(deletedRequestIntegrity)
             .Must((_, valid) => valid).Named("deleted-request-allocation-integrity-invariant");
 
-        var allocationFulfillmentQuantity = model.Derived(allocations).Using(activeAllocationFulfillments).Incrementally()
-            .Compute((_, matches) => matches.Sum(x => x.Quantity)).Named("allocation-fulfillment-quantity");
-        var allocationQuantityBalance = model.Derived(allocations).Using(allocationFulfillmentQuantity).Compute((allocation, fulfilled) =>
+        var allocationFulfillmentQuantity = model.Derived(allocations).From(activeAllocationFulfillments)
+            .Sum(x => x.Quantity).Named("allocation-fulfillment-quantity");
+        var allocationQuantityBalance = model.Derived(allocations).From(allocationFulfillmentQuantity).Select((allocation, fulfilled) =>
             allocation.FulfillmentMode == FulfillmentMode.Unknown ? RuleEvaluation.Unknown :
             allocation.FulfillmentMode == FulfillmentMode.Disabled || allocation.AllocatedQuantity == fulfilled ? RuleEvaluation.Valid : RuleEvaluation.Violation)
             .Named("allocation-quantity-balance");
-        _ = model.Invariant(allocations).Using(allocationQuantityBalance)
+        _ = model.Invariant(allocations).From(allocationQuantityBalance)
             .Must((_, result) => result != RuleEvaluation.Violation)
             .Named("allocation-quantity-balance-invariant");
 
-        var fulfillmentBalanceConservation = model.Derived(fulfillmentBalances).Compute(fulfillmentBalance =>
+        var fulfillmentBalanceConservation = model.Derived(fulfillmentBalances).Select(fulfillmentBalance =>
             fulfillmentBalance.FulfillmentMode == FulfillmentMode.Unknown || fulfillmentBalance.OrderLine.IsServiceLine == null ? RuleEvaluation.Unknown :
             fulfillmentBalance.FulfillmentMode == FulfillmentMode.Disabled || fulfillmentBalance.OrderLine.IsServiceLine == true ? RuleEvaluation.Valid :
             fulfillmentBalance.AvailableQuantity + fulfillmentBalance.AllocatedQuantity + fulfillmentBalance.ProcessedQuantity == fulfillmentBalance.TotalQuantity
                 ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("fulfillment-balance-conservation");
-        _ = model.Invariant(fulfillmentBalances).Using(fulfillmentBalanceConservation)
+        _ = model.Invariant(fulfillmentBalances).From(fulfillmentBalanceConservation)
             .Must((_, result) => result != RuleEvaluation.Violation)
             .Named("fulfillment-balance-conservation-invariant");
 
-        var matchingFulfillmentBalanceCount = model.Derived(allocationFulfillments).Using(matchingFulfillmentBalance).Incrementally()
-            .Compute((_, matches) => matches.Count()).Named("matching-fulfillment-balance-count");
-        var allocationFulfillmentBalanceExistence = model.Derived(allocationFulfillments).Using(matchingFulfillmentBalanceCount).Compute((allocationFulfillment, count) =>
+        var matchingFulfillmentBalanceCount = model.Derived(allocationFulfillments).From(matchingFulfillmentBalance)
+            .Count().Named("matching-fulfillment-balance-count");
+        var allocationFulfillmentBalanceExistence = model.Derived(allocationFulfillments).From(matchingFulfillmentBalanceCount).Select((allocationFulfillment, count) =>
             allocationFulfillment.Allocation.FulfillmentMode == FulfillmentMode.Unknown ? RuleEvaluation.Unknown :
             allocationFulfillment.Allocation.FulfillmentMode == FulfillmentMode.Disabled || allocationFulfillment.IsDeleted || count > 0
                 ? RuleEvaluation.Valid : RuleEvaluation.Violation).Named("allocation-fulfillment-balance-existence");
-        _ = model.Invariant(allocationFulfillments).Using(allocationFulfillmentBalanceExistence)
+        _ = model.Invariant(allocationFulfillments).From(allocationFulfillmentBalanceExistence)
             .Must((_, result) => result != RuleEvaluation.Violation)
             .Named("allocation-fulfillment-balance-existence-invariant");
 
@@ -81,16 +81,16 @@ internal static class AllocationIntegrityScenarios
         foreach (var test in data.RequestCases)
             runner.Check(test.Name, test.Expected, runtime.Evaluate(deletedRequestInvariant, test.Value) ? RuleEvaluation.Valid : RuleEvaluation.Violation);
         foreach (var test in data.AllocationCases)
-            runner.Check(test.Name, test.Expected, runtime.Get(allocationQuantityBalance, test.Value));
+            runner.Check(test.Name, test.Expected, runtime.Evaluate(allocationQuantityBalance, test.Value));
         foreach (var test in data.FulfillmentBalanceCases)
-            runner.Check(test.Name, test.Expected, runtime.Get(fulfillmentBalanceConservation, test.Value));
+            runner.Check(test.Name, test.Expected, runtime.Evaluate(fulfillmentBalanceConservation, test.Value));
         foreach (var test in data.AllocationFulfillmentCases)
-            runner.Check(test.Name, test.Expected, runtime.Get(allocationFulfillmentBalanceExistence, test.Value));
+            runner.Check(test.Name, test.Expected, runtime.Evaluate(allocationFulfillmentBalanceExistence, test.Value));
 
         var removable = data.RemovableFulfillmentBalance;
-        _ = runtime.Get(allocationFulfillmentBalanceExistence, data.RemovalAllocationFulfillment);
+        _ = runtime.Evaluate(allocationFulfillmentBalanceExistence, data.RemovalAllocationFulfillment);
         var removal = runtime.ApplyDetailed(MutationSet.Create(Change.Remove(fulfillmentBalances, removable)), RuntimeImpactDetailLevel.Causal);
-        runner.Check("D4 fulfillment balance removed while allocation fulfillment survives", RuleEvaluation.Violation, runtime.Get(allocationFulfillmentBalanceExistence, data.RemovalAllocationFulfillment), removal.Result);
+        runner.Check("D4 fulfillment balance removed while allocation fulfillment survives", RuleEvaluation.Violation, runtime.Evaluate(allocationFulfillmentBalanceExistence, data.RemovalAllocationFulfillment), removal.Result);
 
         var pairLine = new OrderLine { IsServiceLine = false };
         var pairAllocation = new Allocation { RequestLineId = Guid.NewGuid(), OrderLineId = pairLine.Id, OrderLine = pairLine, AllocatedQuantity = 2 };
@@ -98,7 +98,7 @@ internal static class AllocationIntegrityScenarios
         var pairFulfillmentBalance = new FulfillmentBalance { OrderLineId = pairLine.Id, OrderLine = pairLine, FulfillmentId = 9001, TotalQuantity = 2, AllocatedQuantity = 2 };
         var addition = runtime.ApplyDetailed(MutationSet.Create(Change.Add(lines, pairLine), Change.Add(allocations, pairAllocation),
             Change.Add(allocationFulfillments, pairAllocationFulfillment), Change.Add(fulfillmentBalances, pairFulfillmentBalance)), RuntimeImpactDetailLevel.Causal);
-        runner.Check("D6 allocation fulfillment and fulfillment balance added in one MutationSet", RuleEvaluation.Valid, runtime.Get(allocationFulfillmentBalanceExistence, pairAllocationFulfillment), addition.Result);
+        runner.Check("D6 allocation fulfillment and fulfillment balance added in one MutationSet", RuleEvaluation.Valid, runtime.Evaluate(allocationFulfillmentBalanceExistence, pairAllocationFulfillment), addition.Result);
         var versionBeforeRemoval = runtime.Version;
         var pairRemoval = runtime.ApplyDetailed(
             MutationSet.Create(Change.Remove(allocationFulfillments, pairAllocationFulfillment), Change.Remove(fulfillmentBalances, pairFulfillmentBalance)),

@@ -9,7 +9,7 @@ public sealed class RelationTouchedStateTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
         var touchedSource = new Source { Code = "A" };
         var unrelatedSource = new Source { Code = "U" };
         var touched = new Item { Code = "A" };
@@ -47,7 +47,7 @@ public sealed class RelationTouchedStateTests
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => MatchOrThrow(source, item))
             .AllowIncompleteDependencies();
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
         var source = new Source { Code = "A" };
         var existing = new Item { Code = "A" };
         var failing = new Item { Code = "A", Fail = true };
@@ -87,7 +87,7 @@ public sealed class RelationTouchedStateTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
         var source = new Source { Code = "touched" };
         var touched = new Item { Code = "touched" };
         var unrelated = Enumerable.Range(0, count)

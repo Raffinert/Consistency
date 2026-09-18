@@ -7,23 +7,23 @@ public sealed class DerivedDagTests
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
-        var ordered = model.Derived(lines).Compute(line => line.Ordered);
-        var remaining = model.Derived(lines).Using(ordered)
-            .Compute((line, value) => value - line.Received);
-        var display = model.Derived(lines).Using(remaining)
-            .Compute((_, value) => value + 1m);
+        var ordered = model.Derived(lines).Select(line => line.Ordered);
+        var remaining = model.Derived(lines).From(ordered)
+            .Select((line, value) => value - line.Received);
+        var display = model.Derived(lines).From(remaining)
+            .Select((_, value) => value + 1m);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
         runtime.Add(lines, line);
 
-        Assert.Equal(9m, runtime.Get(display, line));
+        Assert.Equal(9m, runtime.Evaluate(display, line));
         line.Ordered = 12m;
         runtime.Apply(Change.Property(lines, line, value => value.Ordered, 10m, 12m));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(ordered, line));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(remaining, line));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(display, line));
-        Assert.Equal(11m, runtime.Get(display, line));
+        Assert.Equal(11m, runtime.Evaluate(display, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(ordered, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(remaining, line));
         runtime.Remove(lines, line);
@@ -37,16 +37,16 @@ public sealed class DerivedDagTests
         var sources = model.Objects<Line>().Key(line => line.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.LineId);
-        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        var doubled = model.Derived(sources).Using(count).Compute((_, value) => value * 2);
+        var count = model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        var doubled = model.Derived(sources).From(count).Select((_, value) => value * 2);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid() };
         runtime.Add(sources, line);
-        Assert.Equal(0, runtime.Get(doubled, line));
+        Assert.Equal(0, runtime.Evaluate(doubled, line));
 
         runtime.Add(items, new Item { Id = Guid.NewGuid(), LineId = line.Id });
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(doubled, line));
-        Assert.Equal(2, runtime.Get(doubled, line));
+        Assert.Equal(2, runtime.Evaluate(doubled, line));
     }
 
     [Fact]
@@ -56,25 +56,25 @@ public sealed class DerivedDagTests
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(line => line.Ordered);
-        var doubled = model.Derived(lines).Using(basis).Compute((_, value) => value * 2m);
-        var reduced = model.Derived(lines).Using(basis).Compute((line, value) => value - line.Received);
-        var combined = model.Derived(lines).Using(doubled, reduced)
-            .Compute((_, left, right) => left + right);
+            .Select(line => line.Ordered);
+        var doubled = model.Derived(lines).From(basis).Select((_, value) => value * 2m);
+        var reduced = model.Derived(lines).From(basis).Select((line, value) => value - line.Received);
+        var combined = model.Derived(lines).From(doubled).From(reduced)
+            .Select((_, left, right) => left + right);
         var runtime = model.Build().CreateRuntime();
         var first = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
         var second = new Line { Id = Guid.NewGuid(), Ordered = 5m, Received = 1m };
         runtime.Add(lines, first);
         runtime.Add(lines, second);
-        Assert.Equal(28m, runtime.Get(combined, first));
-        Assert.Equal(14m, runtime.Get(combined, second));
+        Assert.Equal(28m, runtime.Evaluate(combined, first));
+        Assert.Equal(14m, runtime.Evaluate(combined, second));
 
         first.Ordered = 12m;
         runtime.Apply(Change.Property(lines, first, value => value.Ordered, 10m, 12m));
 
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(combined, first));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(combined, second));
-        Assert.Equal(34m, runtime.Get(combined, first));
+        Assert.Equal(34m, runtime.Evaluate(combined, first));
     }
 
     [Fact]
@@ -101,20 +101,20 @@ public sealed class DerivedDagTests
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(line => line.Ordered);
-        var available = model.Derived(lines).Using(basis)
+            .Select(line => line.Ordered);
+        var available = model.Derived(lines).From(basis)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Dirty))
-            .Compute((line, ordered) => ordered - line.Received);
+            .Select((line, ordered) => ordered - line.Received);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
         runtime.Add(lines, line);
-        Assert.Equal(8m, runtime.Get(available, line));
+        Assert.Equal(8m, runtime.Evaluate(available, line));
 
         line.Received = 3m;
         runtime.Apply(Change.Property(lines, line, value => value.Received, 2m, 3m));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(basis, line));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(available, line));
-        Assert.Equal(7m, runtime.Get(available, line));
+        Assert.Equal(7m, runtime.Evaluate(available, line));
 
         line.Ordered = 12m;
         line.Received = 4m;
@@ -129,17 +129,17 @@ public sealed class DerivedDagTests
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
-        var ordered = model.Derived(lines).Compute(line => line.Ordered);
-        var received = model.Derived(lines).Compute(line => line.Received);
-        var remaining = model.Derived(lines).Using(ordered, received)
+        var ordered = model.Derived(lines).Select(line => line.Ordered);
+        var received = model.Derived(lines).Select(line => line.Received);
+        var remaining = model.Derived(lines).From(ordered).From(received)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute((line, first, second) => first - second + line.Offset);
-        var invariant = model.Invariant(lines).Using(remaining, ordered)
+            .Select((line, first, second) => first - second + line.Offset);
+        var invariant = model.Invariant(lines).From(remaining).From(ordered)
             .Must((_, value, maximum) => value <= maximum);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m, Offset = 1m };
         runtime.Add(lines, line);
-        Assert.Equal(9m, runtime.Get(remaining, line));
+        Assert.Equal(9m, runtime.Evaluate(remaining, line));
 
         line.Offset = 2m;
         runtime.Apply(Change.Property(lines, line, value => value.Offset, 1m, 2m));
@@ -157,9 +157,9 @@ public sealed class DerivedDagTests
         var lines = model.Objects<Line>().Key(line => line.Id);
         var ordered = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(line => line.Ordered);
-        var received = model.Derived(lines).Compute(line => line.Received);
-        var invariant = model.Invariant(lines).Using(received, ordered)
+            .Select(line => line.Ordered);
+        var received = model.Derived(lines).Select(line => line.Received);
+        var invariant = model.Invariant(lines).From(received).From(ordered)
             .Must((line, receivedValue, orderedValue) => receivedValue <= orderedValue)
             .ScheduleRepairWith(repairs.Add);
         var runtime = model.Build().CreateRuntime();
@@ -185,9 +185,9 @@ public sealed class DerivedDagTests
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
-        var ordered = model.Derived(lines).Compute(line => line.Ordered);
-        var received = model.Derived(lines).Compute(line => line.Received);
-        var invariant = model.Invariant(lines).Using(received, ordered)
+        var ordered = model.Derived(lines).Select(line => line.Ordered);
+        var received = model.Derived(lines).Select(line => line.Received);
+        var invariant = model.Invariant(lines).From(received).From(ordered)
             .Must((_, receivedValue, orderedValue) => receivedValue <= orderedValue)
             .ReactWith(InvariantReaction.EvaluateImmediately);
         var runtime = model.Build().CreateRuntime();
@@ -218,15 +218,15 @@ public sealed class DerivedDagTests
         var lines = model.Objects<Line>().Key(line => line.Id);
         var basis = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(line => line.Ordered);
-        var doubled = model.Derived(lines).Using(basis).Compute((_, value) => value * 2m);
-        var reduced = model.Derived(lines).Using(basis).Compute((line, value) => value - line.Received);
-        var combined = model.Derived(lines).Using(doubled, reduced)
-            .Compute((_, left, right) => left + right);
+            .Select(line => line.Ordered);
+        var doubled = model.Derived(lines).From(basis).Select((_, value) => value * 2m);
+        var reduced = model.Derived(lines).From(basis).Select((line, value) => value - line.Received);
+        var combined = model.Derived(lines).From(doubled).From(reduced)
+            .Select((_, left, right) => left + right);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
         runtime.Add(lines, line);
-        Assert.Equal(28m, runtime.Get(combined, line));
+        Assert.Equal(28m, runtime.Evaluate(combined, line));
         line.Ordered = 12m;
         line.Received = 3m;
         var upstream = Change.Property(lines, line, value => value.Ordered, 10m, 12m);

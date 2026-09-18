@@ -10,11 +10,11 @@ public sealed class PlannedDerivedEvaluationTests
     {
         var counter = new Counter(); var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Named("items").Key(x => x.Id);
-        var doubled = model.Derived(items).Compute(x => counter.Count(x.Value * 2))
+        var doubled = model.Derived(items).Select(x => counter.Count(x.Value * 2))
             .AllowIncompleteDependencies().Named("doubled");
         var item = new Item { Id = 1, Value = 2 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
-        Assert.Equal(4, runtime.Get(doubled, item)); item.Value = 3;
+        Assert.Equal(4, runtime.Evaluate(doubled, item)); item.Value = 3;
         var prepared = runtime.Prepare(MutationSet.Create(Change.Property(items, item, x => x.Value, 2, 3)));
 
         var plan = runtime.PlanDetailed(prepared, detailLevel, PlannedInvariantEvaluationMode.None,
@@ -24,7 +24,7 @@ public sealed class PlannedDerivedEvaluationTests
         Assert.Equal(6, evaluation.Value); Assert.Equal(DerivedValueState.Fresh, evaluation.State);
         Assert.Equal(0, runtime.Version); Assert.Equal(2, counter.Calls);
         runtime.Commit(plan);
-        Assert.Equal(2, counter.Calls); Assert.Equal(6, runtime.Get(doubled, item));
+        Assert.Equal(2, counter.Calls); Assert.Equal(6, runtime.Evaluate(doubled, item));
     }
 
     [Fact]
@@ -34,12 +34,12 @@ public sealed class PlannedDerivedEvaluationTests
         var groups = model.Objects<Group>().Named("groups").Key(x => x.Id);
         var items = model.Objects<Item>().Named("sum-items").Key(x => x.Id);
         var relation = model.Relation(groups, items).Where((group, item) => group.Id == item.GroupId);
-        var sum = model.Derived(groups).Using(relation).Incrementally().Compute((_, rows) => rows.Sum(x => x.Value)).Named("sum");
-        var doubled = model.Derived(groups).Using(sum).Compute((_, value) => value * 2).Named("double-sum");
+        var sum = model.Derived(groups).From(relation).Sum(x => x.Value).Named("sum");
+        var doubled = model.Derived(groups).From(sum).Select((_, value) => value * 2).Named("double-sum");
         var first = new Group { Id = 1 }; var other = new Group { Id = 2 };
         var item = new Item { Id = 1, GroupId = 1, Value = 2 };
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(groups, [first, other]); seed.Add(items, [item]); });
-        _ = runtime.Get(doubled, first); _ = runtime.Get(doubled, other); item.Value = 4;
+        _ = runtime.Evaluate(doubled, first); _ = runtime.Evaluate(doubled, other); item.Value = 4;
 
         var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(
             Change.Property(items, item, x => x.Value, 2, 4))), RuntimeImpactDetailLevel.Causal,
@@ -55,7 +55,7 @@ public sealed class PlannedDerivedEvaluationTests
     {
         var counter = new Counter(); var model = new ConsistencyModelBuilder();
         var items = model.Objects<Item>().Key(x => x.Id);
-        model.Derived(items).Compute(x => counter.Count(x.Value)).AllowIncompleteDependencies();
+        model.Derived(items).Select(x => counter.Count(x.Value)).AllowIncompleteDependencies();
         var item = new Item { Id = 1, Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item])); item.Value = 2;
         var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(
@@ -67,7 +67,7 @@ public sealed class PlannedDerivedEvaluationTests
     public void Added_source_is_evaluated_and_removed_source_is_not_returned()
     {
         var model = new ConsistencyModelBuilder(); var items = model.Objects<Item>().Named("lifecycle").Key(x => x.Id);
-        model.Derived(items).Compute(x => x.Value * 2).Named("double");
+        model.Derived(items).Select(x => x.Value * 2).Named("double");
         var removed = new Item { Id = 1, Value = 2 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [removed]));
         var added = new Item { Id = 2, Value = 3 };
@@ -81,7 +81,7 @@ public sealed class PlannedDerivedEvaluationTests
     public void Stale_and_domain_drift_reject_without_reexecution()
     {
         var counter = new Counter(); var model = new ConsistencyModelBuilder(); var items = model.Objects<Item>().Key(x => x.Id);
-        model.Derived(items).Compute(x => counter.Count(x.Value)).AllowIncompleteDependencies();
+        model.Derived(items).Select(x => counter.Count(x.Value)).AllowIncompleteDependencies();
         var item = new Item { Id = 1, Value = 1 }; var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
         item.Value = 2; var prepared = runtime.Prepare(MutationSet.Create(Change.Property(items, item, x => x.Value, 1, 2)));
         var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Summary, PlannedInvariantEvaluationMode.None, PlannedDerivedEvaluationMode.Affected);
@@ -95,7 +95,7 @@ public sealed class PlannedDerivedEvaluationTests
     public void Affected_mode_does_not_scan_unrelated_registered_sources()
     {
         var counter = new Counter(); var model = new ConsistencyModelBuilder(); var items = model.Objects<Item>().Key(x => x.Id);
-        model.Derived(items).Compute(x => counter.Count(x.Value)).AllowIncompleteDependencies();
+        model.Derived(items).Select(x => counter.Count(x.Value)).AllowIncompleteDependencies();
         var all = Enumerable.Range(1, 101).Select(id => new Item { Id = id, Value = id }).ToArray();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, all)); all[0].Value = 500;
         var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(Change.Property(items, all[0], x => x.Value, 1, 500))),
@@ -108,10 +108,10 @@ public sealed class PlannedDerivedEvaluationTests
     {
         var model = new ConsistencyModelBuilder(); var groups = model.Objects<Group>().Key(x => x.Id); var items = model.Objects<Item>().Key(x => x.Id);
         var relation = model.Relation(groups, items).Where((g, i) => g.Id == i.GroupId);
-        var total = model.Derived(groups).Using(relation).Compute((_, rows) => rows.Sum(x => x.Value)).Named("full-total");
+        var total = model.Derived(groups).From(relation).Select((_, rows) => rows.Sum(x => x.Value)).Named("full-total");
         var group = new Group { Id = 1 }; var item = new Item { Id = 1, GroupId = 1, Value = 2 };
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(groups, [group]); seed.Add(items, [item]); });
-        Assert.Equal(2, runtime.Get(total, group)); item.Value = 5;
+        Assert.Equal(2, runtime.Evaluate(total, group)); item.Value = 5;
         var plan = runtime.PlanDetailed(runtime.Prepare(MutationSet.Create(Change.Property(items, item, x => x.Value, 2, 5))),
             RuntimeImpactDetailLevel.Causal, PlannedInvariantEvaluationMode.None, PlannedDerivedEvaluationMode.Affected);
         Assert.Equal(5, Assert.Single(plan.DerivedEvaluations).Value);
@@ -122,8 +122,8 @@ public sealed class PlannedDerivedEvaluationTests
     {
         var model = new ConsistencyModelBuilder(); var owners = model.Objects<Owner>().Named("owners").Key(x => x.Id);
         var links = model.Objects<ProjectedLink>().Named("links").Key(x => x.Id);
-        var amount = model.Derived(owners).Compute(x => x.Amount).Named("amount");
-        model.Derived(links).Using(x => x.Owner, amount).Compute((_, value) => value * 2).Named("projected");
+        var amount = model.Derived(owners).Select(x => x.Amount).Named("amount");
+        model.Derived(links).From(x => x.Owner, amount).Select((_, value) => value * 2).Named("projected");
         var first = new Owner { Id = 1, Amount = 2 }; var second = new Owner { Id = 2, Amount = 3 };
         var firstLink = new ProjectedLink { Id = 1, Owner = first }; var secondLink = new ProjectedLink { Id = 2, Owner = second };
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(owners, [first, second]); seed.Add(links, [firstLink, secondLink]); });
@@ -138,9 +138,9 @@ public sealed class PlannedDerivedEvaluationTests
     public void Affected_derived_exception_restores_runtime_state_atomically()
     {
         var model = new ConsistencyModelBuilder(); var items = model.Objects<Item>().Key(x => x.Id);
-        var value = model.Derived(items).Compute(x => ThrowAtNine(x.Value)).AllowIncompleteDependencies();
+        var value = model.Derived(items).Select(x => ThrowAtNine(x.Value)).AllowIncompleteDependencies();
         var item = new Item { Id = 1, Value = 2 }; var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
-        Assert.Equal(2, runtime.Get(value, item)); item.Value = 9;
+        Assert.Equal(2, runtime.Evaluate(value, item)); item.Value = 9;
         var prepared = runtime.Prepare(MutationSet.Create(Change.Property(items, item, x => x.Value, 2, 9)));
         Assert.Throws<InvalidOperationException>(() => runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal,
             PlannedInvariantEvaluationMode.None, PlannedDerivedEvaluationMode.Affected));

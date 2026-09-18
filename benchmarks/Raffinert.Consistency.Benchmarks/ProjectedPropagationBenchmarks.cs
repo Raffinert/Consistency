@@ -22,9 +22,9 @@ public class ProjectedPropagationBenchmarks
         var model = new ConsistencyModelBuilder();
         _owners = model.Objects<Owner>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var amount = model.Derived(_owners).Compute(value => value.Amount);
-        _ = model.Derived(links).Using(value => value.Owner, amount)
-            .Compute((_, current) => current);
+        var amount = model.Derived(_owners).Select(value => value.Amount);
+        _ = model.Derived(links).From(value => value.Owner, amount)
+            .Select((_, current) => current);
         _changed = new Owner(0);
         var other = new Owner(1);
         var downstream = Enumerable.Range(0, DownstreamCount)

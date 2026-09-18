@@ -89,13 +89,13 @@ public sealed class ApiV2MaterializationTests
 
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<ApiV2Entity>().Key(x => x.Id);
-        var oldValue = model.Derived(objects).Compute(x => x.Input * 2m).Named("old-value");
+        var oldValue = model.Derived(objects).Select(x => x.Input * 2m).Named("old-value").MaterializeTo(x => x.OldMirror);
         _ = model.Derived(objects).Select(x => x.Input * 2m)
             .MaterializeTo(x => x.PriceMirror).Named("v2-value");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new ConsistencyEfCoreMappings()
             .Map(objects)
-            .Materialize(oldValue, x => x.OldMirror);
+            ;
 
         entity.Input = 3m;
         context.SaveChangesConsistently(runtime, mappings);

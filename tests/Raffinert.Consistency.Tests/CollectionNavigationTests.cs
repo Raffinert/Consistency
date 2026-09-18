@@ -10,9 +10,9 @@ public sealed class CollectionNavigationTests
         var invoices = model.Objects<RequestLine>().Key(invoice => invoice.Id);
         var relation = model.Relation(orders, invoices).Where((order, invoice) =>
             order.Lines.Any(line => line.ItemNumber == invoice.ItemNumber));
-        var derived = model.Derived(orders).Using(relation)
-            .Compute((_, matches) => matches.Count);
-        var invariant = model.Invariant(orders).Using(derived)
+        var derived = model.Derived(orders).From(relation)
+            .Select((_, matches) => matches.Count);
+        var invariant = model.Invariant(orders).From(derived)
             .Must((_, count) => count == 0);
         var runtime = model.Build().CreateRuntime();
         var order = new CollectionOrder { Id = Guid.NewGuid() };
@@ -20,7 +20,7 @@ public sealed class CollectionNavigationTests
         var line = new CollectionOrderLine { ItemNumber = "A" };
         runtime.Add(orders, order);
         runtime.Add(invoices, invoice);
-        Assert.Equal(0, runtime.Get(derived, order));
+        Assert.Equal(0, runtime.Evaluate(derived, order));
         Assert.True(runtime.Evaluate(invariant, order));
 
         order.Lines.Add(line);
@@ -29,7 +29,7 @@ public sealed class CollectionNavigationTests
         Assert.Equal([invoice], runtime.Related(relation, order));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(derived, order));
         Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(invariant, order));
-        Assert.Equal(1, runtime.Get(derived, order));
+        Assert.Equal(1, runtime.Evaluate(derived, order));
 
         order.Lines.Remove(line);
         runtime.Apply(Change.CollectionRemove(order, value => value.Lines, line));

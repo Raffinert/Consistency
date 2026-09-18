@@ -45,7 +45,7 @@ public class DependencyDagBenchmarks
         var (model, sources, final) = BuildDeepChainModel(depth);
         var source = new Source();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(final, source);
+        _ = runtime.Evaluate(final, source);
         return new MutationScenario(runtime, sources, source);
     }
 
@@ -54,11 +54,11 @@ public class DependencyDagBenchmarks
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var current = model.Derived(sources).Compute(source => source.Value);
+        var current = model.Derived(sources).Select(source => source.Value);
         for (var index = 1; index < depth; index++)
         {
             var upstream = current;
-            current = model.Derived(sources).Using(upstream).Compute((_, value) => value + 1);
+            current = model.Derived(sources).From(upstream).Select((_, value) => value + 1);
         }
         return (model, sources, current);
     }
@@ -67,18 +67,18 @@ public class DependencyDagBenchmarks
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var current = model.Derived(sources).Compute(source => source.Value);
+        var current = model.Derived(sources).Select(source => source.Value);
         for (var index = 0; index < layers; index++)
         {
             var upstream = current;
-            var left = model.Derived(sources).Using(upstream).Compute((_, value) => value + 1);
-            var right = model.Derived(sources).Using(upstream).Compute((_, value) => value + 2);
-            current = model.Derived(sources).Using(left, right)
-                .Compute((_, first, second) => first + second);
+            var left = model.Derived(sources).From(upstream).Select((_, value) => value + 1);
+            var right = model.Derived(sources).From(upstream).Select((_, value) => value + 2);
+            current = model.Derived(sources).From(left).From(right)
+                .Select((_, first, second) => first + second);
         }
         var source = new Source();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(current, source);
+        _ = runtime.Evaluate(current, source);
         return new MutationScenario(runtime, sources, source);
     }
 
@@ -88,17 +88,17 @@ public class DependencyDagBenchmarks
         var sources = model.Objects<Source>().Key(source => source.Id);
         var nodes = new List<Derived<Source, int>>
         {
-            model.Derived(sources).Compute(source => source.Value)
+            model.Derived(sources).Select(source => source.Value)
         };
         for (var index = 1; index < nodeCount; index++)
         {
             var upstream = nodes[(index - 1) / 2];
-            nodes.Add(model.Derived(sources).Using(upstream).Compute((_, value) => value + 1));
+            nodes.Add(model.Derived(sources).From(upstream).Select((_, value) => value + 1));
         }
         var source = new Source();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
         foreach (var leaf in nodes.Skip(nodeCount / 2))
-            _ = runtime.Get(leaf, source);
+            _ = runtime.Evaluate(leaf, source);
         return new MutationScenario(runtime, sources, source);
     }
 
@@ -107,7 +107,7 @@ public class DependencyDagBenchmarks
         var (model, sources, final) = BuildDeepChainModel(depth);
         var source = new Source();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(final, source);
+        _ = runtime.Evaluate(final, source);
         source.Value = 1;
         var prepared = runtime.Prepare(MutationSet.Create(
             Change.Property(sources, source, value => value.Value, 0, 1)));

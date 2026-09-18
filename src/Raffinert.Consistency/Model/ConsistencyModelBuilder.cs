@@ -194,25 +194,56 @@ public sealed class ConsistencyModelBuilder
 
     private void ValidateMaterializationDependencies()
     {
-        foreach (var derived in _derivedStates)
+        foreach (var materialization in _materializations)
         {
-            foreach (var dependency in derived.Analysis.Dependencies.Where(value =>
-                         value.Role == ExpressionParameterRole.DerivedSource &&
-                         value.Path.Segments.Count == 1))
-            {
-                var target = _materializations.FirstOrDefault(value =>
-                    ReferenceEquals(value.SourceSet, derived.SourceSet) &&
-                    value.Target == dependency.Path.Segments[0].Member);
-                if (target is null)
-                    continue;
-                var name = target.Definition.DefinitionKey ?? "<unnamed>";
-                throw new InvalidOperationException(
-                    $"'{target.Target.Name}' is a materialization target of derived definition '{name}'. " +
-                    $"Depend on the logical definition with From({name}) instead of treating the mirror property " +
-                    "as an independent source dependency.");
-            }
+            var usage = GetMemberUsage(materialization.SourceSet, materialization.Target);
+            if (usage == ConsistencyRuntime.ModelMemberUsageKind.None)
+                continue;
+            var name = materialization.Definition.DefinitionKey ?? "<unnamed>";
+            throw new InvalidOperationException(
+                $"'{materialization.Target.Name}' is a materialization target of derived definition '{name}' " +
+                $"and must remain sink-only ({usage}). Depend on the logical definition with From({name}) " +
+                "instead of treating the mirror property as an independent source dependency.");
         }
     }
+
+    private ConsistencyRuntime.ModelMemberUsageKind GetMemberUsage(
+        IObjectSetDefinition set,
+        MemberInfo member)
+    {
+        var usage = set.KeyMembers.Contains(member)
+            ? ConsistencyRuntime.ModelMemberUsageKind.ObjectSetKey
+            : ConsistencyRuntime.ModelMemberUsageKind.None;
+        if (_relations.Any(relation => relation.Analysis.DependencyPaths.Any(path =>
+                ReferenceEquals(path.RootParameterIndex == 0 ? relation.LeftSet : relation.RightSet, set) &&
+                path.Segments.Any(segment => segment.Member == member))))
+            usage |= ConsistencyRuntime.ModelMemberUsageKind.RelationDependency;
+        if (_derivedStates.Any(definition => definition.Analysis.Dependencies.Any(dependency =>
+                ReferenceEquals(ResolveDependencyRootSet(definition, dependency.Role), set) &&
+                dependency.Path.Segments.Any(segment => segment.Member == member))))
+            usage |= ConsistencyRuntime.ModelMemberUsageKind.DerivedDependency;
+        if (_invariants.Any(invariant => invariant.Analysis.Dependencies.Any(dependency =>
+                dependency.Role == ExpressionParameterRole.InvariantSource &&
+                ReferenceEquals(invariant.SourceSet, set) &&
+                dependency.Path.Segments.Any(segment => segment.Member == member))))
+            usage |= ConsistencyRuntime.ModelMemberUsageKind.InvariantDependency;
+        if (_derivedStates.Any(definition => ReferenceEquals(definition.SourceSet, set) &&
+                definition.Inputs.OfType<ProjectedUpstreamDerivedInput>().Any(input =>
+                    input.SelectorPath.Segments.Any(segment => segment.Member == member))))
+            usage |= ConsistencyRuntime.ModelMemberUsageKind.ProjectedSelector;
+        return usage;
+    }
+
+    private static IObjectSetDefinition? ResolveDependencyRootSet(
+        IDerivedDefinition definition,
+        ExpressionParameterRole role) => role switch
+        {
+            ExpressionParameterRole.DerivedSource => definition.SourceSet,
+            ExpressionParameterRole.RelationItem => definition.Inputs
+                .OfType<RelationDerivedInput>()
+                .Single().Relation.RightSet,
+            _ => null
+        };
 
     private static void ValidateComplete(
         string consumerKind,

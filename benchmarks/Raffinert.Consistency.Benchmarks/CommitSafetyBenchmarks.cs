@@ -42,7 +42,7 @@ public class CommitSafetyBenchmarks
         var items = builder.Objects<Item>().Key(item => item.Id);
         var flags = builder.Objects<Flag>().Key(flag => flag.Id);
         var relation = builder.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        builder.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        builder.Derived(sources).From(relation).Select((_, matches) => matches.Count);
 
         var runtime = builder.Build().CreateRuntime();
         if (disableSnapshots)

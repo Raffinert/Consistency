@@ -117,8 +117,8 @@ public sealed class ModelValidationTests
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        var invariant = model.Invariant(sources).Using(count)
+        var count = model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        var invariant = model.Invariant(sources).From(count)
             .Must((source, value) => OpaqueInvariant(source, value));
 
         var error = Assert.Throws<InvalidOperationException>(() => model.Build());
@@ -137,7 +137,7 @@ public sealed class ModelValidationTests
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item));
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
 
         var error = Assert.Throws<InvalidOperationException>(() => model.Build());
 
@@ -171,7 +171,7 @@ public sealed class ModelValidationTests
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => OpaqueRelation(source, item))
             .AllowIncompleteDependencies();
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
 
         var compiled = model.Build();
 

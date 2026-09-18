@@ -7,8 +7,8 @@ public sealed class ConsistencyScopeRequirementTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(x => x.Id);
-        var local = model.Derived(sources).Compute(x => x.Value);
-        var invariant = model.Invariant(sources).Using(local).Must((_, value) => value >= 0);
+        var local = model.Derived(sources).Select(x => x.Value);
+        var invariant = model.Invariant(sources).From(local).Must((_, value) => value >= 0);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Empty(runtime.GetScopeRequirements(local.Definition));
@@ -20,10 +20,10 @@ public sealed class ConsistencyScopeRequirementTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(x => x.Id);
-        var scalar = model.Derived(sources).Compute(x => x.Value);
-        var terminal = model.Derived(sources).Compute(x => x.Parent);
-        var nested = model.Derived(sources).Compute(x => x.Parent!.Value);
-        var twoHop = model.Derived(sources).Compute(x => x.Parent!.Parent!.Value);
+        var scalar = model.Derived(sources).Select(x => x.Value);
+        var terminal = model.Derived(sources).Select(x => x.Parent);
+        var nested = model.Derived(sources).Select(x => x.Parent!.Value);
+        var twoHop = model.Derived(sources).Select(x => x.Parent!.Parent!.Value);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Empty(runtime.GetScopeRequirements(scalar.Definition));
@@ -39,7 +39,7 @@ public sealed class ConsistencyScopeRequirementTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(x => x.Id);
-        var nested = model.Derived(sources).Compute(x => x.Address.PostCode);
+        var nested = model.Derived(sources).Select(x => x.Address.PostCode);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Empty(runtime.GetScopeRequirements(nested.Definition));
@@ -50,9 +50,9 @@ public sealed class ConsistencyScopeRequirementTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(x => x.Id);
-        var nested = model.Derived(sources).Compute(x => x.Parent!.Value);
-        var composed = model.Derived(sources).Using(nested).Compute((_, value) => value + 1);
-        var invariant = model.Invariant(sources).Using(composed)
+        var nested = model.Derived(sources).Select(x => x.Parent!.Value);
+        var composed = model.Derived(sources).From(nested).Select((_, value) => value + 1);
+        var invariant = model.Invariant(sources).From(composed)
             .Must((source, value) => value <= source.Parent!.Value);
         var runtime = model.Build().CreateRuntime();
 
@@ -67,8 +67,8 @@ public sealed class ConsistencyScopeRequirementTests
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(x => x.Id);
         var consumers = model.Objects<Consumer>().Key(x => x.Id);
-        var local = model.Derived(sources).Compute(x => x.Value);
-        var projected = model.Derived(consumers).Using(x => x.Source, local).Compute((_, value) => value);
+        var local = model.Derived(sources).Select(x => x.Value);
+        var projected = model.Derived(consumers).From(x => x.Source, local).Select((_, value) => value);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal([(consumers.Definition.Id, ScopeRequirementReason.ProjectedConsumerCoverage)],
@@ -82,9 +82,9 @@ public sealed class ConsistencyScopeRequirementTests
         var sources = model.Objects<Source>().Key(x => x.Id);
         var items = model.Objects<Item>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var count = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
-        var composed = model.Derived(sources).Using(count).Compute((_, value) => value > 0);
-        var invariant = model.Invariant(sources).Using(composed).Must((_, value) => value);
+        var count = model.Derived(sources).From(relation).Select((_, rows) => rows.Count);
+        var composed = model.Derived(sources).From(count).Select((_, value) => value > 0);
+        var invariant = model.Invariant(sources).From(composed).Must((_, value) => value);
         var runtime = model.Build().CreateRuntime();
 
         var expected = new[]
@@ -106,9 +106,9 @@ public sealed class ConsistencyScopeRequirementTests
         var secondItems = model.Objects<OtherItem>().Key(x => x.Id);
         var firstRelation = model.Relation(sources, firstItems).Where((source, item) => source.Id == item.SourceId);
         var secondRelation = model.Relation(sources, secondItems).Where((source, item) => source.Id == item.SourceId);
-        var first = model.Derived(sources).Using(firstRelation).Compute((_, rows) => rows.Count);
-        var second = model.Derived(sources).Using(secondRelation).Compute((_, rows) => rows.Count);
-        var combined = model.Derived(sources).Using(first, second).Compute((_, left, right) => left + right);
+        var first = model.Derived(sources).From(firstRelation).Select((_, rows) => rows.Count);
+        var second = model.Derived(sources).From(secondRelation).Select((_, rows) => rows.Count);
+        var combined = model.Derived(sources).From(first).From(second).Select((_, left, right) => left + right);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal(new[]
@@ -127,8 +127,8 @@ public sealed class ConsistencyScopeRequirementTests
         var items = model.Objects<Item>().Key(x => x.Id);
         var consumers = model.Objects<Consumer>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var count = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
-        var projected = model.Derived(consumers).Using(x => x.Source, count).Compute((_, value) => value);
+        var count = model.Derived(sources).From(relation).Select((_, rows) => rows.Count);
+        var projected = model.Derived(consumers).From(x => x.Source, count).Select((_, value) => value);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal(new[]
@@ -146,8 +146,8 @@ public sealed class ConsistencyScopeRequirementTests
         var sources = model.Objects<Source>().Key(x => x.Id);
         var items = model.Objects<Item>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var count = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
-        var projected = model.Derived(sources).Using(x => x.Parent!, count).Compute((_, value) => value);
+        var count = model.Derived(sources).From(relation).Select((_, rows) => rows.Count);
+        var projected = model.Derived(sources).From(x => x.Parent!, count).Select((_, value) => value);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal(new[]
@@ -191,7 +191,7 @@ public sealed class ConsistencyScopeRequirementTests
         var sources = model.Objects<Source>().Named("sources").Key(x => x.Id);
         var items = model.Objects<Item>().Named("items").Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var derived = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
+        var derived = model.Derived(sources).From(relation).Select((_, rows) => rows.Count);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal(new[]
@@ -212,7 +212,7 @@ public sealed class ConsistencyScopeRequirementTests
     {
         var first = new ConsistencyModelBuilder();
         var source = first.Objects<Source>().Key(x => x.Id);
-        var local = first.Derived(source).Compute(x => x.Value);
+        var local = first.Derived(source).Select(x => x.Value);
         var runtime = first.Build().CreateRuntime();
         var second = new ConsistencyModelBuilder();
         var foreign = second.Objects<Source>().Key(x => x.Id);
@@ -234,9 +234,9 @@ public sealed class ConsistencyScopeRequirementTests
         var sources = model.Objects<Source>().Key(x => x.Id);
         var items = model.Objects<Item>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var builder = model.Derived(sources).Using(relation);
+        var builder = model.Derived(sources).From(relation);
         if (conservative) builder.PreferConservativePropagation();
-        var count = builder.Compute((_, rows) => rows.Count);
+        var count = builder.Select((_, rows) => rows.Count);
         var runtime = model.Build().CreateRuntime();
 
         Assert.Equal(2, runtime.GetScopeRequirements(count.Definition).Count);
@@ -249,8 +249,8 @@ public sealed class ConsistencyScopeRequirementTests
         var sources = model.Objects<Source>().Key(x => x.Id);
         var items = model.Objects<Item>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Id == item.SourceId);
-        var derived = model.Derived(sources).Using(relation).Compute((_, rows) => rows.Count);
-        var invariant = model.Invariant(sources).Using(derived).Must((_, value) => value >= 0);
+        var derived = model.Derived(sources).From(relation).Select((_, rows) => rows.Count);
+        var invariant = model.Invariant(sources).From(derived).Must((_, value) => value >= 0);
         return (model.Build().CreateRuntime(), derived, invariant);
     }
 

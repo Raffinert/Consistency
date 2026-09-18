@@ -67,7 +67,7 @@ public class ApplyDetailBenchmarks
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
-        model.Derived(set).Compute(source => source.Value);
+        model.Derived(set).Select(source => source.Value);
         var runtime = model.Build().CreateRuntime();
         var sources = Enumerable.Range(0, count).Select(_ => new Source()).ToArray();
         runtime.Apply(MutationSet.Create(sources.Select(source => Change.Add(set, source)).ToArray()));

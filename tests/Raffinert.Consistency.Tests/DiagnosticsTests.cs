@@ -13,12 +13,11 @@ public sealed class DiagnosticsTests
         var items = model.Objects<DerivedItemRecord>().Named("Item").Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code)
             .Named("Source.Items");
-        var total = model.Derived(sources).Using(relation)
+        var total = model.Derived(sources).From(relation)
             .Impact(policy => policy.MembershipRemoved(DependencySeverity.Invalid))
-            .Incrementally()
-            .Compute((source, matches) => matches.Sum(item => item.Quantity))
+            .Sum(item => item.Quantity)
             .Named("Source.Total");
-        model.Invariant(sources).Using(total).Must((source, value) => value >= 0m)
+        model.Invariant(sources).From(total).Must((source, value) => value >= 0m)
             .Named("Source.Total.NonNegative")
             .ReactWith(InvariantReaction.MarkInvalid);
 
@@ -63,10 +62,9 @@ public sealed class DiagnosticsTests
         var sources = model.Objects<DerivedSourceRecord>().Named("Source").Key(value => value.Id);
         var items = model.Objects<DerivedItemRecord>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var total = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var total = model.Derived(sources).From(relation).Sum(item => item.Quantity);
         var repairs = new List<DerivedSourceRecord>();
-        var invariant = model.Invariant(sources).Using(total).Must((source, value) => value == 0m)
+        var invariant = model.Invariant(sources).From(total).Must((source, value) => value == 0m)
             .Named("Source.ZeroTotal")
             .ScheduleRepairWith(repairs.Add);
         var runtime = model.Build().CreateRuntime();
@@ -74,7 +72,7 @@ public sealed class DiagnosticsTests
         var item = new DerivedItemRecord { Id = Guid.NewGuid(), Code = "B", Quantity = 2m };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(0m, runtime.Get(total, source));
+        Assert.Equal(0m, runtime.Evaluate(total, source));
         Assert.True(runtime.Evaluate(invariant, source));
         runtime.ResetDiagnostics();
         item.Code = "A";

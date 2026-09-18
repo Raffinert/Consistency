@@ -33,7 +33,7 @@ public class ReversePropagationBenchmarks
         var items = model.Objects<BenchItem>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         runtime.Add(sources, new BenchItem { Id = Guid.NewGuid(), Code = "A" });
         runtime.Add(sources, new BenchItem { Id = Guid.NewGuid(), Code = "B" });

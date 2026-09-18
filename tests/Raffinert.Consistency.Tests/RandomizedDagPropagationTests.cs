@@ -218,11 +218,11 @@ public sealed class RandomizedDagPropagationTests
                 foreach (var source in sources)
                 {
                     var expected = oracle[source.Id];
-                    Assert.Equal(expected.A, scenario.Runtime.Get(scenario.A, source));
-                    Assert.Equal(expected.B, scenario.Runtime.Get(scenario.B, source));
-                    Assert.Equal(expected.C, scenario.Runtime.Get(scenario.C, source));
-                    Assert.Equal(expected.D, scenario.Runtime.Get(scenario.D, source));
-                    Assert.Equal(expected.E, scenario.Runtime.Get(scenario.E, source));
+                    Assert.Equal(expected.A, scenario.Runtime.Evaluate(scenario.A, source));
+                    Assert.Equal(expected.B, scenario.Runtime.Evaluate(scenario.B, source));
+                    Assert.Equal(expected.C, scenario.Runtime.Evaluate(scenario.C, source));
+                    Assert.Equal(expected.D, scenario.Runtime.Evaluate(scenario.D, source));
+                    Assert.Equal(expected.E, scenario.Runtime.Evaluate(scenario.E, source));
                     Assert.Equal(expected.Invariant, scenario.Runtime.Evaluate(scenario.Invariant, source));
                 }
                 Assert.Equal(sources.Count * 5, scenario.Runtime.DerivedStateEntryCount);
@@ -286,15 +286,15 @@ public sealed class RandomizedDagPropagationTests
             var items = model.Objects<DagItem>().Key(value => value.Id);
             var relation = model.Relation(sources, items).Where((source, item) =>
                 item.Details != null && source.Code == item.Details.Code && item.Enabled);
-            var a = model.Derived(sources).Compute(source => source.Adjustment);
-            var bBuilder = model.Derived(sources).Using(relation);
+            var a = model.Derived(sources).Select(source => source.Adjustment);
+            var bBuilder = model.Derived(sources).From(relation);
             if (conservative)
                 bBuilder.PreferConservativePropagation();
-            var b = bBuilder.Compute((_, matches) => matches.Sum(item => item.Details!.Quantity));
-            var c = model.Derived(sources).Using(a, b).Compute((_, left, right) => left + right);
-            var d = model.Derived(sources).Compute(source => source.Policy!.Maximum);
-            var e = model.Derived(sources).Using(c, d).Compute((_, left, right) => left - right);
-            var invariant = model.Invariant(sources).Using(e, c)
+            var b = bBuilder.Select((_, matches) => matches.Sum(item => item.Details!.Quantity));
+            var c = model.Derived(sources).From(a).From(b).Select((_, left, right) => left + right);
+            var d = model.Derived(sources).Select(source => source.Policy!.Maximum);
+            var e = model.Derived(sources).From(c).From(d).Select((_, left, right) => left - right);
+            var invariant = model.Invariant(sources).From(e).From(c)
                 .Must((_, balance, total) => balance <= 0 && total >= 0)
                 .ScheduleRepairWith(_ => { });
             return new Scenario(model.Build().CreateRuntime(), sources, items, a, b, c, d, e,

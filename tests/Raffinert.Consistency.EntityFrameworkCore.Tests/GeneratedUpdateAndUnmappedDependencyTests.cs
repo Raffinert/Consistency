@@ -29,7 +29,7 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         context.SaveChanges();
         _ = work.CommitAfterDatabaseCommit();
         work.Dispatch();
-        Assert.Equal(25m, setup.Runtime.Get(setup.CurrentPrice, line));
+        Assert.Equal(25m, setup.Runtime.Evaluate(setup.CurrentPrice, line));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         _ = work.CommitAfterDatabaseCommit();
         work.Dispatch();
 
-        Assert.Equal(8, setup.Runtime.Get(setup.Computed, record));
+        Assert.Equal(8, setup.Runtime.Evaluate(setup.Computed, record));
         var stored = database.CreateContext().Set<ComputedRecord>().AsNoTracking().Single();
         Assert.Equal(8, stored.DatabaseComputed);
         Assert.Equal(8, stored.Mirror);
@@ -215,7 +215,7 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         context.SaveChanges();
         var model = new ConsistencyModelBuilder();
         var records = model.Objects<UnusedComputedRecord>().Key(x => x.Id);
-        var semantic = model.Derived(records).Compute(x => x.SemanticValue);
+        var semantic = model.Derived(records).Select(x => x.SemanticValue);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(records, [record]));
         record.Input = 4;
         record.SemanticValue = 2;
@@ -224,7 +224,7 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
             new ConsistencyEfCoreMappings().Map(records), Complete(records));
 
         Assert.Equal(8, record.DatabaseComputed);
-        Assert.Equal(2, runtime.Get(semantic, record));
+        Assert.Equal(2, runtime.Evaluate(semantic, record));
     }
 
     [Fact]
@@ -238,11 +238,11 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         context.SaveChanges();
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<GeneratedLine>().Key(x => x.Id);
-        var computed = model.Derived(lines).Compute(x => x.Product.DatabaseComputed);
+        var computed = model.Derived(lines).Select(x => x.Product.DatabaseComputed).MaterializeTo(x => x.Mirror);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
-        _ = runtime.Get(computed, line);
+        _ = runtime.Evaluate(computed, line);
         var mappings = new ConsistencyEfCoreMappings().Map(lines)
-            .Materialize(computed, x => x.Mirror);
+            ;
         product.Input = 4;
         var work = context.CaptureConsistencyUnitOfWork(runtime, mappings, Complete(lines));
         using var transaction = context.Database.BeginTransaction();
@@ -255,7 +255,7 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         transaction.Commit();
         _ = work.CommitAfterDatabaseCommit();
         work.Dispatch();
-        Assert.Equal(8, runtime.Get(computed, line));
+        Assert.Equal(8, runtime.Evaluate(computed, line));
     }
 
     [Fact]
@@ -271,13 +271,13 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
         var lines = model.Objects<GeneratedLine>().Key(x => x.Id);
         var computed = model.Derived(lines)
             .DependsOn(x => x.Product.DatabaseComputed)
-            .Compute(x => ReadGenerated(x.Product));
+            .Select(x => ReadGenerated(x.Product)).MaterializeTo(x => x.Mirror);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
         product.Input = 4;
 
         var error = Assert.Throws<ConsistencyStoreGeneratedValueRequiresManualWorkflowException>(() =>
             context.SaveChangesConsistently(runtime,
-                new ConsistencyEfCoreMappings().Map(lines).Materialize(computed, x => x.Mirror),
+                new ConsistencyEfCoreMappings().Map(lines),
                 Complete(lines)));
 
         Assert.Equal(nameof(GeneratedProduct.DatabaseComputed), error.PropertyName);
@@ -324,18 +324,18 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
                 work.Dispatch();
             }
         }
-        Assert.Equal(25m, setup.Runtime.Get(setup.CurrentPrice, line));
+        Assert.Equal(25m, setup.Runtime.Evaluate(setup.CurrentPrice, line));
     }
 
     private static LineSetup CreateLineModel(OrderLine line)
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<OrderLine>().Key(x => x.Id);
-        var currentPrice = model.Derived(lines).Compute(x => x.Product.Price);
+        var currentPrice = model.Derived(lines).Select(x => x.Product.Price).MaterializeTo(x => x.PriceMirror);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
         var mappings = new ConsistencyEfCoreMappings()
             .Map(lines)
-            .Materialize(currentPrice, x => x.PriceMirror);
+            ;
         return new LineSetup(lines, currentPrice, runtime, mappings,
             new ConsistencyUnitOfWorkMappings().Map(lines));
     }
@@ -344,13 +344,13 @@ public sealed class GeneratedUpdateAndUnmappedDependencyTests
     {
         var model = new ConsistencyModelBuilder();
         var records = model.Objects<ComputedRecord>().Key(x => x.Id);
-        var computed = model.Derived(records).Compute(x => x.DatabaseComputed);
-        var valid = model.Invariant(records).Using(computed).Must((_, value) => value <= 20);
+        var computed = model.Derived(records).Select(x => x.DatabaseComputed).MaterializeTo(x => x.Mirror);
+        var valid = model.Invariant(records).From(computed).Must((_, value) => value <= 20);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(records, [record]));
-        _ = runtime.Get(computed, record);
+        _ = runtime.Evaluate(computed, record);
         _ = runtime.Evaluate(valid, record);
         var mappings = new ConsistencyEfCoreMappings().Map(records)
-            .Materialize(computed, x => x.Mirror).Enforce(valid);
+            .Enforce(valid);
         return new RecordSetup(records, computed, runtime, mappings,
             new ConsistencyUnitOfWorkMappings().Map(records));
     }

@@ -10,7 +10,7 @@ public sealed class DependencyDagCaptureStateTests
         var chain = CreateChain(model, sources, depth: 12);
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(chain[^1], source);
+        _ = runtime.Evaluate(chain[^1], source);
         var prepared = ChangeValue(runtime, sources, source, 2);
 
         var count = runtime.CaptureDependencyPatchEntryCount(prepared);
@@ -23,13 +23,13 @@ public sealed class DependencyDagCaptureStateTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var left = model.Derived(sources).Using(root).Compute((_, value) => value + 1);
-        var right = model.Derived(sources).Using(root).Compute((_, value) => value + 2);
-        var join = model.Derived(sources).Using(left, right).Compute((_, first, second) => first + second);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var left = model.Derived(sources).From(root).Select((_, value) => value + 1);
+        var right = model.Derived(sources).From(root).Select((_, value) => value + 2);
+        var join = model.Derived(sources).From(left).From(right).Select((_, first, second) => first + second);
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(join, source);
+        _ = runtime.Evaluate(join, source);
         var prepared = ChangeValue(runtime, sources, source, 2);
 
         var count = runtime.CaptureDependencyPatchEntryCount(prepared);
@@ -44,11 +44,11 @@ public sealed class DependencyDagCaptureStateTests
         var roots = model.Objects<Root>().Key(root => root.Id);
         var middles = model.Objects<Middle>().Key(middle => middle.Id);
         var leaves = model.Objects<Leaf>().Key(leaf => leaf.Id);
-        var rootValue = model.Derived(roots).Compute(root => root.Value);
-        var middleValue = model.Derived(middles).Using(middle => middle.Root, rootValue)
-            .Compute((_, value) => value + 1);
-        var leafValue = model.Derived(leaves).Using(leaf => leaf.Middle, middleValue)
-            .Compute((_, value) => value + 1);
+        var rootValue = model.Derived(roots).Select(root => root.Value);
+        var middleValue = model.Derived(middles).From(middle => middle.Root, rootValue)
+            .Select((_, value) => value + 1);
+        var leafValue = model.Derived(leaves).From(leaf => leaf.Middle, middleValue)
+            .Select((_, value) => value + 1);
         var root = new Root { Value = 1 };
         var middle = new Middle { Root = root };
         var leaf = new Leaf { Middle = middle };
@@ -58,7 +58,7 @@ public sealed class DependencyDagCaptureStateTests
             seed.Add(middles, [middle]);
             seed.Add(leaves, [leaf]);
         });
-        _ = runtime.Get(leafValue, leaf);
+        _ = runtime.Evaluate(leafValue, leaf);
         root.Value = 2;
         var prepared = runtime.Prepare(MutationSet.Create(
             Change.Property(roots, root, value => value.Value, 1, 2)));
@@ -73,12 +73,12 @@ public sealed class DependencyDagCaptureStateTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var root = model.Derived(sources).Compute(source => source.Value);
-        var downstream = model.Derived(sources).Using(root)
-            .Compute((source, value) => value + source.Offset);
+        var root = model.Derived(sources).Select(source => source.Value);
+        var downstream = model.Derived(sources).From(root)
+            .Select((source, value) => value + source.Offset);
         var source = new Source { Value = 1, Offset = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(downstream, source);
+        _ = runtime.Evaluate(downstream, source);
         source.Value = 2;
         source.Offset = 2;
         var prepared = runtime.Prepare(MutationSet.Create(
@@ -98,7 +98,7 @@ public sealed class DependencyDagCaptureStateTests
         var chain = CreateChain(model, sources, depth: 6);
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(chain[^1], source);
+        _ = runtime.Evaluate(chain[^1], source);
         var prepared = ChangeValue(runtime, sources, source, 2);
 
         var plan = runtime.PlanDetailed(prepared);
@@ -117,12 +117,12 @@ public sealed class DependencyDagCaptureStateTests
     {
         var chain = new List<Derived<Source, int>>
         {
-            model.Derived(sources).Compute(source => source.Value)
+            model.Derived(sources).Select(source => source.Value)
         };
         for (var index = 1; index < depth; index++)
         {
             var upstream = chain[^1];
-            chain.Add(model.Derived(sources).Using(upstream).Compute((_, value) => value + 1));
+            chain.Add(model.Derived(sources).From(upstream).Select((_, value) => value + 1));
         }
         return chain;
     }

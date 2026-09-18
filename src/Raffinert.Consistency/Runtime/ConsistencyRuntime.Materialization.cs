@@ -30,7 +30,16 @@ public sealed partial class ConsistencyRuntime
 
     /// <summary>Makes the logical value current and returns it without writing a materialized mirror.</summary>
     public TValue Evaluate<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
-        where TSource : class => Get(derived, source);
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(derived);
+        ArgumentNullException.ThrowIfNull(source);
+        if (!_derivedStates.TryGetValue(derived.Definition, out var state))
+            throw new ArgumentException("The derived state does not belong to this compiled model.", nameof(derived));
+        EnsureRegistered(derived.Definition.SourceSet, source, "source");
+        ValidateProjectedTargets(derived.Definition, source);
+        return (TValue)state.GetValue(source)!;
+    }
 
     /// <summary>Evaluates and synchronizes exactly one configured materialized representation.</summary>
     public TValue Materialize<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)

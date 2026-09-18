@@ -60,9 +60,9 @@ public sealed class GeneratedValueFixupTests
         using var database = new FixupDatabase(); using var context = database.CreateContext();
         var model = new ConsistencyModelBuilder();
         var records = model.Objects<SequencedRecord>().Key(x => x.BusinessId);
-        var sequence = model.Derived(records).Compute(x => x.DatabaseSequence);
+        var sequence = model.Derived(records).Select(x => x.DatabaseSequence).MaterializeTo(x => x.Mirror);
         var runtime = model.Build().CreateRuntime();
-        var mappings = new ConsistencyEfCoreMappings().Map(records).Materialize(sequence, x => x.Mirror);
+        var mappings = new ConsistencyEfCoreMappings().Map(records);
         var record = new SequencedRecord { BusinessId = Guid.NewGuid() }; context.Add(record);
         var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
 
@@ -73,12 +73,12 @@ public sealed class GeneratedValueFixupTests
         context.Entry(record).State = EntityState.Detached;
         var unusedModel = new ConsistencyModelBuilder();
         var unusedRecords = unusedModel.Objects<UnusedGeneratedRecord>().Key(x => x.BusinessId);
-        var local = unusedModel.Derived(unusedRecords).Compute(x => x.Value);
+        var local = unusedModel.Derived(unusedRecords).Select(x => x.Value).MaterializeTo(x => x.Mirror);
         var unusedRuntime = unusedModel.Build().CreateRuntime();
         var unused = new UnusedGeneratedRecord { BusinessId = Guid.NewGuid(), Value = 2 };
         context.Add(unused);
         var unusedWork = context.CaptureConsistencyUnitOfWork(unusedRuntime,
-            new ConsistencyEfCoreMappings().Map(unusedRecords).Materialize(local, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(unusedRecords));
         Assert.NotNull(unusedWork.PrepareAndPlan());
     }
 
@@ -135,8 +135,8 @@ public sealed class GeneratedValueFixupTests
         var model = new ConsistencyModelBuilder();
         var active = model.Objects<SharedLine>().Key(x => x.Id);
         var archive = model.Objects<SharedLine>().Key(x => x.Id);
-        _ = model.Derived(active).Compute(x => x.GeneratedOnly);
-        var archiveValue = model.Derived(archive).Compute(x => x.Other);
+        _ = model.Derived(active).Select(x => x.GeneratedOnly);
+        var archiveValue = model.Derived(archive).Select(x => x.Other).MaterializeTo(x => x.Value);
         var runtime = model.Build().CreateRuntime(seed =>
         {
             seed.Add(active, [activeEntity]); seed.Add(archive, [archiveEntity]);
@@ -144,7 +144,7 @@ public sealed class GeneratedValueFixupTests
         var mappings = new ConsistencyEfCoreMappings()
             .Map(active, entry => entry.Entity.Kind == "active")
             .Map(archive, entry => entry.Entity.Kind == "archive")
-            .Materialize(archiveValue, x => x.Value);
+            ;
         archiveEntity.Other = 5;
         context.Add(new SharedLine { Id = 3, Kind = "archive", Other = 6 });
 
@@ -158,8 +158,8 @@ public sealed class GeneratedValueFixupTests
         using var database = new FixupDatabase(); using var context = database.CreateContext();
         var model = new ConsistencyModelBuilder();
         var records = model.Objects<SequencedRecord>().Key(x => x.BusinessId);
-        var local = model.Derived(records).Compute(x => x.BusinessId);
-        var invariant = model.Invariant(records).Using(local)
+        var local = model.Derived(records).Select(x => x.BusinessId);
+        var invariant = model.Invariant(records).From(local)
             .Must((source, _) => source.DatabaseSequence >= 0);
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyEfCoreMappings().Map(records).Enforce(invariant);
@@ -177,14 +177,14 @@ public sealed class GeneratedValueFixupTests
         var parents = model.Objects<Parent>().Named("parents").Key(x => x.Id);
         var children = model.Objects<Child>().Named("children").Key(x => x.Id);
         var relation = model.Relation(parents, children).Where((left, right) => left.Id == right.ParentId);
-        var count = model.Derived(parents).Using(relation).Compute((_, rows) => rows.Count);
-        var invariant = model.Invariant(parents).Using(count).Must((_, value) => value <= 1);
+        var count = model.Derived(parents).From(relation).Select((_, rows) => rows.Count).MaterializeTo(parent => parent.ChildCountMirror);
+        var invariant = model.Invariant(parents).From(count).Must((_, value) => value <= 1);
         var runtime = model.Build().CreateRuntime(seed =>
         {
             seed.Add(parents, [parent]); seed.Add(children, [child]);
         });
         var mappings = new ConsistencyEfCoreMappings().Map(parents).Map(children)
-            .Enforce(invariant).Materialize(count, parent => parent.ChildCountMirror);
+            .Enforce(invariant);
         return new RelationSetup(parents, children, relation, runtime, mappings);
     }
 
@@ -193,10 +193,10 @@ public sealed class GeneratedValueFixupTests
     {
         var model = new ConsistencyModelBuilder();
         var records = model.Objects<SequencedRecord>().Key(x => x.BusinessId);
-        var sequence = model.Derived(records).Compute(x => x.DatabaseSequence);
+        var sequence = model.Derived(records).Select(x => x.DatabaseSequence).MaterializeTo(x => x.Mirror);
         var runtime = model.Build().CreateRuntime();
         return (records, runtime,
-            new ConsistencyEfCoreMappings().Map(records).Materialize(sequence, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(records));
     }
 
     private static ConsistencySaveOptions Complete(ObjectSet<Parent> parents, ObjectSet<Child> children) =>

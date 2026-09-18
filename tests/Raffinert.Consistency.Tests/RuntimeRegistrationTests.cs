@@ -7,8 +7,8 @@ public sealed class RuntimeRegistrationTests
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
-        var amount = model.Derived(sources).Compute(source => source.Amount);
-        var invariant = model.Invariant(sources).Using(amount).Must((_, value) => value >= 0);
+        var amount = model.Derived(sources).Select(source => source.Amount);
+        var invariant = model.Invariant(sources).From(amount).Must((_, value) => value >= 0);
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Amount = 1 };
 
@@ -25,15 +25,15 @@ public sealed class RuntimeRegistrationTests
         var model = new ConsistencyModelBuilder();
         var first = model.Objects<Source>().Key(source => source.Id);
         var second = model.Objects<Source>().Key(source => source.Id);
-        var amount = model.Derived(first).Compute(source => source.Amount);
-        var invariant = model.Invariant(first).Using(amount).Must((_, value) => value >= 0);
+        var amount = model.Derived(first).Select(source => source.Amount);
+        var invariant = model.Invariant(first).From(amount).Must((_, value) => value >= 0);
         var runtime = model.Build().CreateRuntime();
         var valid = new Source { Amount = 1 };
         var wrongSet = new Source { Amount = 2 };
         runtime.Add(first, valid);
         runtime.Add(second, wrongSet);
 
-        Assert.Equal(1, runtime.Get(amount, valid));
+        Assert.Equal(1, runtime.Evaluate(amount, valid));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(amount, valid));
         Assert.True(runtime.Evaluate(invariant, valid));
         Assert.Equal(InvariantEvaluationState.Valid, runtime.GetState(invariant, valid));

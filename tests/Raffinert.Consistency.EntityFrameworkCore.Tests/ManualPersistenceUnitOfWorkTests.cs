@@ -159,9 +159,9 @@ public sealed class ManualPersistenceUnitOfWorkTests
         var parent = SeedParent(context);
         var attempts = 0;
         var model = new ConsistencyModelBuilder(); var parents = model.Objects<Parent>().Key(x => x.Id);
-        var value = model.Derived(parents).Compute(x => x.Touch);
-        var valid = model.Invariant(parents).Using(value).Must((_, current) => current >= 0);
-        model.Invariant(parents).Using(value).Must((_, current) => current == 0)
+        var value = model.Derived(parents).Select(x => x.Touch);
+        var valid = model.Invariant(parents).From(value).Must((_, current) => current >= 0);
+        model.Invariant(parents).From(value).Must((_, current) => current == 0)
             .ScheduleRepairWith(_ =>
             {
                 attempts++;
@@ -193,14 +193,14 @@ public sealed class ManualPersistenceUnitOfWorkTests
         var parents = model.Objects<Parent>().Named("parents").Key(x => x.Id);
         var items = model.Objects<GeneratedItem>().Named("items").Key(x => x.Id);
         var relation = model.Relation(parents, items).Where((left, right) => left.Id == right.ParentId);
-        var count = model.Derived(parents).Using(relation).Compute((_, rows) => rows.Count);
+        var count = model.Derived(parents).From(relation).Select((_, rows) => rows.Count).MaterializeTo(x => x.Mirror);
         var invariant = maximumCount == 0
-            ? model.Invariant(parents).Using(count).Must((_, value) => value <= 0)
-            : model.Invariant(parents).Using(count).Must((_, value) => value <= 10);
-        var blocking = model.Invariant(parents).Using(count).Must((_, _) => false);
+            ? model.Invariant(parents).From(count).Must((_, value) => value <= 0)
+            : model.Invariant(parents).From(count).Must((_, value) => value <= 10);
+        var blocking = model.Invariant(parents).From(count).Must((_, _) => false);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(parents, [parent]));
         var mappings = new ConsistencyEfCoreMappings().Map(parents).Map(items)
-            .Enforce(invariant).Materialize(count, x => x.Mirror);
+            .Enforce(invariant);
         return new Setup(parents, items, count, blocking, runtime, mappings);
     }
 

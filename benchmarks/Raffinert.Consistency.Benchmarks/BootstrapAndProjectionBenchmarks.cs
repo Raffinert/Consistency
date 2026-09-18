@@ -17,7 +17,7 @@ public class BootstrapAndProjectionBenchmarks
     {
         var model = new ConsistencyModelBuilder();
         _owners = model.Objects<Owner>().Key(value => value.Id);
-        model.Derived(_owners).Compute(value => value.Amount);
+        model.Derived(_owners).Select(value => value.Amount);
         _compiled = model.Build();
         _data = Enumerable.Range(0, Count).Select(index => new Owner(index)).ToArray();
     }

@@ -7,12 +7,12 @@ public sealed class SourceDerivedTests
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
-        var amount = model.Derived(lines).Compute(line => line.Quantity * line.UnitRate);
+        var amount = model.Derived(lines).Select(line => line.Quantity * line.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Quantity = 2m, UnitRate = 3m };
         runtime.Add(lines, line);
 
-        Assert.Equal(6m, runtime.Get(amount, line));
+        Assert.Equal(6m, runtime.Evaluate(amount, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(amount, line));
 
         line.Note = "unrelated";
@@ -22,7 +22,7 @@ public sealed class SourceDerivedTests
         line.Quantity = 4m;
         runtime.Apply(Change.Property(lines, line, value => value.Quantity, 2m, 4m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(amount, line));
-        Assert.Equal(12m, runtime.Get(amount, line));
+        Assert.Equal(12m, runtime.Evaluate(amount, line));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(amount, line));
     }
 
@@ -33,11 +33,11 @@ public sealed class SourceDerivedTests
         var lines = model.Objects<Line>().Key(line => line.Id);
         var amount = model.Derived(lines)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(line => line.Quantity * line.UnitRate);
+            .Select(line => line.Quantity * line.UnitRate);
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Quantity = 2m, UnitRate = 3m };
         runtime.Add(lines, line);
-        Assert.Equal(6m, runtime.Get(amount, line));
+        Assert.Equal(6m, runtime.Evaluate(amount, line));
 
         line.UnitRate = 5m;
         runtime.Apply(Change.Property(lines, line, value => value.UnitRate, 3m, 5m));
@@ -53,17 +53,17 @@ public sealed class SourceDerivedTests
     {
         var model = new ConsistencyModelBuilder();
         var lines = model.Objects<Line>().Key(line => line.Id);
-        var amount = model.Derived(lines).Compute(line => line.ThrowOnRead
+        var amount = model.Derived(lines).Select(line => line.ThrowOnRead
             ? Throw()
             : line.Quantity * line.UnitRate).AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Quantity = 2m, UnitRate = 3m };
         runtime.Add(lines, line);
-        Assert.Equal(6m, runtime.Get(amount, line));
+        Assert.Equal(6m, runtime.Evaluate(amount, line));
 
         line.ThrowOnRead = true;
         runtime.Apply(Change.Property(lines, line, value => value.ThrowOnRead, false, true));
-        Assert.Throws<DeliberateSourceException>(() => runtime.Get(amount, line));
+        Assert.Throws<DeliberateSourceException>(() => runtime.Evaluate(amount, line));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(amount, line));
     }
 

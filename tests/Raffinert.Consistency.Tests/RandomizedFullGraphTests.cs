@@ -196,8 +196,8 @@ public sealed class RandomizedFullGraphTests
                     scan.Runtime.Related(scan.Relation, source).Select(item => item.Id).Order());
                 Assert.Equal(scan.Runtime.GetState(scan.Derived, source), hash.Runtime.GetState(hash.Derived, source));
                 var expectedValue = expected.Sum(item => item.Details!.Quantity) + source.Adjustment;
-                Assert.Equal(expectedValue, hash.Runtime.Get(hash.Derived, source));
-                Assert.Equal(expectedValue, scan.Runtime.Get(scan.Derived, source));
+                Assert.Equal(expectedValue, hash.Runtime.Evaluate(hash.Derived, source));
+                Assert.Equal(expectedValue, scan.Runtime.Evaluate(scan.Derived, source));
                 var expectedInvariant = expectedValue <= source.Policy!.Maximum;
                 Assert.Equal(expectedInvariant, hash.Runtime.Evaluate(hash.Invariant, source));
                 Assert.Equal(expectedInvariant, scan.Runtime.Evaluate(scan.Invariant, source));
@@ -236,10 +236,10 @@ public sealed class RandomizedFullGraphTests
         var items = model.Objects<DerivedItemRecord>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             item.Details != null && source.Code == item.Details.Code && item.Enabled);
-        var derived = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Sum(item => item.Details!.Quantity) + source.Adjustment);
+        var derived = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Sum(item => item.Details!.Quantity) + source.Adjustment);
         var repairs = new List<Guid>();
-        var invariant = model.Invariant(sources).Using(derived)
+        var invariant = model.Invariant(sources).From(derived)
             .Must((source, value) => value <= source.Policy!.Maximum)
             .ScheduleRepairWith(source => repairs.Add(source.Id));
         return new Scenario(model.Build().CreateRuntime(), sources, items, relation, derived, invariant, repairs);

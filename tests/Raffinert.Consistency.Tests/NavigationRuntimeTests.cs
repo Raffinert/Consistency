@@ -10,7 +10,7 @@ public sealed partial class RuntimeTests
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var queryOnly = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
         var materialized = model.Relation(sources, items).Where((source, item) => source.Enabled == item.Enabled);
-        model.Derived(sources).Using(materialized).Compute((source, matches) => matches.Count);
+        model.Derived(sources).From(materialized).Select((source, matches) => matches.Count);
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime(new RuntimeDiagnosticOptions
         {

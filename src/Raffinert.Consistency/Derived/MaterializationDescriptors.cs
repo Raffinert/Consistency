@@ -31,17 +31,6 @@ internal sealed class MaterializationDescriptor
     public static MaterializationDescriptor Create<TSource, TValue>(
         IDerivedDefinition definition,
         Expression<Func<TSource, TValue>> target)
-        where TSource : class => Create(definition, target, exactTargetType: true);
-
-    public static MaterializationDescriptor CreateLegacy<TSource, TValue>(
-        IDerivedDefinition definition,
-        Expression<Func<TSource, TValue>> target)
-        where TSource : class => Create(definition, target, exactTargetType: false);
-
-    private static MaterializationDescriptor Create<TSource, TValue>(
-        IDerivedDefinition definition,
-        Expression<Func<TSource, TValue>> target,
-        bool exactTargetType)
         where TSource : class
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -56,20 +45,15 @@ internal sealed class MaterializationDescriptor
             !ReferenceEquals(parameter, target.Parameters[0]) ||
             property.GetMethod?.IsStatic == true ||
             property.SetMethod is not { } setter ||
-            (exactTargetType && (!setter.IsPublic || setter.ReturnParameter.GetRequiredCustomModifiers()
-                .Contains(typeof(System.Runtime.CompilerServices.IsExternalInit)))) ||
+            !setter.IsPublic || setter.ReturnParameter.GetRequiredCustomModifiers()
+                .Contains(typeof(System.Runtime.CompilerServices.IsExternalInit)) ||
             property.GetIndexParameters().Length != 0)
             throw new ArgumentException(
                 "MaterializeTo must select one direct writable property on the derived source object.",
                 nameof(target));
-        if (exactTargetType
-                ? property.PropertyType != typeof(TValue)
-                : !property.PropertyType.IsAssignableFrom(typeof(TValue)))
+        if (property.PropertyType != typeof(TValue))
             throw new ArgumentException(
-                exactTargetType
-                    ? "The materialization target property type must exactly match the derived value type."
-                    : "The materialization property is incompatible with the derived value type.",
-                nameof(target));
+                "The materialization target property type must exactly match the derived value type.", nameof(target));
         if (!ReferenceEquals(definition.SourceSet.ObjectType, typeof(TSource)))
             throw new ArgumentException(
                 "The materialization target source type does not match the derived source object set.",

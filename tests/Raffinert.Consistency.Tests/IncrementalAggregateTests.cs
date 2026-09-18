@@ -9,29 +9,26 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.Count);
-        var longCount = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.LongCount());
-        var any = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.Any());
+        var count = model.Derived(sources).From(relation).Count();
+        var longCount = model.Derived(sources).From(relation).LongCount();
+        var any = model.Derived(sources).From(relation).Any();
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         runtime.Add(sources, source);
-        Assert.Equal(0, runtime.Get(count, source));
-        Assert.Equal(0L, runtime.Get(longCount, source));
-        Assert.False(runtime.Get(any, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
+        Assert.Equal(0L, runtime.Evaluate(longCount, source));
+        Assert.False(runtime.Evaluate(any, source));
 
         runtime.Add(items, item);
 
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, source));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(longCount, source));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(any, source));
-        Assert.Equal(1, runtime.Get(count, source));
-        Assert.Equal(1L, runtime.Get(longCount, source));
-        Assert.True(runtime.Get(any, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
+        Assert.Equal(1L, runtime.Evaluate(longCount, source));
+        Assert.True(runtime.Evaluate(any, source));
         Assert.Contains("Computation plan: IncrementalCount", compiled.DebugView);
         Assert.Contains("Computation plan: IncrementalLongCount", compiled.DebugView);
         Assert.Contains("Computation plan: IncrementalAny", compiled.DebugView);
@@ -44,8 +41,7 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var total = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var total = model.Derived(sources).From(relation).Sum(item => item.Quantity);
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
         var source = Source("A");
@@ -53,20 +49,20 @@ public sealed partial class DerivedStateTests
         var second = Item("A", 3m);
         runtime.Add(sources, source);
         runtime.Add(items, first);
-        Assert.Equal(1m, runtime.Get(total, source));
+        Assert.Equal(1m, runtime.Evaluate(total, source));
 
         first.Quantity = 2m;
         runtime.Apply(Change.Property(items, first, x => x.Quantity, 1m, 2m));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(total, source));
-        Assert.Equal(2m, runtime.Get(total, source));
+        Assert.Equal(2m, runtime.Evaluate(total, source));
 
         runtime.Add(items, second);
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(total, source));
-        Assert.Equal(5m, runtime.Get(total, source));
+        Assert.Equal(5m, runtime.Evaluate(total, source));
 
         runtime.Remove(items, first);
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(total, source));
-        Assert.Equal(3m, runtime.Get(total, source));
+        Assert.Equal(3m, runtime.Evaluate(total, source));
         Assert.Contains("Computation plan: IncrementalSum(DerivedItemRecord.Quantity)", compiled.DebugView);
     }
 
@@ -77,21 +73,20 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var total = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var total = model.Derived(sources).From(relation).Sum(item => item.Quantity);
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
         var source = Source("A");
         var item = Item("A", 1m);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(1m, runtime.Get(total, source));
+        Assert.Equal(1m, runtime.Evaluate(total, source));
 
         item.Quantity = 2m;
         runtime.Apply(Change.Property(items, item, x => x.Quantity, 1m, 2m));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(total, source));
-        Assert.Equal(2m, runtime.Get(total, source));
+        Assert.Equal(2m, runtime.Evaluate(total, source));
         Assert.Contains("Computation plan: FullRecompute", compiled.DebugView);
     }
 
@@ -156,8 +151,8 @@ public sealed partial class DerivedStateTests
             }
 
             Assert.Equal(
-                reference.Runtime.Get(reference.Total, reference.Source),
-                optimized.Runtime.Get(optimized.Total, optimized.Source));
+                reference.Runtime.Evaluate(reference.Total, reference.Source),
+                optimized.Runtime.Evaluate(optimized.Total, optimized.Source));
         }
 
         static IncrementalScenario CreateScenario(bool forceFullRecompute)
@@ -168,12 +163,11 @@ public sealed partial class DerivedStateTests
             var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
             var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
             var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-            var total = model.Derived(sources).Using(relation).Incrementally()
-                .Compute((source, matches) => matches.Sum(item => item.Quantity));
+            var total = model.Derived(sources).From(relation).Sum(item => item.Quantity);
             var runtime = model.Build().CreateRuntime();
             var source = Source("A");
             runtime.Add(sources, source);
-            Assert.Equal(0m, runtime.Get(total, source));
+            Assert.Equal(0m, runtime.Evaluate(total, source));
             return new IncrementalScenario(runtime, sources, items, total, source);
         }
     }

@@ -10,7 +10,7 @@ public sealed class ExplicitDerivedDependencyTests
     {
         var rejected = new ConsistencyModelBuilder();
         var rejectedRoots = rejected.Objects<Association>().Key(x => x.Id);
-        _ = rejected.Derived(rejectedRoots).Compute(x => Calculate(x.Source.Value, x.Target.Value));
+        _ = rejected.Derived(rejectedRoots).Select(x => Calculate(x.Source.Value, x.Target.Value));
         var error = Assert.Throws<InvalidOperationException>(() => rejected.Build());
         Assert.Contains("ContainsOpaqueCode", error.Message);
         Assert.Contains("AllowIncompleteDependencies", error.Message);
@@ -20,7 +20,7 @@ public sealed class ExplicitDerivedDependencyTests
         _ = accepted.Derived(roots)
             .DependsOn(x => x.Source.Value)
             .DependsOn(x => x.Target.Value)
-            .Compute(x => Calculate(x.Source.Value, x.Target.Value));
+            .Select(x => Calculate(x.Source.Value, x.Target.Value));
         _ = accepted.Build();
     }
 
@@ -32,7 +32,7 @@ public sealed class ExplicitDerivedDependencyTests
         var rate = model.Derived(associations)
             .DependsOn(x => x.Source.Value)
             .DependsOn(x => x.Target.Value)
-            .Compute(x => Calculate(x.Source.Value, x.Target.Value));
+            .Select(x => Calculate(x.Source.Value, x.Target.Value));
         var shared = new Endpoint { Value = 12m };
         var other = new Endpoint { Value = 30m };
         var firstTarget = new Endpoint { Value = 4m };
@@ -42,34 +42,34 @@ public sealed class ExplicitDerivedDependencyTests
         var second = new Association { Id = 2, Source = shared, Target = secondTarget };
         var unrelated = new Association { Id = 3, Source = unrelatedSource, Target = secondTarget };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(associations, [first, second, unrelated]));
-        Assert.Equal(3m, runtime.Get(rate, first));
-        Assert.Equal(2.4m, runtime.Get(rate, second));
-        Assert.Equal(1.6m, runtime.Get(rate, unrelated));
+        Assert.Equal(3m, runtime.Evaluate(rate, first));
+        Assert.Equal(2.4m, runtime.Evaluate(rate, second));
+        Assert.Equal(1.6m, runtime.Evaluate(rate, unrelated));
 
         shared.Value = 20m;
         runtime.Apply(Change.Property(shared, x => x.Value, 12m, 20m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(rate, first));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(rate, second));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(rate, unrelated));
-        Assert.Equal(5m, runtime.Get(rate, first));
-        Assert.Equal(4m, runtime.Get(rate, second));
+        Assert.Equal(5m, runtime.Evaluate(rate, first));
+        Assert.Equal(4m, runtime.Evaluate(rate, second));
 
         firstTarget.Value = 10m;
         runtime.Apply(Change.Property(firstTarget, x => x.Value, 4m, 10m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(rate, first));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(rate, second));
-        Assert.Equal(2m, runtime.Get(rate, first));
+        Assert.Equal(2m, runtime.Evaluate(rate, first));
 
         second.Source = other;
         runtime.Apply(Change.Property(associations, second, x => x.Source, shared, other));
-        Assert.Equal(6m, runtime.Get(rate, second));
+        Assert.Equal(6m, runtime.Evaluate(rate, second));
         shared.Value = 25m;
         runtime.Apply(Change.Property(shared, x => x.Value, 20m, 25m));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(rate, second));
         other.Value = 35m;
         runtime.Apply(Change.Property(other, x => x.Value, 30m, 35m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(rate, second));
-        Assert.Equal(7m, runtime.Get(rate, second));
+        Assert.Equal(7m, runtime.Evaluate(rate, second));
     }
 
     [Fact]
@@ -80,17 +80,17 @@ public sealed class ExplicitDerivedDependencyTests
         var value = model.Derived(associations)
             .DependsOn(x => x.Source.Value)
             .DependsOn(x => x.Source.Value)
-            .Compute(x => Calculate(x.Source.Value, 1m) + x.Adjustment);
+            .Select(x => Calculate(x.Source.Value, 1m) + x.Adjustment);
         var source = new Endpoint { Value = 2m };
         var association = new Association { Id = 1, Source = source, Target = new(), Adjustment = 3m };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(associations, [association]));
-        Assert.Equal(5m, runtime.Get(value, association));
+        Assert.Equal(5m, runtime.Evaluate(value, association));
         Assert.Equal(2, value.Definition.Analysis.Dependencies.Count);
 
         association.Adjustment = 4m;
         runtime.Apply(Change.Property(associations, association, x => x.Adjustment, 3m, 4m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(value, association));
-        Assert.Equal(6m, runtime.Get(value, association));
+        Assert.Equal(6m, runtime.Evaluate(value, association));
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed class ExplicitDerivedDependencyTests
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Association>().Key(x => x.Id);
         _ = model.Derived(roots).DependsOn(x => x.Source.Value)
-            .Compute(x => Calculate(x.Source.Value, 1m) * multiplier);
+            .Select(x => Calculate(x.Source.Value, 1m) * multiplier);
         var error = Assert.Throws<InvalidOperationException>(() => model.Build());
         Assert.Contains("ContainsExternalState", error.Message);
     }
@@ -129,9 +129,9 @@ public sealed class ExplicitDerivedDependencyTests
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Association>().Key(x => x.Id);
         var direct = model.Derived(roots).DependsOn(x => x.Adjustment)
-            .Compute(x => OpaqueScale(x.Adjustment));
+            .Select(x => OpaqueScale(x.Adjustment));
         var nested = model.Derived(roots).DependsOn(x => x.Source.Value)
-            .Compute(x => OpaqueScale(x.Source.Value ?? 0m));
+            .Select(x => OpaqueScale(x.Source.Value ?? 0m));
         var compiled = model.Build();
         var runtime = compiled.CreateRuntime();
 

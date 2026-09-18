@@ -39,16 +39,15 @@ var associations = builder.Objects<Association>()
 var unitRate = builder.Derived(associations)
     .DependsOn(a => a.SourceItem.UnitValue)
     .DependsOn(a => a.TargetItem.UnitValue)
-    .Compute(association => UnitRateCalculator.Calculate(
+    .Select(association => UnitRateCalculator.Calculate(
         association.SourceItem.UnitValue,
         association.TargetItem.UnitValue))
+    .MaterializeTo(association => association.UnitRate)
     .Named("association-unit-rate");
 
 var compiled = builder.Build();
 var runtime = compiled.CreateRuntime(seed => seed.Add(associations, [associationA, associationB]));
-var mappings = new ConsistencyEfCoreMappings()
-    .Map(associations)
-    .Materialize(unitRate, association => association.UnitRate);
+var mappings = new ConsistencyEfCoreMappings().Map(associations);
 var saveOptions = new ConsistencySaveOptions
 {
     Scope = new ConsistencyScope().Complete(associations)
@@ -139,13 +138,13 @@ static async Task RunExternalConsumerDiscoveryScenario()
     var unitRate = builder.Derived(associations)
         .DependsOn(x => x.SourceItem.UnitValue)
         .DependsOn(x => x.TargetItem.UnitValue)
-        .Compute(x => UnitRateCalculator.Calculate(x.SourceItem.UnitValue, x.TargetItem.UnitValue))
+        .Select(x => UnitRateCalculator.Calculate(x.SourceItem.UnitValue, x.TargetItem.UnitValue))
+        .MaterializeTo(x => x.UnitRate)
         .Named("discovery-unit-rate");
     var runtime = builder.Build().CreateRuntime(seed => seed.Add(associations, [known]));
     var resolverCalls = 0;
     var mappings = new ConsistencyEfCoreMappings()
         .Map(associations)
-        .Materialize(unitRate, x => x.UnitRate)
         .DiscoverConsumers(associations, x => x.SourceItem, (db, sources) =>
         {
             resolverCalls++;
@@ -178,7 +177,7 @@ static async Task RunExternalConsumerDiscoveryScenario()
     {
         var expected = UnitRateCalculator.Calculate(association.SourceItem.UnitValue, association.TargetItem.UnitValue);
         RequireEqual(expected, association.UnitRate, $"discovered tracked UnitRate for {association.Id}");
-        RequireEqual(expected, runtime.Get(unitRate, association), $"discovered runtime UnitRate for {association.Id}");
+        RequireEqual(expected, runtime.Evaluate(unitRate, association), $"discovered runtime UnitRate for {association.Id}");
     }
 
     await using var verification = new DependencyMaintenanceContext(connection);
@@ -204,7 +203,7 @@ static async Task SaveAndVerifyAsync(
     foreach (var (association, value) in expected)
     {
         RequireEqual(value, association.UnitRate, $"tracked UnitRate for {association.Id}");
-        RequireEqual(value, runtime.Get(unitRate, association), $"runtime UnitRate for {association.Id}");
+        RequireEqual(value, runtime.Evaluate(unitRate, association), $"runtime UnitRate for {association.Id}");
         await using var verification = new DependencyMaintenanceContext(context.Database.GetDbConnection());
         var persisted = verification.Set<Association>().AsNoTracking().Single(x => x.Id == association.Id);
         RequireEqual(value, persisted.UnitRate, $"persisted UnitRate for {association.Id}");

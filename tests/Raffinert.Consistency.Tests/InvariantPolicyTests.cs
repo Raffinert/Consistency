@@ -9,18 +9,18 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var score = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Count + (source.Enabled ? 1 : 0));
+        var score = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Count + (source.Enabled ? 1 : 0));
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A", Enabled = false };
         runtime.Add(sources, source);
-        Assert.Equal(0, runtime.Get(score, source));
+        Assert.Equal(0, runtime.Evaluate(score, source));
 
         source.Enabled = true;
         runtime.Apply(Change.Property(sources, source, x => x.Enabled, false, true));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(score, source));
-        Assert.Equal(1, runtime.Get(score, source));
+        Assert.Equal(1, runtime.Evaluate(score, source));
     }
 
     [Fact]
@@ -30,8 +30,8 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
-        var invariant = model.Invariant(sources).Using(count).Must((source, value) => value <= 1)
+        var count = model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
+        var invariant = model.Invariant(sources).From(count).Must((source, value) => value <= 1)
             .ReactWith(InvariantReaction.EvaluateImmediately);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -57,8 +57,8 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
-        model.Invariant(sources).Using(count).Must((source, value) => value <= 1)
+        var count = model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
+        model.Invariant(sources).From(count).Must((source, value) => value <= 1)
             .ScheduleRepairWith(scheduled.Add);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -80,17 +80,17 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
+        var count = model.Derived(sources).From(relation)
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Dirty)
                 .MembershipRemoved(DependencySeverity.Invalid))
-            .Compute((source, matches) => matches.Count);
+            .Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
 
         runtime.Remove(items, item);
 
@@ -104,12 +104,12 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
+        var count = model.Derived(sources).From(relation)
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Dirty)
                 .MembershipRemoved(DependencySeverity.Invalid))
-            .Compute((_, matches) => matches.Count);
-        var invariant = model.Invariant(sources).Using(count).Must((_, value) => value >= 0);
+            .Select((_, matches) => matches.Count);
+        var invariant = model.Invariant(sources).From(count).Must((_, value) => value >= 0);
         var addedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var removedSource = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
@@ -117,8 +117,8 @@ public sealed partial class DerivedStateTests
         runtime.Add(sources, addedSource);
         runtime.Add(sources, removedSource);
         runtime.Add(items, item);
-        Assert.Equal(0, runtime.Get(count, addedSource));
-        Assert.Equal(1, runtime.Get(count, removedSource));
+        Assert.Equal(0, runtime.Evaluate(count, addedSource));
+        Assert.Equal(1, runtime.Evaluate(count, removedSource));
         Assert.True(runtime.Evaluate(invariant, addedSource));
         Assert.True(runtime.Evaluate(invariant, removedSource));
         item.Code = "A";
@@ -147,13 +147,13 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
+        var count = model.Derived(sources).From(relation)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute((source, matches) => source.Enabled ? matches.Count : 0);
+            .Select((source, matches) => source.Enabled ? matches.Count : 0);
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A", Enabled = true };
         var runtime = model.Build().CreateRuntime();
         runtime.Add(sources, source);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
         source.Enabled = false;
 
         runtime.Apply(Change.Property(sources, source, value => value.Enabled, true, false));
@@ -168,15 +168,15 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var total = model.Derived(sources).Using(relation)
+        var total = model.Derived(sources).From(relation)
             .Impact(policy => policy.ItemChanged(DependencySeverity.Invalid))
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+            .Select((source, matches) => matches.Sum(item => item.Quantity));
         var runtime = model.Build().CreateRuntime();
         var source = Source("A");
         var item = Item("A", 1m);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(1m, runtime.Get(total, source));
+        Assert.Equal(1m, runtime.Evaluate(total, source));
 
         item.Quantity = 2m;
         runtime.Apply(Change.Property(items, item, x => x.Quantity, 1m, 2m));
@@ -195,15 +195,15 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
+        var count = model.Derived(sources).From(relation)
             .Impact(policy => policy.MembershipAdded(DependencySeverity.Invalid))
-            .Compute((source, matches) => matches.Count);
+            .Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
 
         item.Code = "A";
         runtime.Apply(Change.Property(items, item, x => x.Code, "B", "A"));
@@ -219,8 +219,8 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
-        model.Invariant(sources).Using(count).Must((source, value) => value <= 1)
+        var count = model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
+        model.Invariant(sources).From(count).Must((source, value) => value <= 1)
             .ScheduleRepairWith(scheduled.Add);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -254,17 +254,17 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(value => value.Id);
         var items = model.Objects<CodeHolder>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
-        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+        var count = model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
+        model.Invariant(sources).From(count).Must((_, value) => value >= 0)
             .ScheduleRepairWith(_ => calls[0]++);
-        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+        model.Invariant(sources).From(count).Must((_, value) => value >= 0)
             .ScheduleRepairWith(_ =>
             {
                 calls[1]++;
                 if (failSecond)
                     throw new DeliberateDispatchException();
             });
-        model.Invariant(sources).Using(count).Must((_, value) => value >= 0)
+        model.Invariant(sources).From(count).Must((_, value) => value >= 0)
             .ScheduleRepairWith(_ => calls[2]++);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -295,17 +295,17 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
+        var count = model.Derived(sources).From(relation)
             .Impact(policy => policy.MembershipAdded(DependencySeverity.Invalid))
-            .Compute((source, matches) => matches.Count);
-        model.Invariant(sources).Using(count).Must((source, value) => value == 0)
+            .Select((source, matches) => matches.Count);
+        model.Invariant(sources).From(count).Must((source, value) => value == 0)
             .ScheduleRepairWith(scheduled.Add);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
         scheduled.Clear();
         item.Code = "A";
 
@@ -350,8 +350,8 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
-        var invariant = model.Invariant(sources).Using(count).Must((source, value) => value == 0)
+        var count = model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
+        var invariant = model.Invariant(sources).From(count).Must((source, value) => value == 0)
             .ReactWith(InvariantReaction.EvaluateImmediately);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -383,14 +383,14 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Count);
         ConsistencyRuntime? runtime = null;
         Invariant<CodeHolder>? invariant = null;
         var observedRelatedCount = -1;
         var observedDerivedState = DerivedValueState.Fresh;
         var observedInvariantState = InvariantEvaluationState.Unknown;
-        invariant = model.Invariant(sources).Using(count)
+        invariant = model.Invariant(sources).From(count)
             .Must((source, value) => value <= 1)
             .ScheduleRepairWith(source =>
             {
@@ -404,7 +404,7 @@ public sealed partial class DerivedStateTests
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "B" };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
         Assert.True(runtime.Evaluate(invariant, source));
 
         item.Code = "A";
@@ -415,7 +415,7 @@ public sealed partial class DerivedStateTests
         Assert.Equal(DerivedValueState.Dirty, observedDerivedState);
         Assert.Equal(InvariantEvaluationState.Invalid, observedInvariantState);
         Assert.Equal([item], runtime.Related(relation, source));
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
     }
 
     [Fact]
@@ -426,14 +426,14 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Count);
-        var immediate = model.Invariant(sources).Using(count)
+        var count = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Count);
+        var immediate = model.Invariant(sources).From(count)
             .Must((source, value) => value == 0)
             .ReactWith(InvariantReaction.EvaluateImmediately);
         ConsistencyRuntime? runtime = null;
         var observedImmediateState = InvariantEvaluationState.Unknown;
-        model.Invariant(sources).Using(count)
+        model.Invariant(sources).From(count)
             .Must((source, value) => value <= 1)
             .ScheduleRepairWith(source =>
                 observedImmediateState = runtime!.GetState(immediate, source));
@@ -456,7 +456,7 @@ public sealed partial class DerivedStateTests
             out var items,
             out var quantity,
             (source, matches) => matches.Sum(item => item.Quantity));
-        var invariant = model.Invariant(sources).Using(quantity)
+        var invariant = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= source.Adjustment)
             .ScheduleRepairWith(_ => repairCount++);
         var runtime = model.Build().CreateRuntime();

@@ -281,20 +281,20 @@ public sealed class StoreSideReferentialActionTests
         var parents = model.Objects<ClientNullParent>().Key(x => x.Id);
         var children = model.Objects<ClientNullChild>().Key(x => x.Id);
         var relation = model.Relation(parents, children).Where((p, c) => p.Id == c.ParentId);
-        var parentIdentity = model.Derived(children).Compute(x => x.ParentId);
+        var parentIdentity = model.Derived(children).Select(x => x.ParentId);
         var runtime = model.Build().CreateRuntime(seed =>
         {
             seed.Add(parents, [parent]);
             seed.Add(children, [child]);
         });
-        _ = runtime.Get(parentIdentity, child);
+        _ = runtime.Evaluate(parentIdentity, child);
         context.Remove(parent);
 
         context.SaveChangesConsistently(runtime,
             new ConsistencyEfCoreMappings().Map(parents).Map(children));
 
         Assert.Null(database.CreateContext().Set<ClientNullChild>().Single().ParentId);
-        Assert.Null(runtime.Get(parentIdentity, child));
+        Assert.Null(runtime.Evaluate(parentIdentity, child));
         Assert.Equal(1, runtime.Version);
     }
 

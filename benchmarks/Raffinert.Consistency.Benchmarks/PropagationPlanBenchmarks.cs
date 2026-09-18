@@ -39,10 +39,10 @@ public class PropagationPlanBenchmarks
         var sources = model.Objects<Entry>().Key(entry => entry.Id);
         var items = model.Objects<Entry>().Key(entry => entry.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var usingRelation = model.Derived(sources).Using(relation);
+        var usingRelation = model.Derived(sources).From(relation);
         if (conservative)
             usingRelation.PreferConservativePropagation();
-        var count = usingRelation.Compute((_, matches) => matches.Count);
+        var count = usingRelation.Select((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var retainedSources = Enumerable.Range(0, SourceCount)
             .Select(index => new Entry { Id = Guid.NewGuid(), Code = "dense" }).ToArray();
@@ -51,7 +51,7 @@ public class PropagationPlanBenchmarks
         runtime.Apply(MutationSet.Create(retainedSources.Select(source => Change.Add(sources, source))
             .Concat(retainedItems.Select(item => Change.Add(items, item))).ToArray()));
         foreach (var source in retainedSources)
-            runtime.Get(count, source);
+            runtime.Evaluate(count, source);
         return new Scenario(runtime, items, count, retainedSources[0], retainedItems[0]);
     }
 
@@ -64,7 +64,7 @@ public class PropagationPlanBenchmarks
             changedItem.Code = oldCode == "dense" ? "other" : "dense";
             var impact = runtime.Apply(Change.Property(items, changedItem, entry => entry.Code, oldCode, changedItem.Code));
             if (readAfterWrite)
-                _ = runtime.Get(count, readSource);
+                _ = runtime.Evaluate(count, readSource);
             return impact;
         }
     }
@@ -113,10 +113,10 @@ public class SelectivePropagationPlanBenchmarks
         var sources = model.Objects<SelectiveEntry>().Key(entry => entry.Id);
         var items = model.Objects<SelectiveEntry>().Key(entry => entry.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var builder = model.Derived(sources).Using(relation);
+        var builder = model.Derived(sources).From(relation);
         if (conservative)
             builder.PreferConservativePropagation();
-        var count = builder.Compute((_, matches) => matches.Count);
+        var count = builder.Select((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var retainedSources = Enumerable.Range(0, SourceCount)
             .Select(index => new SelectiveEntry { Id = Guid.NewGuid(), Code = Key(index % DistinctKeyCount) })
@@ -127,7 +127,7 @@ public class SelectivePropagationPlanBenchmarks
         runtime.Apply(MutationSet.Create(retainedSources.Select(source => Change.Add(sources, source))
             .Concat(retainedItems.Select(item => Change.Add(items, item))).ToArray()));
         foreach (var source in retainedSources)
-            runtime.Get(count, source);
+            runtime.Evaluate(count, source);
         runtime.ResetDiagnostics();
         return new SelectiveScenario(runtime, items, count, retainedSources[0], retainedItems[0]);
     }
@@ -145,7 +145,7 @@ public class SelectivePropagationPlanBenchmarks
             var impact = runtime.Apply(Change.Property(items, changedItem, entry => entry.Code,
                 oldCode, changedItem.Code));
             if (readAfterWrite)
-                _ = runtime.Get(count, readSource);
+                _ = runtime.Evaluate(count, readSource);
             return impact;
         }
     }

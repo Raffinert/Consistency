@@ -11,8 +11,8 @@ public sealed class RelationEfCoreMappingsTests
         using var context = new MappingContext();
         var entity = Seed(context);
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var value = model.Derived(objects).Compute(x => x.Input);
-        var invariant = model.Invariant(objects).Using(value).Must((_, current) => current < 2);
+        var value = model.Derived(objects).Select(x => x.Input);
+        var invariant = model.Invariant(objects).From(value).Must((_, current) => current < 2);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
 
@@ -21,16 +21,16 @@ public sealed class RelationEfCoreMappingsTests
     }
 
     [Fact]
-    public void Materialize_accepts_normal_mapped_writable_property()
+    public void MaterializeTo_accepts_normal_mapped_writable_property()
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var value = model.Derived(objects).Compute(x => x.Input * 2);
+        var value = model.Derived(objects).Select(x => x.Input * 2).MaterializeTo(x => x.Mirror);
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror));
+            new ConsistencyEfCoreMappings().Map(objects));
 
         Assert.Equal(6, entity.Mirror);
     }
@@ -40,71 +40,64 @@ public sealed class RelationEfCoreMappingsTests
     [InlineData(nameof(MappingEntity.Alternate))]
     [InlineData(nameof(MappingEntity.Generated))]
     [InlineData(nameof(MappingEntity.Unmapped))]
-    public void Materialize_rejects_invalid_ef_property(string propertyName)
+    public void MaterializeTo_rejects_invalid_ef_property(string propertyName)
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var value = model.Derived(objects).Compute(x => x.Input);
+        var value = model.Derived(objects).Select(x => x.Input);
+        if (propertyName == nameof(MappingEntity.Id)) value.MaterializeTo(x => x.Id);
+        else if (propertyName == nameof(MappingEntity.Alternate)) value.MaterializeTo(x => x.Alternate);
+        else if (propertyName == nameof(MappingEntity.Generated)) value.MaterializeTo(x => x.Generated);
+        else value.MaterializeTo(x => x.Unmapped);
+        if (propertyName == nameof(MappingEntity.Id))
+        {
+            Assert.Throws<InvalidOperationException>(model.Build);
+            return;
+        }
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 2;
         var mappings = new ConsistencyEfCoreMappings().Map(objects);
-        if (propertyName == nameof(MappingEntity.Id)) mappings.Materialize(value, x => x.Id);
-        else if (propertyName == nameof(MappingEntity.Alternate)) mappings.Materialize(value, x => x.Alternate);
-        else if (propertyName == nameof(MappingEntity.Generated)) mappings.Materialize(value, x => x.Generated);
-        else mappings.Materialize(value, x => x.Unmapped);
 
         Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime, mappings));
     }
 
     [Fact]
-    public void Materialize_rejects_relations_dependency_member()
+    public void MaterializeTo_rejects_derived_dependency_member()
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var value = model.Derived(objects).Compute(x => x.Input);
-        model.Derived(objects).Compute(x => x.Mirror + 1);
-        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        entity.Input = 2;
-
-        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        var value = model.Derived(objects).Select(x => x.Input).MaterializeTo(x => x.Mirror);
+        model.Derived(objects).Select(x => x.Mirror + 1);
+        var error = Assert.Throws<InvalidOperationException>(model.Build);
         Assert.Contains("DerivedDependency", error.Message);
     }
 
     [Fact]
-    public void Materialize_rejects_relation_predicate_member()
+    public void MaterializeTo_rejects_relation_predicate_member()
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var related = new RelatedEntity { Id = 1, Value = 0 }; context.Add(related); context.SaveChanges();
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
         var relatedObjects = model.Objects<RelatedEntity>().Key(x => x.Id);
         model.Relation(objects, relatedObjects).Where((left, right) => left.Mirror == right.Value);
-        var value = model.Derived(objects).Compute(x => x.Input);
-        var runtime = model.Build().CreateRuntime(seed => { seed.Add(objects, [entity]); seed.Add(relatedObjects, [related]); });
-        entity.Input = 2;
-
-        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        model.Derived(objects).Select(x => x.Input).MaterializeTo(x => x.Mirror);
+        var error = Assert.Throws<InvalidOperationException>(model.Build);
         Assert.Contains("RelationDependency", error.Message);
     }
 
     [Fact]
-    public void Materialize_rejects_invariant_dependency_member()
+    public void MaterializeTo_rejects_invariant_dependency_member()
     {
         using var context = new MappingContext(); var entity = Seed(context);
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var value = model.Derived(objects).Compute(x => x.Input);
-        model.Invariant(objects).Using(value).Must((source, current) => source.Mirror <= current);
-        var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
-        entity.Input = 2;
-
-        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(objects).Materialize(value, x => x.Mirror)));
+        var value = model.Derived(objects).Select(x => x.Input).MaterializeTo(x => x.Mirror);
+        model.Invariant(objects).From(value).Must((source, current) => source.Mirror <= current);
+        var error = Assert.Throws<InvalidOperationException>(model.Build);
         Assert.Contains("InvariantDependency", error.Message);
     }
 
     [Fact]
-    public void Materialize_rejects_projected_selector_member()
+    public void MaterializeTo_rejects_projected_selector_member()
     {
         using var context = new MappingContext();
         var target = new ProjectionTarget { Id = 1, Value = 1 };
@@ -112,42 +105,34 @@ public sealed class RelationEfCoreMappingsTests
         context.Add(link); context.SaveChanges();
         var model = new ConsistencyModelBuilder(); var links = model.Objects<ProjectionLink>().Key(x => x.Id);
         var targets = model.Objects<ProjectionTarget>().Key(x => x.Id);
-        var upstream = model.Derived(targets).Compute(x => x.Value);
-        model.Derived(links).Using(x => x.Target, upstream).Compute((_, value) => value);
-        var mirror = model.Derived(links).Compute(_ => target).AllowIncompleteDependencies();
-        var runtime = model.Build().CreateRuntime(seed => { seed.Add(links, [link]); seed.Add(targets, [target]); });
-        target.Value = 2;
-
-        var error = Assert.Throws<InvalidOperationException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(links).Materialize(mirror, x => x.Target)));
+        var upstream = model.Derived(targets).Select(x => x.Value);
+        model.Derived(links).From(x => x.Target, upstream).Select((_, value) => value);
+        model.Derived(links).Select(_ => target).AllowIncompleteDependencies().MaterializeTo(x => x.Target);
+        var error = Assert.Throws<InvalidOperationException>(model.Build);
         Assert.Contains("ProjectedSelector", error.Message);
     }
 
     [Fact]
-    public void Materialize_rejects_duplicate_target_and_duplicate_derived()
+    public void MaterializeTo_rejects_duplicate_target_and_duplicate_derived()
     {
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
-        var first = model.Derived(objects).Compute(x => x.Input);
-        var second = model.Derived(objects).Compute(x => x.Input + 1);
-        var mappings = new ConsistencyEfCoreMappings().Materialize(first, x => x.Mirror);
+        var first = model.Derived(objects).Select(x => x.Input);
+        var second = model.Derived(objects).Select(x => x.Input + 1);
+        first.MaterializeTo(x => x.Mirror);
 
-        Assert.Throws<InvalidOperationException>(() => mappings.Materialize(second, x => x.Mirror));
-        Assert.Throws<InvalidOperationException>(() => mappings.Materialize(first, x => x.OtherMirror));
+        Assert.Throws<InvalidOperationException>(() => second.MaterializeTo(x => x.Mirror));
+        Assert.Throws<InvalidOperationException>(() => first.MaterializeTo(x => x.OtherMirror));
     }
 
     [Fact]
-    public void Materialize_rejects_handle_from_another_runtime()
+    public void MaterializeTo_rejects_configuration_after_model_build()
     {
         using var context = new MappingContext(); var entity = Seed(context);
-        var firstModel = new ConsistencyModelBuilder(); var firstObjects = firstModel.Objects<MappingEntity>().Key(x => x.Id);
-        var foreign = firstModel.Derived(firstObjects).Compute(x => x.Input);
-        firstModel.Build();
-        var secondModel = new ConsistencyModelBuilder(); var secondObjects = secondModel.Objects<MappingEntity>().Key(x => x.Id);
-        var runtime = secondModel.Build().CreateRuntime(seed => seed.Add(secondObjects, [entity]));
-        entity.Input = 2;
+        var model = new ConsistencyModelBuilder(); var objects = model.Objects<MappingEntity>().Key(x => x.Id);
+        var value = model.Derived(objects).Select(x => x.Input);
+        model.Build();
 
-        Assert.Throws<ArgumentException>(() => context.SaveChangesConsistently(runtime,
-            new ConsistencyEfCoreMappings().Map(secondObjects).Materialize(foreign, x => x.Mirror)));
+        Assert.Throws<InvalidOperationException>(() => value.MaterializeTo(x => x.Mirror));
     }
 
     private static MappingEntity Seed(MappingContext context)

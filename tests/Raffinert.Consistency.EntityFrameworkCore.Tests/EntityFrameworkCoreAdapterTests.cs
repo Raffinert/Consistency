@@ -120,7 +120,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     {
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
-        var code = model.Derived(objects).Compute(value => value.Code).Named("code");
+        var code = model.Derived(objects).Select(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();
@@ -128,7 +128,7 @@ public sealed class EntityFrameworkCoreAdapterTests
         context.Add(entity);
         context.SaveChanges();
         runtime.Add(objects, entity);
-        Assert.Equal("A", runtime.Get(code, entity));
+        Assert.Equal("A", runtime.Evaluate(code, entity));
         entity.Code = "B";
         var unit = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         unit.Prepare(runtime);
@@ -146,7 +146,7 @@ public sealed class EntityFrameworkCoreAdapterTests
     {
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<CodeHolder>().Named("holders").Key(value => value.Id);
-        model.Derived(objects).Compute(value => value.Code).Named("code");
+        model.Derived(objects).Select(value => value.Code).Named("code");
         var runtime = model.Build().CreateRuntime();
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         using var context = new TestDbContext();

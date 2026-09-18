@@ -90,10 +90,10 @@ public sealed class PreparedDetailedCommitTests
         var value = model.Derived(set)
             .Impact(policy => policy.SourceMemberChanged(source => source.Value, (_, _) =>
                 ++calls == 1 ? DependencySeverity.Invalid : DependencySeverity.Dirty))
-            .Compute(source => source.Value);
+            .Select(source => source.Value);
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
-        Assert.Equal(1, runtime.Get(value, source));
+        Assert.Equal(1, runtime.Evaluate(value, source));
         source.Value = 2;
         var prepared = runtime.Prepare(MutationSet.Create(
             Change.Property(set, source, item => item.Value, 1, 2)));
@@ -180,7 +180,7 @@ public sealed class PreparedDetailedCommitTests
         Assert.Equal(version, scenario.Runtime.Version);
         Assert.False(plan.IsCommitted);
         Assert.False(prepared.IsCommitted);
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, scenario.Source));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Value, scenario.Source));
         Assert.Equal(derivedState, scenario.Runtime.GetState(scenario.Value, scenario.Source));
         Assert.Equal(invariantState, scenario.Runtime.GetState(scenario.Invariant, scenario.Source));
         Assert.Equal(diagnostics, scenario.Runtime.Diagnostics);
@@ -196,7 +196,7 @@ public sealed class PreparedDetailedCommitTests
         var touchedRelation = model.Relation(sources, items)
             .Where((source, item) => source.Value == item.Value);
         model.Relation(sources, unrelatedItems).Where((source, item) => source.Value == item.Value);
-        model.Derived(sources).Using(touchedRelation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(touchedRelation).Select((_, matches) => matches.Count);
         var source = new Source { Value = 1 };
         var item = new Item { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed =>
@@ -321,13 +321,13 @@ public sealed class PreparedDetailedCommitTests
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
-        var value = model.Derived(set).Compute(source => source.Value);
-        var invariant = model.Invariant(set).Using(value).Must((_, current) => current <= 1)
+        var value = model.Derived(set).Select(source => source.Value);
+        var invariant = model.Invariant(set).From(value).Must((_, current) => current <= 1)
             .ScheduleRepairWith(source => callbacks.Add(source.Value));
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Value = 1 };
         runtime.Add(set, source);
-        Assert.Equal(1, runtime.Get(value, source));
+        Assert.Equal(1, runtime.Evaluate(value, source));
         return new Scenario(runtime, set, source, value, invariant);
     }
 

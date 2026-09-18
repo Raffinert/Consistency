@@ -27,18 +27,6 @@ public sealed class ConsistencyEfCoreMappings
         return this;
     }
 
-    public ConsistencyEfCoreMappings Materialize<TSource, TValue>(Derived<TSource, TValue> derived,
-        Expression<Func<TSource, TValue>> property) where TSource : class
-    {
-        ArgumentNullException.ThrowIfNull(derived);
-        var descriptor = MaterializationDescriptor.CreateLegacy(derived.Definition, property);
-        if (_materializations.Any(x => ReferenceEquals(x.Definition, derived.Definition) ||
-            (ReferenceEquals(x.SourceSet, descriptor.SourceSet) && x.Target == descriptor.Target)))
-            throw new InvalidOperationException("A materialized property or derived definition cannot be mapped twice.");
-        _materializations.Add(descriptor);
-        return this;
-    }
-
     /// <summary>Registers an authoritative reverse-consumer query for a direct navigation.</summary>
     public ConsistencyEfCoreMappings DiscoverConsumers<TRoot, TTarget>(
         ObjectSet<TRoot> roots,
@@ -74,7 +62,6 @@ public sealed class ConsistencyEfCoreMappings
 
     internal ConsistencyUnitOfWorkMappings UnitOfWorkMappings => _sets;
     internal bool HasEnforced => _enforced.Count > 0;
-    internal bool HasMaterializations => _materializations.Count > 0;
     internal IReadOnlyList<MaterializationDescriptor> Materializations => _materializations;
     internal IReadOnlyList<ConsumerResolver> ConsumerResolvers => _consumerResolvers;
     internal IReadOnlyList<(object Definition, IObjectSetDefinition Set, ExternalConsumerAnalysis Analysis)> ActivePolicyDefinitions(
@@ -85,7 +72,7 @@ public sealed class ConsistencyEfCoreMappings
         foreach (var definition in _enforced)
             values.Add((definition, definition.SourceSet, runtime.GetExternalConsumerAnalysis(definition)));
         if (saveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
-            foreach (var mapping in _materializations)
+            foreach (var mapping in runtime.Materializations)
                 values.Add((mapping.Definition, mapping.Definition.SourceSet,
                     runtime.GetExternalConsumerAnalysis(mapping.Definition)));
         return values;
@@ -144,7 +131,8 @@ public sealed class ConsistencyEfCoreMappings
 
     internal HashSet<int> Validate(DbContext context, ConsistencyRuntime runtime)
     {
-        SynchronizeCoreMaterializations(runtime);
+        _materializations.Clear();
+        _materializations.AddRange(runtime.Materializations);
         var ids = _enforced.Select(runtime.GetInvariantId).ToHashSet();
         foreach (var mapping in _materializations)
         {
@@ -181,27 +169,6 @@ public sealed class ConsistencyEfCoreMappings
             resolver.EfNavigation = navigation;
         }
         return ids;
-    }
-
-    private void SynchronizeCoreMaterializations(ConsistencyRuntime runtime)
-    {
-        foreach (var descriptor in runtime.Materializations)
-        {
-            var existing = _materializations.FirstOrDefault(value =>
-                ReferenceEquals(value.Definition, descriptor.Definition));
-            if (existing is not null)
-            {
-                if (existing.Target != descriptor.Target)
-                    throw new InvalidOperationException(
-                        "A derived definition cannot use different Core and EF materialization targets.");
-                continue;
-            }
-            if (_materializations.Any(value =>
-                    ReferenceEquals(value.SourceSet, descriptor.SourceSet) && value.Target == descriptor.Target))
-                throw new InvalidOperationException(
-                    "A materialized property cannot be mapped by more than one derived definition.");
-            _materializations.Add(descriptor);
-        }
     }
 
     internal sealed record ConsumerResolver(

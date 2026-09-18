@@ -16,13 +16,13 @@ public sealed partial class DerivedStateTests
         var item = Item("A", quantity: 2m);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(2m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(2m, runtime.Evaluate(receivedQuantity, source));
 
         item.Quantity = 5m;
         runtime.Apply(Change.Property(items, item, x => x.Quantity, 2m, 5m));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(receivedQuantity, source));
-        Assert.Equal(5m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(5m, runtime.Evaluate(receivedQuantity, source));
         Assert.Contains("RelationItem: DerivedItemRecord.Quantity", compiled.DebugView);
     }
 
@@ -40,24 +40,24 @@ public sealed partial class DerivedStateTests
         var item = Item("A", details: details);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(2m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(2m, runtime.Evaluate(receivedQuantity, source));
 
         details.Quantity = 7m;
         runtime.Apply(Change.Property(details, x => x.Quantity, 2m, 7m));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(receivedQuantity, source));
-        Assert.Equal(7m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(7m, runtime.Evaluate(receivedQuantity, source));
 
         var replacement = new DerivedItemDetails { Quantity = 9m };
         item.Details = replacement;
         runtime.Apply(Change.Property(items, item, x => x.Details, details, replacement));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(receivedQuantity, source));
-        Assert.Equal(9m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(9m, runtime.Evaluate(receivedQuantity, source));
 
         replacement.Quantity = 11m;
         runtime.Apply(Change.Property(replacement, x => x.Quantity, 9m, 11m));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(receivedQuantity, source));
-        Assert.Equal(11m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(11m, runtime.Evaluate(receivedQuantity, source));
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public sealed partial class DerivedStateTests
         var second = Source("B", adjustment: 2m);
         runtime.Add(sources, first);
         runtime.Add(sources, second);
-        Assert.Equal(1m, runtime.Get(receivedQuantity, first));
-        Assert.Equal(2m, runtime.Get(receivedQuantity, second));
+        Assert.Equal(1m, runtime.Evaluate(receivedQuantity, first));
+        Assert.Equal(2m, runtime.Evaluate(receivedQuantity, second));
 
         first.Adjustment = 3m;
         runtime.Apply(Change.Property(sources, first, x => x.Adjustment, 1m, 3m));
@@ -165,7 +165,7 @@ public sealed partial class DerivedStateTests
             out var items,
             out var receivedQuantity,
             (source, matches) => matches.Sum(item => item.Quantity));
-        var invariant = model.Invariant(sources).Using(receivedQuantity)
+        var invariant = model.Invariant(sources).From(receivedQuantity)
             .Must((source, received) => received <= source.Policy!.Maximum);
         var runtime = model.Build().CreateRuntime();
         var policy = new ReceiptPolicy { Maximum = 10m };
@@ -173,7 +173,7 @@ public sealed partial class DerivedStateTests
         var item = Item("A", quantity: 2m);
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(2m, runtime.Get(receivedQuantity, source));
+        Assert.Equal(2m, runtime.Evaluate(receivedQuantity, source));
         Assert.True(runtime.Evaluate(invariant, source));
 
         policy.Maximum = 1m;
@@ -198,8 +198,8 @@ public sealed partial class DerivedStateTests
         Assert.Equal(DerivedValueState.Dirty, hash.Runtime.GetState(hash.Derived, hash.Source));
         Assert.Equal(DerivedValueState.Dirty, scan.Runtime.GetState(scan.Derived, scan.Source));
         Assert.Equal(
-            hash.Runtime.Get(hash.Derived, hash.Source),
-            scan.Runtime.Get(scan.Derived, scan.Source));
+            hash.Runtime.Evaluate(hash.Derived, hash.Source),
+            scan.Runtime.Evaluate(scan.Derived, scan.Source));
     }
 
 }

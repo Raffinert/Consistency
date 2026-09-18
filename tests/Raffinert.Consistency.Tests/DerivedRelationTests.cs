@@ -11,10 +11,10 @@ public sealed partial class DerivedStateTests
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code && item.Enabled);
         var count = model.Derived(sources)
-            .Using(relation)
-            .Compute((source, matches) => matches.Count);
+            .From(relation)
+            .Select((source, matches) => matches.Count);
         var atMostOne = model.Invariant(sources)
-            .Using(count)
+            .From(count)
             .Must((source, value) => value <= 1);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
@@ -24,7 +24,7 @@ public sealed partial class DerivedStateTests
         runtime.Add(items, first);
         runtime.Add(items, second);
 
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, source));
         Assert.True(runtime.Evaluate(atMostOne, source));
 
@@ -33,7 +33,7 @@ public sealed partial class DerivedStateTests
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
         Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(atMostOne, source));
-        Assert.Equal(2, runtime.Get(count, source));
+        Assert.Equal(2, runtime.Evaluate(count, source));
         Assert.False(runtime.Evaluate(atMostOne, source));
 
         second.Enabled = false;
@@ -41,7 +41,7 @@ public sealed partial class DerivedStateTests
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
         Assert.Equal(InvariantEvaluationState.Dirty, runtime.GetState(atMostOne, source));
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
     }
 
     [Fact]
@@ -51,20 +51,20 @@ public sealed partial class DerivedStateTests
         var sources = model.Objects<CodeHolder>().Key(x => x.Id);
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Compute((source, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation).Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         runtime.Add(sources, source);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
 
         runtime.Add(items, item);
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
 
         runtime.Remove(items, item);
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, source));
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
     }
 
     [Fact]
@@ -82,8 +82,8 @@ public sealed partial class DerivedStateTests
         runtime.Add(sources, matching);
         runtime.Add(sources, unrelated);
         runtime.Add(items, item);
-        Assert.Equal(2m, runtime.Get(quantity, matching));
-        Assert.Equal(0m, runtime.Get(quantity, unrelated));
+        Assert.Equal(2m, runtime.Evaluate(quantity, matching));
+        Assert.Equal(0m, runtime.Evaluate(quantity, unrelated));
 
         item.Quantity = 3m;
         runtime.Apply(Change.Property(items, item, x => x.Quantity, 2m, 3m));
@@ -114,7 +114,7 @@ public sealed partial class DerivedStateTests
             runtime.Add(sources, source);
         runtime.Add(items, item);
         foreach (var source in new[] { losing, gaining, unrelated })
-            runtime.Get(quantity, source);
+            runtime.Evaluate(quantity, source);
 
         item.Code = "B";
         runtime.Apply(Change.Property(items, item, x => x.Code, "A", "B"));
@@ -122,8 +122,8 @@ public sealed partial class DerivedStateTests
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
-        Assert.Equal(0m, runtime.Get(quantity, losing));
-        Assert.Equal(2m, runtime.Get(quantity, gaining));
+        Assert.Equal(0m, runtime.Evaluate(quantity, losing));
+        Assert.Equal(2m, runtime.Evaluate(quantity, gaining));
     }
 
     [Fact]
@@ -134,8 +134,8 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Details!.Code);
-        var quantity = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var quantity = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Sum(item => item.Quantity));
         var runtime = model.Build().CreateRuntime();
         var losing = Source("A");
         var gaining = Source("B");
@@ -144,16 +144,16 @@ public sealed partial class DerivedStateTests
         runtime.Add(sources, losing);
         runtime.Add(sources, gaining);
         runtime.Add(items, item);
-        runtime.Get(quantity, losing);
-        runtime.Get(quantity, gaining);
+        runtime.Evaluate(quantity, losing);
+        runtime.Evaluate(quantity, gaining);
 
         details.Code = "B";
         runtime.Apply(Change.Property(details, x => x.Code, "A", "B"));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
-        Assert.Equal(0m, runtime.Get(quantity, losing));
-        Assert.Equal(2m, runtime.Get(quantity, gaining));
+        Assert.Equal(0m, runtime.Evaluate(quantity, losing));
+        Assert.Equal(2m, runtime.Evaluate(quantity, gaining));
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code && item.Enabled);
-        var quantity = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var quantity = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Sum(item => item.Quantity));
         var runtime = model.Build().CreateRuntime();
         var losing = Source("A");
         var unrelated = Source("B");
@@ -174,8 +174,8 @@ public sealed partial class DerivedStateTests
         runtime.Add(sources, losing);
         runtime.Add(sources, unrelated);
         runtime.Add(items, item);
-        runtime.Get(quantity, losing);
-        runtime.Get(quantity, unrelated);
+        runtime.Evaluate(quantity, losing);
+        runtime.Evaluate(quantity, unrelated);
 
         item.Enabled = false;
         runtime.Apply(Change.Property(items, item, x => x.Enabled, true, false));
@@ -192,9 +192,9 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Code == item.Code && item.Enabled);
-        var quantity = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
-        var invariant = model.Invariant(sources).Using(quantity)
+        var quantity = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Sum(item => item.Quantity));
+        var invariant = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m);
         var runtime = model.Build().CreateRuntime(new InvalidMembershipImpactPolicy());
         var source = Source("A");
@@ -202,7 +202,7 @@ public sealed partial class DerivedStateTests
         item.Enabled = true;
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        runtime.Get(quantity, source);
+        runtime.Evaluate(quantity, source);
         Assert.True(runtime.Evaluate(invariant, source));
 
         item.Enabled = false;
@@ -211,7 +211,7 @@ public sealed partial class DerivedStateTests
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
         Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, source));
 
-        Assert.Equal(0m, runtime.Get(quantity, source));
+        Assert.Equal(0m, runtime.Evaluate(quantity, source));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, source));
         Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, source));
         Assert.True(runtime.Evaluate(invariant, source));
@@ -232,8 +232,8 @@ public sealed partial class DerivedStateTests
         var relation = model.Relation(sources, items).Where((source, item) =>
             PredicateProbe.Observe() && source.Code == item.Code)
             .AllowIncompleteDependencies();
-        var quantity = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Sum(item => item.Quantity));
+        var quantity = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Sum(item => item.Quantity));
         var compiled = model.Build();
         Assert.Contains(
             $"Reverse access plan: {(forceScan ? "Scan" : "HashJoin")}",
@@ -245,8 +245,8 @@ public sealed partial class DerivedStateTests
         runtime.Add(sources, gaining);
         for (var index = 0; index < unrelatedCount; index++)
             runtime.Add(sources, Source($"U-{index}"));
-        runtime.Get(quantity, losing);
-        runtime.Get(quantity, gaining);
+        runtime.Evaluate(quantity, losing);
+        runtime.Evaluate(quantity, gaining);
         var item = Item("A", quantity: 1m);
 
         PredicateProbe.Reset();
@@ -254,7 +254,7 @@ public sealed partial class DerivedStateTests
         Assert.Equal(forceScan ? unrelatedCount + 2 : 1, PredicateProbe.Evaluations);
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, gaining));
-        runtime.Get(quantity, losing);
+        runtime.Evaluate(quantity, losing);
 
         PredicateProbe.Reset();
         item.Code = "B";
@@ -262,7 +262,7 @@ public sealed partial class DerivedStateTests
         Assert.Equal(forceScan ? unrelatedCount + 2 : 1, PredicateProbe.Evaluations);
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, losing));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, gaining));
-        runtime.Get(quantity, gaining);
+        runtime.Evaluate(quantity, gaining);
 
         PredicateProbe.Reset();
         runtime.Remove(items, item);
@@ -279,8 +279,8 @@ public sealed partial class DerivedStateTests
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.OrderNumber == item.OrderNumber &&
             source.ItemNumber == item.ItemNumber);
-        var count = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Count);
         var compiled = model.Build();
         Assert.Contains("Reverse access plan: HashJoin", compiled.DebugView);
         var runtime = compiled.CreateRuntime();
@@ -298,8 +298,8 @@ public sealed partial class DerivedStateTests
         };
         runtime.Add(sources, matching);
         runtime.Add(sources, partial);
-        runtime.Get(count, matching);
-        runtime.Get(count, partial);
+        runtime.Evaluate(count, matching);
+        runtime.Evaluate(count, partial);
 
         runtime.Add(items, new OrderLine
         {
@@ -320,15 +320,15 @@ public sealed partial class DerivedStateTests
         var items = model.Objects<CodeHolder>().Key(x => x.Id);
         var relation = model.Relation(sources, items).Where((source, item) =>
             string.Equals(source.Code, item.Code, StringComparison.OrdinalIgnoreCase));
-        var count = model.Derived(sources).Using(relation)
-            .Compute((source, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation)
+            .Select((source, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var matching = new CodeHolder { Id = Guid.NewGuid(), Code = "ABC" };
         var unrelated = new CodeHolder { Id = Guid.NewGuid(), Code = "XYZ" };
         runtime.Add(sources, matching);
         runtime.Add(sources, unrelated);
-        runtime.Get(count, matching);
-        runtime.Get(count, unrelated);
+        runtime.Evaluate(count, matching);
+        runtime.Evaluate(count, unrelated);
 
         runtime.Add(items, new CodeHolder { Id = Guid.NewGuid(), Code = "abc" });
 
@@ -348,16 +348,16 @@ public sealed partial class DerivedStateTests
         var source = Source("A");
         runtime.Add(sources, source);
         runtime.Add(items, Item("A", quantity: 1m));
-        Assert.Equal(1m, runtime.Get(quantity, source));
+        Assert.Equal(1m, runtime.Evaluate(quantity, source));
 
         source.Code = "B";
         runtime.Apply(Change.Property(sources, source, x => x.Code, "A", "B"));
-        Assert.Equal(0m, runtime.Get(quantity, source));
+        Assert.Equal(0m, runtime.Evaluate(quantity, source));
 
         runtime.Add(items, Item("B", quantity: 2m));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
-        Assert.Equal(2m, runtime.Get(quantity, source));
+        Assert.Equal(2m, runtime.Evaluate(quantity, source));
     }
 
     [Fact]
@@ -374,14 +374,14 @@ public sealed partial class DerivedStateTests
         var item = Item("A", quantity: 2m);
         runtime.Add(sources, matching);
         runtime.Add(sources, unrelated);
-        runtime.Get(quantity, matching);
-        runtime.Get(quantity, unrelated);
+        runtime.Evaluate(quantity, matching);
+        runtime.Evaluate(quantity, unrelated);
 
         runtime.Add(items, item);
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, matching));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, unrelated));
-        runtime.Get(quantity, matching);
+        runtime.Evaluate(quantity, matching);
 
         runtime.Remove(items, item);
 
@@ -397,13 +397,13 @@ public sealed partial class DerivedStateTests
             out var items,
             out var quantity,
             (source, matches) => matches.Sum(item => item.Quantity));
-        var invariant = model.Invariant(sources).Using(quantity)
+        var invariant = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m);
         var runtime = model.Build().CreateRuntime();
         var source = Source("A");
         runtime.Add(sources, source);
         runtime.Add(items, Item("A", quantity: 2m));
-        Assert.Equal(2m, runtime.Get(quantity, source));
+        Assert.Equal(2m, runtime.Evaluate(quantity, source));
         Assert.True(runtime.Evaluate(invariant, source));
         Assert.Equal(1, runtime.DerivedStateEntryCount);
         Assert.Equal(1, runtime.InvariantStateEntryCount);
@@ -424,7 +424,7 @@ public sealed partial class DerivedStateTests
         Assert.Equal(0, runtime.DerivedStateEntryCount);
         Assert.Equal(0, runtime.InvariantStateEntryCount);
         Assert.Equal(1, runtime.MaterializedRelationPairCount);
-        Assert.Equal(2m, runtime.Get(quantity, source));
+        Assert.Equal(2m, runtime.Evaluate(quantity, source));
         Assert.True(runtime.Evaluate(invariant, source));
     }
 
@@ -436,7 +436,7 @@ public sealed partial class DerivedStateTests
             out var items,
             out var quantity,
             (source, matches) => matches.Sum(item => item.Quantity));
-        var invariant = model.Invariant(sources).Using(quantity)
+        var invariant = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m);
         var runtime = model.Build().CreateRuntime();
         var source = Source("A");
@@ -445,7 +445,7 @@ public sealed partial class DerivedStateTests
         for (var iteration = 0; iteration < 100; iteration++)
         {
             runtime.Add(sources, source);
-            runtime.Get(quantity, source);
+            runtime.Evaluate(quantity, source);
             runtime.Evaluate(invariant, source);
             Assert.True(runtime.Remove(sources, source));
 
@@ -464,10 +464,10 @@ public sealed partial class DerivedStateTests
             out var items,
             out var quantity,
             (source, matches) => matches.Sum(item => item.Quantity));
-        var immediate = model.Invariant(sources).Using(quantity)
+        var immediate = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m)
             .ReactWith(InvariantReaction.EvaluateImmediately);
-        var repair = model.Invariant(sources).Using(quantity)
+        var repair = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m)
             .ScheduleRepairWith(scheduled.Add);
         var runtime = model.Build().CreateRuntime();
@@ -505,9 +505,9 @@ public sealed partial class DerivedStateTests
             runtime.Add(sources, source);
         var item = Item("MATCH", quantity: 1m);
         runtime.Add(items, item);
-        runtime.Get(quantity, affected);
+        runtime.Evaluate(quantity, affected);
         foreach (var source in unrelated)
-            runtime.Get(quantity, source);
+            runtime.Evaluate(quantity, source);
 
         item.Quantity = 2m;
         runtime.Apply(Change.Property(items, item, x => x.Quantity, 1m, 2m));

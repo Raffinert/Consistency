@@ -47,12 +47,12 @@ public sealed class NavigationScopeEfCoreTests
         var model = new ConsistencyModelBuilder();
         var products = model.Objects<Product>().Key(x => x.Id);
         var lines = model.Objects<OrderLine>().Key(x => x.Id);
-        var currentPrice = model.Derived(lines).Compute(line => line.Product.Price);
+        var currentPrice = model.Derived(lines).Select(line => line.Product.Price).MaterializeTo(line => line.CurrentPriceMirror);
         var compiled = model.Build();
         var partial = compiled.CreateRuntime(seed => { seed.Add(products, [product]); seed.Add(lines, [first]); });
         var authoritative = compiled.CreateRuntime(seed => { seed.Add(products, [product]); seed.Add(lines, [first, second]); });
         var mappings = new ConsistencyEfCoreMappings().Map(products).Map(lines)
-            .Materialize(currentPrice, line => line.CurrentPriceMirror);
+            ;
         product.Price = 25;
 
         Assert.Throws<IncompleteConsistencyScopeException>(() =>
@@ -112,8 +112,8 @@ public sealed class NavigationScopeEfCoreTests
         var model = new ConsistencyModelBuilder();
         products = model.Objects<Product>().Key(x => x.Id);
         lines = model.Objects<OrderLine>().Key(x => x.Id);
-        var limit = model.Derived(lines).Compute(line => line.Product.CurrentLimit);
-        invariant = model.Invariant(lines).Using(limit).Must((line, value) => line.ReservedQuantity <= value);
+        var limit = model.Derived(lines).Select(line => line.Product.CurrentLimit);
+        invariant = model.Invariant(lines).From(limit).Must((line, value) => line.ReservedQuantity <= value);
         return model;
     }
 

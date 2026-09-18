@@ -87,8 +87,8 @@ public sealed class ConservativePropagationOracleTests
         var relation = model.Relation(sources, items).Where((source, item) =>
             source.Region == item.Region &&
             string.Equals(source.Code, item.Code, StringComparison.OrdinalIgnoreCase));
-        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count);
         var runtime = model.Build().CreateRuntime();
         var oldCandidate = new Entity { Id = Guid.NewGuid(), Region = 1, Code = "alpha" };
         var newCandidate = new Entity { Id = Guid.NewGuid(), Region = 2, Code = "BETA" };
@@ -98,7 +98,7 @@ public sealed class ConservativePropagationOracleTests
             Change.Add(sources, oldCandidate), Change.Add(sources, newCandidate),
             Change.Add(sources, unrelated), Change.Add(items, item)));
         foreach (var source in new[] { oldCandidate, newCandidate, unrelated })
-            _ = runtime.Get(count, source);
+            _ = runtime.Evaluate(count, source);
         item.Region = 2;
         item.Code = "beta";
 
@@ -109,8 +109,8 @@ public sealed class ConservativePropagationOracleTests
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, oldCandidate));
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(count, newCandidate));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, unrelated));
-        Assert.Equal(0, runtime.Get(count, oldCandidate));
-        Assert.Equal(1, runtime.Get(count, newCandidate));
+        Assert.Equal(0, runtime.Evaluate(count, oldCandidate));
+        Assert.Equal(1, runtime.Evaluate(count, newCandidate));
         Assert.Equal(0, runtime.MaterializedRelationPairCount);
     }
 
@@ -159,10 +159,10 @@ public sealed class ConservativePropagationOracleTests
             var items = model.Objects<Entity>().Key(value => value.Id);
             var relation = model.Relation(sources, items).Where((source, item) =>
                 source.Code == item.Code && source.Active && item.Active);
-            var builder = model.Derived(sources).Using(relation);
+            var builder = model.Derived(sources).From(relation);
             if (conservative)
                 builder.PreferConservativePropagation();
-            var total = builder.Compute((_, matches) => matches.Sum(item => item.Amount));
+            var total = builder.Select((_, matches) => matches.Sum(item => item.Amount));
             return new World(model.Build().CreateRuntime(), sources, items, total);
         }
 
@@ -238,7 +238,7 @@ public sealed class ConservativePropagationOracleTests
         public DerivedValueState State(Guid id) => Runtime.GetState(_total, _sourceById[id]);
 
         public int[] Values() => _sourceById.Values.OrderBy(value => value.Id)
-            .Select(source => Runtime.Get(_total, source)).ToArray();
+            .Select(source => Runtime.Evaluate(_total, source)).ToArray();
 
         public int[] Oracle() => _sourceById.Values.OrderBy(value => value.Id)
             .Select(source => _itemById.Values

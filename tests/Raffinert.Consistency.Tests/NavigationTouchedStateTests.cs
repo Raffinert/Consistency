@@ -11,7 +11,7 @@ public sealed class NavigationTouchedStateTests
         scenario.Root.Child = newChild;
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
             scenario.Roots, scenario.Root, root => root.Child, oldChild, newChild)));
-        _ = scenario.Runtime.Get(scenario.Value, scenario.Root);
+        _ = scenario.Runtime.Evaluate(scenario.Value, scenario.Root);
 
         _ = scenario.Runtime.PreviewDetailed(prepared);
         var navigation = typeof(Root).GetProperty(nameof(Root.Child))!;
@@ -31,14 +31,14 @@ public sealed class NavigationTouchedStateTests
     {
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<NestedRoot>().Key(root => root.Id);
-        var value = model.Derived(roots).Compute(root => root.Container.Child.Value);
+        var value = model.Derived(roots).Select(root => root.Container.Child.Value);
         var child = new Child { Value = 1 };
         var container = new Container { Child = child };
         var first = new NestedRoot { Container = container };
         var second = new NestedRoot { Container = container };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(roots, [first, second]));
-        _ = runtime.Get(value, first);
-        _ = runtime.Get(value, second);
+        _ = runtime.Evaluate(value, first);
+        _ = runtime.Evaluate(value, second);
 
         var removal = runtime.Prepare(MutationSet.Create(Change.Remove(roots, first)));
         _ = runtime.PreviewDetailed(removal);
@@ -54,12 +54,12 @@ public sealed class NavigationTouchedStateTests
     {
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<CollectionRoot>().Key(root => root.Id);
-        var total = model.Derived(roots).Compute(root => root.Children.Sum(child => child.Value));
+        var total = model.Derived(roots).Select(root => root.Children.Sum(child => child.Value));
         var existing = new Child { Value = 1 };
         var added = new Child { Value = 2 };
         var root = new CollectionRoot { Children = [existing] };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(roots, [root]));
-        _ = runtime.Get(total, root);
+        _ = runtime.Evaluate(total, root);
         root.Children.Add(added);
         var prepared = runtime.Prepare(MutationSet.Create(Change.CollectionAdd(
             roots, root, value => value.Children, added)));
@@ -87,7 +87,7 @@ public sealed class NavigationTouchedStateTests
     {
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
-        var value = model.Derived(roots).Compute(root => root.Child.Value);
+        var value = model.Derived(roots).Select(root => root.Child.Value);
         var root = new Root { Child = new Child { Value = 1 } };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(roots, [root]));
         return new ScalarScenario(runtime, roots, root, value);
@@ -97,7 +97,7 @@ public sealed class NavigationTouchedStateTests
     {
         var model = new ConsistencyModelBuilder();
         var roots = model.Objects<Root>().Key(root => root.Id);
-        model.Derived(roots).Compute(root => root.Child.Value);
+        model.Derived(roots).Select(root => root.Child.Value);
         var values = Enumerable.Range(0, count)
             .Select(index => new Root { Child = new Child { Value = index } }).ToArray();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(roots, values));

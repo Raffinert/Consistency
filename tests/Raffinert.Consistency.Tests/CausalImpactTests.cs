@@ -9,7 +9,7 @@ public sealed class CausalImpactTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
         var removedSource = new Source { Code = "A" };
         var addedSource = new Source { Code = "B" };
         var item = new Item { Code = "A" };
@@ -78,14 +78,14 @@ public sealed class CausalImpactTests
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code)
             .Named("matches");
-        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count).Named("count");
+        var count = model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count).Named("count");
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Code = "A" };
         var item = new Item { Code = "A" };
         runtime.Add(sources, source);
         runtime.Add(items, item);
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
         item.Code = "B";
 
         var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
@@ -105,8 +105,8 @@ public sealed class CausalImpactTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count).Named("count");
+        model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count).Named("count");
         var source = new Source { Code = "A" };
         var relevant = new Item { Code = "A" };
         var unrelated = new Source { Code = "Z", Reserved = 1 };
@@ -135,8 +135,8 @@ public sealed class CausalImpactTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count);
+        model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count);
         var firstSource = new Source { Code = "A" };
         var secondSource = new Source { Code = "B" };
         var firstItem = new Item { Code = "A" };
@@ -246,14 +246,14 @@ public sealed class CausalImpactTests
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
-        var left = model.Derived(set).Compute(source => source.Quantity).Named("left");
-        var right = model.Derived(set).Compute(source => source.Quantity * 2).Named("right");
-        var bottom = model.Derived(set).Using(left, right)
-            .Compute((_, first, second) => first + second).Named("bottom");
+        var left = model.Derived(set).Select(source => source.Quantity).Named("left");
+        var right = model.Derived(set).Select(source => source.Quantity * 2).Named("right");
+        var bottom = model.Derived(set).From(left).From(right)
+            .Select((_, first, second) => first + second).Named("bottom");
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Quantity = 1 };
         runtime.Add(set, source);
-        Assert.Equal(3, runtime.Get(bottom, source));
+        Assert.Equal(3, runtime.Evaluate(bottom, source));
         source.Quantity = 2;
 
         var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
@@ -273,9 +273,9 @@ public sealed class CausalImpactTests
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<Source>().Key(source => source.Id);
         var links = model.Objects<Link>().Key(link => link.Id);
-        var quantity = model.Derived(sources).Compute(source => source.Quantity).Named("quantity");
-        model.Derived(links).Using(link => link.Source, quantity)
-            .Compute((_, value) => value).Named("projected");
+        var quantity = model.Derived(sources).Select(source => source.Quantity).Named("quantity");
+        model.Derived(links).From(link => link.Source, quantity)
+            .Select((_, value) => value).Named("projected");
         var first = new Source { Quantity = 1 };
         var second = new Source { Quantity = 2 };
         var link = new Link { Source = second };
@@ -307,12 +307,12 @@ public sealed class CausalImpactTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count).Named("count");
-        var doubled = model.Derived(sources).Using(count)
-            .Compute((_, value) => value * 2).Named("doubled");
-        var final = model.Derived(sources).Using(doubled)
-            .Compute((_, value) => value + 1).Named("final");
+        var count = model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count).Named("count");
+        var doubled = model.Derived(sources).From(count)
+            .Select((_, value) => value * 2).Named("doubled");
+        var final = model.Derived(sources).From(doubled)
+            .Select((_, value) => value + 1).Named("final");
         var source = new Source { Code = "A" };
         var item = new Item { Code = "A" };
         var runtime = model.Build().CreateRuntime(seed =>
@@ -320,7 +320,7 @@ public sealed class CausalImpactTests
             seed.Add(sources, [source]);
             seed.Add(items, [item]);
         });
-        _ = runtime.Get(final, source);
+        _ = runtime.Evaluate(final, source);
         item.Code = "B";
 
         var result = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
@@ -339,9 +339,9 @@ public sealed class CausalImpactTests
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
-        var quantity = model.Derived(set).Compute(source => source.Quantity).Named("quantity");
-        var reserved = model.Derived(set).Compute(source => source.Reserved).Named("reserved");
-        model.Invariant(set).Using(quantity, reserved)
+        var quantity = model.Derived(set).Select(source => source.Quantity).Named("quantity");
+        var reserved = model.Derived(set).Select(source => source.Reserved).Named("reserved");
+        model.Invariant(set).From(quantity).From(reserved)
             .Must((_, available, used) => available >= used).Named("capacity");
         var source = new Source { Quantity = 2, Reserved = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
@@ -363,13 +363,13 @@ public sealed class CausalImpactTests
         var set = model.Objects<Source>().Key(source => source.Id);
         var upstream = model.Derived(set)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(source => source.Quantity).Named("upstream");
-        var downstream = model.Derived(set).Using(upstream)
+            .Select(source => source.Quantity).Named("upstream");
+        var downstream = model.Derived(set).From(upstream)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Dirty))
-            .Compute((source, value) => value + source.Reserved).Named("downstream");
+            .Select((source, value) => value + source.Reserved).Named("downstream");
         var source = new Source { Quantity = 1, Reserved = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(set, [source]));
-        _ = runtime.Get(downstream, source);
+        _ = runtime.Evaluate(downstream, source);
         source.Quantity = 2;
         source.Reserved = 2;
 
@@ -422,15 +422,15 @@ public sealed class CausalImpactTests
                 (oldValue, newValue) => newValue < oldValue
                     ? DependencySeverity.Invalid
                     : DependencySeverity.Dirty))
-            .Compute(source => source.Quantity).Named("capacity");
-        var validity = model.Derived(set).Using(capacity)
-            .Compute((source, available) => available >= source.Reserved).Named("validity");
-        model.Invariant(set).Using(validity).Must((_, valid) => valid).Named("link-invariant")
+            .Select(source => source.Quantity).Named("capacity");
+        var validity = model.Derived(set).From(capacity)
+            .Select((source, available) => available >= source.Reserved).Named("validity");
+        model.Invariant(set).From(validity).Must((_, valid) => valid).Named("link-invariant")
             .ScheduleRepairWith(_ => { });
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Quantity = 10, Reserved = 9, Code = "A" };
         runtime.Add(set, source);
-        Assert.True(runtime.Get(validity, source));
+        Assert.True(runtime.Evaluate(validity, source));
         return new Scenario(runtime, set, source, validity);
     }
 

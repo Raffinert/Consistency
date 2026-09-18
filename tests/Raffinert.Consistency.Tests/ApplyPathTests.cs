@@ -50,13 +50,13 @@ public sealed class ApplyPathTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(sources)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(source => source.Amount);
-        var invariant = model.Invariant(sources).Using(value).Must((_, amount) => amount <= 1)
+            .Select(source => source.Amount);
+        var invariant = model.Invariant(sources).From(value).Must((_, amount) => amount <= 1)
             .ScheduleRepairWith(source => callbacks.Add(source.Amount));
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Amount = 1 };
         runtime.Add(sources, source);
-        Assert.Equal(1, runtime.Get(value, source));
+        Assert.Equal(1, runtime.Evaluate(value, source));
         Assert.True(runtime.Evaluate(invariant, source));
         callbacks.Clear();
         return new Scenario(runtime, sources, value, invariant, source, callbacks);

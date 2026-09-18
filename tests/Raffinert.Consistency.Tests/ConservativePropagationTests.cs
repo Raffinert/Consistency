@@ -14,9 +14,9 @@ public sealed class ConservativePropagationTests
         scenario.Runtime.Add(scenario.Sources, second);
         scenario.Runtime.Add(scenario.Sources, unrelated);
         scenario.Runtime.Add(scenario.Items, item);
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Count, first));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, second));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, unrelated));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Count, first));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, second));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, unrelated));
         Assert.Equal(0, scenario.Runtime.MaterializedRelationPairCount);
 
         item.Code = "B";
@@ -25,8 +25,8 @@ public sealed class ConservativePropagationTests
         Assert.Equal(DerivedValueState.Dirty, scenario.Runtime.GetState(scenario.Count, first));
         Assert.Equal(DerivedValueState.Dirty, scenario.Runtime.GetState(scenario.Count, second));
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, unrelated));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, first));
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Count, second));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, first));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Count, second));
         Assert.Equal(0, scenario.Runtime.MaterializedRelationPairCount);
     }
 
@@ -38,8 +38,8 @@ public sealed class ConservativePropagationTests
         var unrelated = new Entry { Id = Guid.NewGuid(), Code = "B" };
         scenario.Runtime.Add(scenario.Sources, matching);
         scenario.Runtime.Add(scenario.Sources, unrelated);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, matching));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, unrelated));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, matching));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, unrelated));
         var item = new Entry { Id = Guid.NewGuid(), Code = "A" };
 
         var added = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Add(scenario.Items, item))).Result;
@@ -47,7 +47,7 @@ public sealed class ConservativePropagationTests
         Assert.Equal(DerivedValueState.Dirty, scenario.Runtime.GetState(scenario.Count, matching));
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Count, unrelated));
         Assert.Equal([matching], Assert.Single(added.RelationImpacts).AffectedSources);
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Count, matching));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Count, matching));
 
         var removed = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Remove(scenario.Items, item))).Result;
 
@@ -65,8 +65,8 @@ public sealed class ConservativePropagationTests
         var unrelated = new Entry { Id = Guid.NewGuid(), Code = "B" };
         scenario.Runtime.Add(scenario.Sources, matching);
         scenario.Runtime.Add(scenario.Sources, unrelated);
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, matching));
-        Assert.Equal(0, scenario.Runtime.Get(scenario.Count, unrelated));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, matching));
+        Assert.Equal(0, scenario.Runtime.Evaluate(scenario.Count, unrelated));
 
         scenario.Runtime.Add(scenario.Items, new Entry { Id = Guid.NewGuid(), Code = "A" });
 
@@ -92,10 +92,10 @@ public sealed class ConservativePropagationTests
             Change.Add(scenario.Items, first),
             Change.Add(scenario.Items, second)));
 
-        Assert.Equal([1, 1, 0], sources.Select(source => scenario.Runtime.Get(scenario.Count, source)));
+        Assert.Equal([1, 1, 0], sources.Select(source => scenario.Runtime.Evaluate(scenario.Count, source)));
 
         scenario.Runtime.Remove(scenario.Items, first);
-        Assert.Equal([0, 1, 0], sources.Select(source => scenario.Runtime.Get(scenario.Count, source)));
+        Assert.Equal([0, 1, 0], sources.Select(source => scenario.Runtime.Evaluate(scenario.Count, source)));
         Assert.Equal(0, scenario.Runtime.MaterializedRelationPairCount);
     }
 
@@ -107,8 +107,8 @@ public sealed class ConservativePropagationTests
         var sources = model.Objects<Entry>().Key(value => value.Id);
         var items = model.Objects<Entry>().Key(value => value.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).PreferConservativePropagation()
-            .Compute((_, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation).PreferConservativePropagation()
+            .Select((_, matches) => matches.Count);
         var compiled = model.Build();
         var diagnostics = Assert.Single(compiled.Diagnostics.Relations);
         Assert.Equal(RelationPropagationPlanKind.ConservativeInvalidation, diagnostics.PropagationPlan);

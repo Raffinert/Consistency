@@ -83,14 +83,14 @@ public sealed partial class RuntimeTests
         var relation = model.Relation(sources, items)
             .Where((source, item) => gate.Match(source, item))
             .AllowIncompleteDependencies();
-        var count = model.Derived(sources).Using(relation)
-            .Compute((_, matches) => matches.Count)
+        var count = model.Derived(sources).From(relation)
+            .Select((_, matches) => matches.Count)
             .AllowIncompleteDependencies();
         var runtime = model.Build().CreateRuntime();
         var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         var item = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
         runtime.Add(sources, source);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
         var version = runtime.Version;
         var diagnostics = runtime.Diagnostics;
         gate.Throw = true;
@@ -99,7 +99,7 @@ public sealed partial class RuntimeTests
         Assert.Throws<DeliberateTestException>(() => runtime.Commit(prepared));
 
         Assert.Equal(version, runtime.Version);
-        Assert.Equal(0, runtime.Get(count, source));
+        Assert.Equal(0, runtime.Evaluate(count, source));
         Assert.False(runtime.Remove(items, item));
         Assert.Equal(diagnostics.RelationPairsAdded, runtime.Diagnostics.RelationPairsAdded);
         gate.Throw = false;

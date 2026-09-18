@@ -10,9 +10,9 @@ public sealed class ProjectedDerivedTests
         var links = model.Objects<Link>().Key(value => value.Id);
         var total = model.Derived(orders)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(value => value.Total);
-        var validity = model.Derived(links).Using(value => value.Order, total)
-            .Compute((link, currentTotal) => link.CapturedTotal == currentTotal);
+            .Select(value => value.Total);
+        var validity = model.Derived(links).From(value => value.Order, total)
+            .Select((link, currentTotal) => link.CapturedTotal == currentTotal);
         var firstOrder = new Order { Total = 10 };
         var secondOrder = new Order { Total = 20 };
         var first = new Link { Order = firstOrder, CapturedTotal = 10 };
@@ -22,15 +22,15 @@ public sealed class ProjectedDerivedTests
             seed.Add(orders, [firstOrder, secondOrder]);
             seed.Add(links, [first, second]);
         });
-        Assert.True(runtime.Get(validity, first));
-        Assert.True(runtime.Get(validity, second));
+        Assert.True(runtime.Evaluate(validity, first));
+        Assert.True(runtime.Evaluate(validity, second));
 
         firstOrder.Total = 11;
         runtime.Apply(Change.Property(orders, firstOrder, value => value.Total, 10, 11));
 
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(validity, first));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(validity, second));
-        Assert.False(runtime.Get(validity, first));
+        Assert.False(runtime.Evaluate(validity, first));
     }
 
     [Fact]
@@ -39,9 +39,9 @@ public sealed class ProjectedDerivedTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
-        var validity = model.Derived(links).Using(value => value.Order, total)
-            .Compute((link, currentTotal) => link.CapturedTotal == currentTotal);
+        var total = model.Derived(orders).Select(value => value.Total);
+        var validity = model.Derived(links).From(value => value.Order, total)
+            .Select((link, currentTotal) => link.CapturedTotal == currentTotal);
         var oldOrder = new Order { Total = 10 };
         var newOrder = new Order { Total = 20 };
         var link = new Link { Order = oldOrder, CapturedTotal = 10 };
@@ -50,13 +50,13 @@ public sealed class ProjectedDerivedTests
             seed.Add(orders, [oldOrder, newOrder]);
             seed.Add(links, [link]);
         });
-        Assert.True(runtime.Get(validity, link));
+        Assert.True(runtime.Evaluate(validity, link));
 
         link.Order = newOrder;
         runtime.Apply(Change.Property(links, link, value => value.Order, oldOrder, newOrder));
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(validity, link));
-        Assert.False(runtime.Get(validity, link));
+        Assert.False(runtime.Evaluate(validity, link));
     }
 
     [Fact]
@@ -66,9 +66,9 @@ public sealed class ProjectedDerivedTests
         var upstream = model.Objects<Order>().Key(value => value.Id);
         var other = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(upstream).Compute(value => value.Total);
-        _ = model.Derived(links).Using(value => value.Order, total)
-            .Compute((_, currentTotal) => currentTotal);
+        var total = model.Derived(upstream).Select(value => value.Total);
+        _ = model.Derived(links).From(value => value.Order, total)
+            .Select((_, currentTotal) => currentTotal);
         var compiled = model.Build();
         var target = new Order { Total = 1 };
         var link = new Link { Order = target, CapturedTotal = 1 };
@@ -92,7 +92,7 @@ public sealed class ProjectedDerivedTests
         scenario.Runtime.Apply(MutationSet.Create(
             Change.Add(scenario.Links, link),
             Change.Add(scenario.Orders, target)));
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, link));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Value, link));
         Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Prepare(
             MutationSet.Create(Change.Remove(scenario.Orders, target))));
 
@@ -113,14 +113,14 @@ public sealed class ProjectedDerivedTests
             Change.Add(scenario.Orders, oldTarget),
             Change.Add(scenario.Orders, newTarget),
             Change.Add(scenario.Links, link)));
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, link));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Value, link));
 
         link.Order = newTarget;
         scenario.Runtime.Apply(MutationSet.Create(
             Change.Property(scenario.Links, link, value => value.Order, oldTarget, newTarget),
             Change.Remove(scenario.Orders, oldTarget)));
 
-        Assert.Equal(2, scenario.Runtime.Get(scenario.Value, link));
+        Assert.Equal(2, scenario.Runtime.Evaluate(scenario.Value, link));
         newTarget.Total = 3;
         scenario.Runtime.Apply(Change.Property(
             scenario.Orders, newTarget, value => value.Total, 2, 3));
@@ -133,20 +133,20 @@ public sealed class ProjectedDerivedTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
+        var total = model.Derived(orders).Select(value => value.Total);
         Assert.Throws<ArgumentException>(() => model.Derived(links)
-            .Using(value => Select(value), total)
-            .Compute((_, value) => value));
+            .From(value => Select(value), total)
+            .Select((_, value) => value));
         Assert.Throws<ArgumentException>(() => model.Derived(links)
-            .Using(value => value.Container.Order, total)
-            .Compute((_, value) => value));
+            .From(value => value.Container.Order, total)
+            .Select((_, value) => value));
 
         var validModel = new ConsistencyModelBuilder();
         var validOrders = validModel.Objects<Order>().Key(value => value.Id);
         var validLinks = validModel.Objects<Link>().Key(value => value.Id);
-        var validTotal = validModel.Derived(validOrders).Compute(value => value.Total);
-        _ = validModel.Derived(validLinks).Using(value => value.Order, validTotal)
-            .Compute((_, value) => value);
+        var validTotal = validModel.Derived(validOrders).Select(value => value.Total);
+        _ = validModel.Derived(validLinks).From(value => value.Order, validTotal)
+            .Select((_, value) => value);
         var link = new Link { Order = null!, CapturedTotal = 0 };
         Assert.Throws<InvalidOperationException>(() => validModel.Build().CreateRuntime(seed =>
             seed.Add(validLinks, [link])));
@@ -158,12 +158,12 @@ public sealed class ProjectedDerivedTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
+        var total = model.Derived(orders).Select(value => value.Total);
         var doubled = model.Derived(orders)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(value => value.Total * 2);
-        var combined = model.Derived(links).Using(value => value.Order, total, doubled)
-            .Compute((_, first, second) => first + second);
+            .Select(value => value.Total * 2);
+        var combined = model.Derived(links).From(value => value.Order, total, doubled)
+            .Select((_, first, second) => first + second);
         var order = new Order { Total = 2 };
         var link = new Link { Order = order, CapturedTotal = 2 };
         var runtime = model.Build().CreateRuntime(seed =>
@@ -174,13 +174,13 @@ public sealed class ProjectedDerivedTests
         Assert.Equal(2, runtime.Diagnostics.ProjectedDependencyConsumerCount);
         Assert.Equal(1, runtime.Diagnostics.ProjectionIndexCount);
         Assert.Equal(1, runtime.Diagnostics.ReverseProjectionEntryCount);
-        Assert.Equal(6, runtime.Get(combined, link));
+        Assert.Equal(6, runtime.Evaluate(combined, link));
 
         order.Total = 3;
         runtime.Apply(Change.Property(orders, order, value => value.Total, 2, 3));
 
         Assert.Equal(DerivedValueState.Invalid, runtime.GetState(combined, link));
-        Assert.Equal(9, runtime.Get(combined, link));
+        Assert.Equal(9, runtime.Evaluate(combined, link));
     }
 
     [Fact]
@@ -189,12 +189,12 @@ public sealed class ProjectedDerivedTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
+        var total = model.Derived(orders).Select(value => value.Total);
         var doubled = model.Derived(orders)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(value => value.Total * 2);
-        var combined = model.Derived(links).Using(value => value.Order, total, doubled)
-            .Compute((link, first, second) => first + second + link.CapturedTotal);
+            .Select(value => value.Total * 2);
+        var combined = model.Derived(links).From(value => value.Order, total, doubled)
+            .Select((link, first, second) => first + second + link.CapturedTotal);
         var owners = Enumerable.Range(0, 8).Select(index => new Order { Total = index }).ToArray();
         var downstream = Enumerable.Range(0, 40)
             .Select(index => new Link { Order = owners[index % owners.Length], CapturedTotal = index }).ToArray();
@@ -204,7 +204,7 @@ public sealed class ProjectedDerivedTests
             seed.Add(orders, owners);
         });
         foreach (var link in downstream)
-            _ = runtime.Get(combined, link);
+            _ = runtime.Evaluate(combined, link);
         var random = new Random(34040);
 
         for (var step = 0; step < 150; step++)
@@ -225,7 +225,7 @@ public sealed class ProjectedDerivedTests
             }
 
             foreach (var link in downstream)
-                Assert.Equal(link.Order.Total * 3 + link.CapturedTotal, runtime.Get(combined, link));
+                Assert.Equal(link.Order.Total * 3 + link.CapturedTotal, runtime.Evaluate(combined, link));
         }
     }
 
@@ -234,9 +234,9 @@ public sealed class ProjectedDerivedTests
         var model = new ConsistencyModelBuilder();
         var orders = model.Objects<Order>().Key(value => value.Id);
         var links = model.Objects<Link>().Key(value => value.Id);
-        var total = model.Derived(orders).Compute(value => value.Total);
-        var value = model.Derived(links).Using(link => link.Order, total)
-            .Compute((_, current) => current);
+        var total = model.Derived(orders).Select(value => value.Total);
+        var value = model.Derived(links).From(link => link.Order, total)
+            .Select((_, current) => current);
         return new IntegrityScenario(model.Build().CreateRuntime(), orders, links, value);
     }
 

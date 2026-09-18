@@ -36,8 +36,8 @@ public sealed class EndToEndDomainTests
             Change.Add(scenario.Lines, firstLine),
             Change.Add(scenario.Lines, otherLine),
             Change.Add(scenario.Fulfillments, fulfillment)));
-        Assert.Equal(2m, runtime.Get(scenario.Fulfilled, firstLine));
-        Assert.Equal(0m, runtime.Get(scenario.Fulfilled, otherLine));
+        Assert.Equal(2m, runtime.Evaluate(scenario.Fulfilled, firstLine));
+        Assert.Equal(0m, runtime.Evaluate(scenario.Fulfilled, otherLine));
         Assert.True(runtime.Evaluate(scenario.QuantityInvariant, firstLine));
         repairs.Clear();
 
@@ -54,7 +54,7 @@ public sealed class EndToEndDomainTests
         Assert.Single(update.RepairRequests);
         application.Dispatch.Invoke();
         Assert.Equal([firstLine], repairs);
-        Assert.Equal(6m, runtime.Get(scenario.Fulfilled, firstLine));
+        Assert.Equal(6m, runtime.Evaluate(scenario.Fulfilled, firstLine));
         Assert.False(runtime.Evaluate(scenario.QuantityInvariant, firstLine));
 
         fulfillment.Cancelled = true;
@@ -92,7 +92,7 @@ public sealed class EndToEndDomainTests
         };
         context.AddRange(line, fulfillment);
         context.SaveChangesAndApply(runtime, mappings);
-        Assert.Equal(2m, runtime.Get(scenario.Fulfilled, line));
+        Assert.Equal(2m, runtime.Evaluate(scenario.Fulfilled, line));
         Assert.True(runtime.Evaluate(scenario.QuantityInvariant, line));
         repairs.Clear();
 
@@ -172,14 +172,13 @@ public sealed class EndToEndDomainTests
             line.OrderNumber == fulfillment.OrderNumber &&
             line.ItemNumber == fulfillment.ItemNumber &&
             !fulfillment.Cancelled);
-        var received = model.Derived(lines).Using(matches)
+        var received = model.Derived(lines).From(matches)
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Dirty)
                 .MembershipRemoved(DependencySeverity.Invalid)
                 .ItemChanged(DependencySeverity.Invalid))
-            .Incrementally()
-            .Compute((line, related) => related.Sum(fulfillment => fulfillment.Quantity));
-        var invariant = model.Invariant(lines).Using(received)
+            .Sum(fulfillment => fulfillment.Quantity);
+        var invariant = model.Invariant(lines).From(received)
             .Must((line, quantity) => quantity <= line.OrderedQuantity)
             .ScheduleRepairWith(repairs.Add);
         return new Scenario(model.Build(), lines, fulfillments, matches, received, invariant);

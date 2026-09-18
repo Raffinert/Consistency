@@ -9,20 +9,20 @@ public sealed class DependencyDagCausalEvidenceTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var root = model.Derived(sources)
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
-            .Compute(source => source.Value).Named("root");
-        var chain = model.Derived(sources).Using(root)
-            .Compute((_, value) => value + 1).Named("chain");
-        var left = model.Derived(sources).Using(chain)
-            .Compute((_, value) => value + 2).Named("left");
-        var right = model.Derived(sources).Using(chain)
-            .Compute((_, value) => value + 3).Named("right");
-        var join = model.Derived(sources).Using(left, right)
-            .Compute((_, first, second) => first + second).Named("join");
-        model.Invariant(sources).Using(join)
+            .Select(source => source.Value).Named("root");
+        var chain = model.Derived(sources).From(root)
+            .Select((_, value) => value + 1).Named("chain");
+        var left = model.Derived(sources).From(chain)
+            .Select((_, value) => value + 2).Named("left");
+        var right = model.Derived(sources).From(chain)
+            .Select((_, value) => value + 3).Named("right");
+        var join = model.Derived(sources).From(left).From(right)
+            .Select((_, first, second) => first + second).Named("join");
+        model.Invariant(sources).From(join)
             .Must((_, value) => value < 100).Named("limit");
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
-        _ = runtime.Get(join, source);
+        _ = runtime.Evaluate(join, source);
         source.Value = 2;
 
         var result = runtime.ApplyDetailed(

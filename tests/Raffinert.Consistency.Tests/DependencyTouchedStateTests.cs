@@ -8,8 +8,8 @@ public sealed class DependencyTouchedStateTests
         var scenario = CreateScenario(2);
         var touched = scenario.Sources[0];
         var unrelated = scenario.Sources[1];
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, touched));
-        Assert.Equal(2, scenario.Runtime.Get(scenario.Value, unrelated));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Value, touched));
+        Assert.Equal(2, scenario.Runtime.Evaluate(scenario.Value, unrelated));
         Assert.True(scenario.Runtime.Evaluate(scenario.Invariant, touched));
         Assert.True(scenario.Runtime.Evaluate(scenario.Invariant, unrelated));
         touched.Value = 3;
@@ -19,9 +19,9 @@ public sealed class DependencyTouchedStateTests
         _ = scenario.Runtime.PreviewDetailed(prepared);
 
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Value, touched));
-        Assert.Equal(1, scenario.Runtime.Get(scenario.Value, touched));
+        Assert.Equal(1, scenario.Runtime.Evaluate(scenario.Value, touched));
         Assert.Equal(DerivedValueState.Fresh, scenario.Runtime.GetState(scenario.Value, unrelated));
-        Assert.Equal(2, scenario.Runtime.Get(scenario.Value, unrelated));
+        Assert.Equal(2, scenario.Runtime.Evaluate(scenario.Value, unrelated));
         Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(scenario.Invariant, touched));
         Assert.Equal(InvariantEvaluationState.Valid, scenario.Runtime.GetState(scenario.Invariant, unrelated));
     }
@@ -32,8 +32,8 @@ public sealed class DependencyTouchedStateTests
         var scenario = CreateScenario(2);
         var touched = scenario.Sources[0];
         var unrelated = scenario.Sources[1];
-        _ = scenario.Runtime.Get(scenario.Value, touched);
-        _ = scenario.Runtime.Get(scenario.Value, unrelated);
+        _ = scenario.Runtime.Evaluate(scenario.Value, touched);
+        _ = scenario.Runtime.Evaluate(scenario.Value, unrelated);
         _ = scenario.Runtime.Evaluate(scenario.Invariant, touched);
         _ = scenario.Runtime.Evaluate(scenario.Invariant, unrelated);
         touched.Value = 3;
@@ -56,8 +56,7 @@ public sealed class DependencyTouchedStateTests
         var sources = model.Objects<Source>().Key(source => source.Id);
         var items = model.Objects<Item>().Key(item => item.Id);
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
-        var count = model.Derived(sources).Using(relation).Incrementally()
-            .Compute((_, matches) => matches.Count);
+        var count = model.Derived(sources).From(relation).Count();
         var source = new Source { Code = "A" };
         var first = new Item { Code = "A" };
         var second = new Item { Code = "A" };
@@ -66,15 +65,15 @@ public sealed class DependencyTouchedStateTests
             seed.Add(sources, [source]);
             seed.Add(items, [first]);
         });
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
         var prepared = runtime.Prepare(MutationSet.Create(Change.Add(items, second)));
 
         var plan = runtime.PlanDetailed(prepared);
-        Assert.Equal(1, runtime.Get(count, source));
+        Assert.Equal(1, runtime.Evaluate(count, source));
         runtime.Commit(plan);
 
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(count, source));
-        Assert.Equal(2, runtime.Get(count, source));
+        Assert.Equal(2, runtime.Evaluate(count, source));
     }
 
     [Fact]
@@ -105,13 +104,13 @@ public sealed class DependencyTouchedStateTests
     {
         var model = new ConsistencyModelBuilder();
         var set = model.Objects<Source>().Key(source => source.Id);
-        var value = model.Derived(set).Compute(source => source.Value);
-        var invariant = model.Invariant(set).Using(value).Must((_, current) => current >= 0);
+        var value = model.Derived(set).Select(source => source.Value);
+        var invariant = model.Invariant(set).From(value).Must((_, current) => current >= 0);
         var sources = Enumerable.Range(1, count).Select(index => new Source { Value = index }).ToArray();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(set, sources));
         foreach (var source in sources)
         {
-            _ = runtime.Get(value, source);
+            _ = runtime.Evaluate(value, source);
             _ = runtime.Evaluate(invariant, source);
         }
         return new Scenario(runtime, set, value, invariant, sources);

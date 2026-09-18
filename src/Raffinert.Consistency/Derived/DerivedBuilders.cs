@@ -87,7 +87,7 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return this;
     }
 
-    public DerivedUsingBuilder<TSource, TItem> Using<TItem>(Relation<TSource, TItem> relation)
+    public DerivedUsingBuilder<TSource, TItem> From<TItem>(Relation<TSource, TItem> relation)
         where TItem : class
     {
         ArgumentNullException.ThrowIfNull(relation);
@@ -97,10 +97,7 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return new DerivedUsingBuilder<TSource, TItem>(_model, _source, relation);
     }
 
-    public DerivedUsingBuilder<TSource, TItem> From<TItem>(Relation<TSource, TItem> relation)
-        where TItem : class => Using(relation);
-
-    public DerivedUpstreamBuilder<TSource, TValue> Using<TValue>(Derived<TSource, TValue> upstream)
+    public DerivedUpstreamBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> upstream)
     {
         ArgumentNullException.ThrowIfNull(upstream);
         _model.EnsureDerived(upstream.Definition);
@@ -110,11 +107,8 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _model, _source, upstream, _declaredDependencies.ToArray());
     }
 
-    public DerivedUpstreamBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> upstream) =>
-        Using(upstream);
-
     /// <summary>Uses a derived value owned by an object reached through a tracked reference.</summary>
-    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> Using<TUpstreamSource, TValue>(
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> From<TUpstreamSource, TValue>(
         Expression<Func<TSource, TUpstreamSource>> selector,
         Derived<TUpstreamSource, TValue> upstream)
         where TUpstreamSource : class
@@ -126,13 +120,8 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _model, _source, selector, upstream, _declaredDependencies.ToArray());
     }
 
-    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> From<TUpstreamSource, TValue>(
-        Expression<Func<TSource, TUpstreamSource>> selector,
-        Derived<TUpstreamSource, TValue> upstream)
-        where TUpstreamSource : class => Using(selector, upstream);
-
     public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
-        Using<TUpstreamSource, TFirst, TSecond>(
+        From<TUpstreamSource, TFirst, TSecond>(
             Expression<Func<TSource, TUpstreamSource>> selector,
             Derived<TUpstreamSource, TFirst> first,
             Derived<TUpstreamSource, TSecond> second)
@@ -149,22 +138,8 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _model, _source, selector, first, second);
     }
 
-    public DerivedUpstreamBuilder<TSource, TValue1, TValue2> Using<TValue1, TValue2>(
-        Derived<TSource, TValue1> first,
-        Derived<TSource, TValue2> second)
-    {
-        ArgumentNullException.ThrowIfNull(first);
-        ArgumentNullException.ThrowIfNull(second);
-        _model.EnsureDerived(first.Definition);
-        _model.EnsureDerived(second.Definition);
-        if (!ReferenceEquals(first.Definition.SourceSet, _source.Definition) ||
-            !ReferenceEquals(second.Definition.SourceSet, _source.Definition))
-            throw new ArgumentException("All upstream source sets must match the derived source set.");
-        return new DerivedUpstreamBuilder<TSource, TValue1, TValue2>(_model, _source, first, second);
-    }
-
     /// <summary>Defines a value computed directly from the source object.</summary>
-    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TValue>> computation)
+    public Derived<TSource, TValue> Select<TValue>(Expression<Func<TSource, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new SourceDerivedDefinition<TSource, TValue>(
@@ -177,15 +152,12 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return new Derived<TSource, TValue>(definition, _model);
     }
 
-    public Derived<TSource, TValue> Select<TValue>(Expression<Func<TSource, TValue>> computation) =>
-        Compute(computation);
-
     internal Derived<TSource, TValue> SelectOpaque<TValue>(Func<TSource, TValue> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
         var source = Expression.Parameter(typeof(TSource), "source");
         var invocation = Expression.Invoke(Expression.Constant(computation), source);
-        return Compute(Expression.Lambda<Func<TSource, TValue>>(invocation, source));
+        return Select(Expression.Lambda<Func<TSource, TValue>>(invocation, source));
     }
 }
 
@@ -243,7 +215,8 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         return this;
     }
 
-    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TUpstream, TValue>> computation)
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TUpstream, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
@@ -253,8 +226,6 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         return new Derived<TSource, TValue>(definition, _model);
     }
 
-    public Derived<TSource, TValue> Select<TValue>(
-        Expression<Func<TSource, TUpstream, TValue>> computation) => Compute(computation);
 }
 
 public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
@@ -288,7 +259,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TF
         return this;
     }
 
-    public Derived<TSource, TValue> Compute<TValue>(
+    public Derived<TSource, TValue> Select<TValue>(
         Expression<Func<TSource, TFirst, TSecond, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
@@ -422,7 +393,8 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
         return this;
     }
 
-    public Derived<TSource, TValue> Compute<TValue>(Expression<Func<TSource, TUpstream, TValue>> computation)
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TUpstream, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ComposedDerivedDefinition<TSource, TUpstream, TValue>(
@@ -431,9 +403,6 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model);
     }
-
-    public Derived<TSource, TValue> Select<TValue>(
-        Expression<Func<TSource, TUpstream, TValue>> computation) => Compute(computation);
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
@@ -477,7 +446,7 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
         return this;
     }
 
-    public Derived<TSource, TValue> Compute<TValue>(
+    public Derived<TSource, TValue> Select<TValue>(
         Expression<Func<TSource, TFirst, TSecond, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
@@ -487,9 +456,6 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model);
     }
-
-    public Derived<TSource, TValue> Select<TValue>(
-        Expression<Func<TSource, TFirst, TSecond, TValue>> computation) => Compute(computation);
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
@@ -510,7 +476,6 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         DependencySeverity.Dirty,
         false,
         []);
-    private bool _useIncrementalComputation;
     private bool _useConservativePropagation;
 
     internal DerivedUsingBuilder(
@@ -534,25 +499,11 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     }
 
     /// <summary>
-    /// Enables exact incremental maintenance for a recognized standalone aggregate. Unsupported
-    /// expressions continue to use the original compiled computation as a full-recompute fallback.
-    /// </summary>
-    public DerivedUsingBuilder<TSource, TItem> Incrementally()
-    {
-        if (_useConservativePropagation)
-            throw new InvalidOperationException("Incremental computation requires exact propagation.");
-        _useIncrementalComputation = true;
-        return this;
-    }
-
-    /// <summary>
     /// Uses source invalidation instead of retaining exact relation pairs. The computation remains
     /// lazy and may invalidate a safe superset of sources.
     /// </summary>
     public DerivedUsingBuilder<TSource, TItem> PreferConservativePropagation()
     {
-        if (_useIncrementalComputation)
-            throw new InvalidOperationException("Conservative propagation cannot supply exact incremental deltas.");
         _useConservativePropagation = true;
         return this;
     }
@@ -572,7 +523,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     public Derived<TSource, bool> Any() =>
         ComputeRecognized(RecognizedAggregateExpressions.Any<TSource, TItem>());
 
-    public Derived<TSource, TValue> Compute<TValue>(
+    public Derived<TSource, TValue> Select<TValue>(
         Expression<Func<TSource, IReadOnlyList<TItem>, TValue>> computation)
     {
         ArgumentNullException.ThrowIfNull(computation);
@@ -582,7 +533,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             computation,
             computation.Compile(),
             _impactPolicy,
-            _model.ForceFullRecomputePlansForTesting || !_useIncrementalComputation,
+            forceFullRecompute: true,
             _useConservativePropagation);
         _model.AddDerived(definition);
         return new Derived<TSource, TValue>(definition, _model);
@@ -657,7 +608,7 @@ public sealed class InvariantBuilder<TSource> where TSource : class
         _source = source;
     }
 
-    public InvariantUsingBuilder<TSource, TValue> Using<TValue>(Derived<TSource, TValue> derived)
+    public InvariantUsingBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> derived)
     {
         ArgumentNullException.ThrowIfNull(derived);
         _model.EnsureDerived(derived.Definition);
@@ -666,22 +617,6 @@ public sealed class InvariantBuilder<TSource> where TSource : class
         return new InvariantUsingBuilder<TSource, TValue>(_model, derived);
     }
 
-    public InvariantUsingBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> derived) =>
-        Using(derived);
-
-    public InvariantUsingBuilder<TSource, TFirst, TSecond> Using<TFirst, TSecond>(
-        Derived<TSource, TFirst> first,
-        Derived<TSource, TSecond> second)
-    {
-        ArgumentNullException.ThrowIfNull(first);
-        ArgumentNullException.ThrowIfNull(second);
-        _model.EnsureDerived(first.Definition);
-        _model.EnsureDerived(second.Definition);
-        if (!ReferenceEquals(first.Definition.SourceSet, _source.Definition) ||
-            !ReferenceEquals(second.Definition.SourceSet, _source.Definition))
-            throw new ArgumentException("All derived source sets must match the invariant source set.");
-        return new InvariantUsingBuilder<TSource, TFirst, TSecond>(_model, first, second);
-    }
 }
 
 public sealed class InvariantUsingBuilder<TSource, TValue>
@@ -694,6 +629,15 @@ public sealed class InvariantUsingBuilder<TSource, TValue>
     {
         _model = model;
         _derived = derived;
+    }
+
+    public InvariantUsingBuilder<TSource, TValue, TSecond> From<TSecond>(Derived<TSource, TSecond> second)
+    {
+        ArgumentNullException.ThrowIfNull(second);
+        _model.EnsureDerived(second.Definition);
+        if (!ReferenceEquals(second.Definition.SourceSet, _derived.Definition.SourceSet))
+            throw new ArgumentException("All derived source sets must match the invariant source set.", nameof(second));
+        return new InvariantUsingBuilder<TSource, TValue, TSecond>(_model, _derived, second);
     }
 
     public Invariant<TSource> Must(Expression<Func<TSource, TValue, bool>> predicate)
