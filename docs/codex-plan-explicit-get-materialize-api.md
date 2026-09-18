@@ -1,4 +1,4 @@
-# Codex plan — explicit `Get` + `Materialize` derived-value API
+# Codex plan — explicit `Evaluate` + `Materialize` derived-value API
 
 Status: **FOLLOW-UP DESIGN / DOGFOOD PLAN — DO NOT MODIFY PRODUCTION API UNTIL THE DESIGN GATE PASSES**
 
@@ -7,38 +7,35 @@ Baseline evidence: commit `48cdbc93ac2d7f15cd8d2f29f89fb1f57a69b69f` (`experimen
 Purpose: evaluate an explicit two-operation consumption model for derived values:
 
 ```csharp
-var current = runtime.Get(priceRate, link);
+var current = runtime.Evaluate(priceRate, link);
 var materialized = runtime.Materialize(priceRate, link);
 ```
 
-with these intended meanings:
+The naming is intentional. `Evaluate` is preferred over `Get` because obtaining the current logical value may execute dependency evaluation, recompute stale nodes, and mutate runtime cache/state. It is not a passive accessor. `Materialize` adds the separate physical side effect of synchronizing a configured domain-property mirror.
+
+Intended meanings:
 
 ```text
-Get
-    = ensure the logical derived value is Fresh and return it
+Evaluate
+    = ensure the logical derived value is Fresh
+    = evaluate/recompute only when required
+    = update runtime cache/state
+    = return TValue
     = DO NOT synchronize a configured domain-property mirror
 
 Materialize
-    = ensure the logical derived value is Fresh
-    + synchronize its configured target property
-    + return the materialized TValue
+    = Evaluate
+    + synchronize the configured target property
+    + return TValue
 ```
 
-For a materialized `PriceRate`, after successful `Materialize`:
-
-```csharp
-var value = runtime.Materialize(priceRate, link);
-
-Debug.Assert(value == link.PriceRate);
-```
-
-This plan exists because the previous storage experiment showed that making `Get` itself synchronize properties (Model B/C) introduces hidden physical mutation, EF tracking surprises, setter atomicity, feedback-loop risk, and rollback complexity. It also showed that Model A leaves an ordinary-looking property stale after `Get`. The explicit `Materialize` operation is a fourth design candidate that keeps evaluation and representation synchronization separate and makes the side effect visible at the call site.
+`Evaluate` does **not** mean force recomputation. A Fresh cached value must be returned without executing the computation again. If a future force-recompute operation is ever needed, it should be a separately named concept such as `Recompute`, not overloaded into `Evaluate`.
 
 ---
 
-# 1. Read the completed evidence first
+# 1. Read completed evidence first
 
-Before writing code, read:
+Before coding, read:
 
 ```text
 docs/codex-plan-derived-storage-materialization-semantics.md
@@ -50,51 +47,102 @@ src/Raffinert.Consistency/Runtime/**
 src/Raffinert.Consistency.EntityFrameworkCore/**
 ```
 
-Do not repeat Models A/B/C from scratch. Their results are evidence for this plan.
+Do not repeat Models A/B/C from scratch. Preserve their evidence.
 
-Record these verified facts from the completed experiment:
+Verify and record:
 
 ```text
-A: Get can return Fresh 5.5 while link.PriceRate remains stale 6.
-B/C: Get can synchronize link.PriceRate, but a method named Get then physically mutates the object and EF tracking state.
-All models: an unread stale materialized value still requires an explicit persistence/materialization boundary.
+A: logical evaluation can return Fresh 5.5 while link.PriceRate remains stale 6.
+B/C: synchronizing the property during the logical read physically mutates the object and EF tracking state.
+All models: an unread stale materialized value requires a persistence/materialization boundary.
 All models: direct property access can read stale data before synchronization.
-B/C: setter failure and rollback require atomic cache/property handling.
-Derived-handle dependencies are safer than treating a materialized target property as an ordinary independent source edge.
+B/C: setter failure and rollback become coupled to logical evaluation.
+Derived-handle dependencies are safer than treating a materialized target property as an independent source edge.
 ```
 
-If repository evidence has changed since the baseline commit, document the difference before proceeding.
+The previous documents may use the provisional name `Get`. In this plan, interpret that logical-read concept as `Evaluate` unless the section explicitly discusses naming history.
 
 ---
 
-# 2. Central proposal to dogfood
+# 2. Central proposal
 
-The proposal is **not** `GetAndApply`.
-
-Use explicit domain terminology:
+Dogfood this API:
 
 ```csharp
-TValue Get<TSource, TValue>(derived, source);
+TValue Evaluate<TSource, TValue>(derived, source);
 TValue Materialize<TSource, TValue>(derived, source);
 ```
 
-Intended semantic matrix:
+Semantic matrix:
 
-| Operation | Ensure Fresh | Update runtime cache | Assign configured property | Return TValue |
-|---|---:|---:|---:|---:|
-| `Get` | yes | yes | no | yes |
-| `Materialize` | yes | yes | yes | yes |
-| direct property read | no | no | no | stored value |
+| Operation | Ensure Fresh | May evaluate dependencies | May run computation | Update runtime cache | Assign configured property | Return TValue |
+|---|---:|---:|---:|---:|---:|---:|
+| `Evaluate` | yes | yes | only if needed | yes | no | yes |
+| `Materialize` | yes | yes | only if needed | yes | yes | yes |
+| direct property read | no | no | no | no | no | stored value |
 
-Do not add `GetAndApply` unless the dogfood proves `Materialize` is semantically wrong. `Apply` is already overloaded by mutation/application concepts and does not say what is being synchronized.
+Do not add `Get`, `GetActualValue`, `GetFresh`, `EnsureFresh`, `GetAndApply`, `GetAndMaterialize`, or `Refresh` as aliases during this wave.
 
-Do not add `Refresh` in this wave. It is ambiguous between “make runtime value Fresh” and “write the target property”.
+The concept vocabulary under test is:
+
+```text
+Invalidate -> Evaluate -> Materialize -> Repair/Persist
+```
+
+Do not assume every transition occurs for every workflow.
 
 ---
 
-# 3. Fundamental model for this candidate
+# 3. Why `Evaluate` is different from `Get`
 
-For this experiment, start from **runtime-authoritative derived value + optional materialized mirror**:
+The agent must explicitly test the naming against behavior.
+
+This call:
+
+```csharp
+var value = runtime.Evaluate(priceRate, link);
+```
+
+may perform:
+
+```text
+inspect PriceRate state
+    ↓
+find Dirty/Invalid
+    ↓
+evaluate upstream derived dependencies
+    ↓
+recompute PriceRate
+    ↓
+update runtime cache
+    ↓
+Dirty/Invalid -> Fresh
+    ↓
+return value
+```
+
+A method named `Get` can look like a passive cache/property accessor even though the operation above has runtime side effects. `Evaluate` exposes that semantic weight.
+
+However, prove that `Evaluate` is still lazy/cached:
+
+```csharp
+var a = runtime.Evaluate(priceRate, link);
+var b = runtime.Evaluate(priceRate, link);
+```
+
+If nothing changed between calls, the second call must not recompute.
+
+Required documentation sentence to dogfood:
+
+> Returns the current logical value of the derived definition, evaluating it only when its cached value is not Fresh.
+
+If users consistently interpret `Evaluate` as “always recompute”, record that as a naming drawback rather than changing semantics.
+
+---
+
+# 4. Fundamental model
+
+Start from **runtime-authoritative derived value + optional materialized mirror**:
 
 ```text
 DerivedDefinition<TSource,TValue>
@@ -113,15 +161,13 @@ logical current value = runtime derived value
 materialized property = synchronized representation/mirror
 ```
 
-This deliberately differs from property-backed Model C.
-
-Do not delete Model C from previous results. The final comparison must say whether explicit `Materialize` removes enough of Model A's usability problem to prefer runtime-authoritative storage over property-backed storage.
+This deliberately differs from property-backed Model C. Do not delete Model C from previous results. The final comparison must state whether explicit `Evaluate`/`Materialize` is preferable after considering stale direct reads and duplicate representations.
 
 ---
 
-# 4. PriceRate canonical example
+# 5. Canonical PriceRate lifecycle
 
-Use this exact lifecycle as the first executable test:
+Use:
 
 ```text
 initial:
@@ -133,19 +179,19 @@ link.PriceRate          = 6
 mutation:
 InvoiceLine.Price       = 55
 
-before read:
+before evaluation:
 runtime PriceRate       = 6 / Dirty or Invalid
 link.PriceRate          = 6
 logical PriceRate       = 5.5
 ```
 
-## 4.1 `Get`
+## 5.1 Evaluate
 
 ```csharp
-var current = runtime.Get(priceRate, link);
+var current = runtime.Evaluate(priceRate, link);
 ```
 
-Required result:
+Required:
 
 ```text
 current                 = 5.5
@@ -153,25 +199,7 @@ runtime PriceRate       = 5.5 / Fresh
 link.PriceRate          = 6
 ```
 
-## 4.2 `Materialize`
-
-Then:
-
-```csharp
-var value = runtime.Materialize(priceRate, link);
-```
-
-Required result:
-
-```text
-value                   = 5.5
-runtime PriceRate       = 5.5 / Fresh
-link.PriceRate          = 5.5
-```
-
-Because runtime state is already Fresh after `Get`, `Materialize` must not recompute. It only synchronizes the configured target if needed.
-
-Also test direct materialization without prior Get:
+## 5.2 Materialize after Evaluate
 
 ```csharp
 var value = runtime.Materialize(priceRate, link);
@@ -180,110 +208,127 @@ var value = runtime.Materialize(priceRate, link);
 Required:
 
 ```text
+value                   = 5.5
+runtime PriceRate       = 5.5 / Fresh
+link.PriceRate          = 5.5
+PriceRate computation   = NOT run again
+```
+
+## 5.3 Direct Materialize
+
+Without prior Evaluate:
+
+```csharp
+var value = runtime.Materialize(priceRate, link);
+```
+
+Required:
+
+```text
+Evaluate internally
 compute exactly once if stale
 cache 5.5 / Fresh
 assign link.PriceRate = 5.5
 return 5.5
 ```
 
+The implementation relationship under test is conceptually:
+
+```text
+Materialize(derived, source)
+    ↓
+Evaluate(derived, source)   // canonical logical evaluation path
+    ↓
+write configured target
+    ↓
+return TValue
+```
+
+Do not build a second evaluator inside Materialize.
+
 ---
 
-# 5. The important consequence: after `Materialize`, read the property directly
+# 6. Primary usage story
 
-This is intentional and must be documented as a primary use case:
+The API should communicate without extra explanation:
+
+```csharp
+var rate = runtime.Evaluate(priceRate, link);     // need current logical value
+var stored = runtime.Materialize(priceRate, link); // need link.PriceRate synchronized too
+```
+
+After Materialize, both are valid:
+
+```csharp
+var rate = runtime.Materialize(priceRate, link);
+```
+
+and:
 
 ```csharp
 runtime.Materialize(priceRate, link);
 Use(link.PriceRate);
 ```
 
-or:
-
-```csharp
-var rate = runtime.Materialize(priceRate, link);
-```
-
-Both are valid.
-
-Do not invent an additional `GetAndMaterialize` convenience method. `Materialize` already returns `TValue`, so it covers that use case.
-
-The API should communicate:
-
-```text
-Need the current logical value only?          Get
-Need the object property to become current?   Materialize
-```
+Do not add `EvaluateAndMaterialize`. `Materialize` already performs evaluation as necessary and returns `TValue`.
 
 ---
 
-# 6. What happens for runtime-only derived values?
+# 7. Runtime-only derived values
 
 A definition may have no target property:
 
 ```csharp
-var riskScore = ...; // runtime-only derived
+var riskScore = ...;
+var score = runtime.Evaluate(riskScore, link); // valid
 ```
 
-Then:
-
-```csharp
-runtime.Get(riskScore, link); // valid
-```
-
-What should this do?
-
-```csharp
-runtime.Materialize(riskScore, link);
-```
-
-Dogfood two alternatives:
+Dogfood `Materialize(riskScore, link)` alternatives:
 
 ### M1 — reject
 
-Throw a clear misuse exception because no materialization target exists.
+Throw a clear misuse exception because there is no materialization target.
 
-### M2 — degenerate to Get
+### M2 — degenerate to Evaluate
 
-Return the Fresh value without writing anything.
+Return the Fresh value and write nothing.
 
-Default design hypothesis: **M1 is clearer**. A method called `Materialize` should mean that a representation was actually synchronized. Silent degeneration to `Get` hides configuration mistakes.
+Default hypothesis: **M1** is clearer. `Materialize` should mean that some configured representation was actually synchronized.
 
-Do not choose until tested/documented.
+Do not choose without evidence.
 
 ---
 
-# 7. Where does the materialization target belong?
+# 8. Where materialization metadata belongs
 
-This is mandatory.
-
-The current repository has EF materialization concepts. Determine whether explicit runtime materialization requires the target mapping to live in:
+Determine whether target mapping should live in:
 
 ```text
 A. Core compiled model
 B. EF/persistence adapter only
-C. separate optional Core materialization extension/adapter
+C. optional Core materialization adapter/extension
 ```
 
 Dogfood at least A and C conceptually.
 
-The desired plain-object scenario is:
+The desired plain-object story is:
 
 ```csharp
-runtime.Materialize(priceRate, link);
-Debug.Assert(link.PriceRate == current);
+var value = runtime.Materialize(priceRate, link);
+Debug.Assert(link.PriceRate == value);
 ```
 
-without requiring an EF `DbContext`.
+without requiring EF.
 
-If this is a real requirement, EF-only mapping cannot power the public Core operation by itself.
+If this is a real requirement, EF-only metadata cannot power the Core API by itself.
 
-Do not move existing EF APIs into Core during the spike. Create concept-only mapping facades.
+Do not move production EF APIs during the spike.
 
 ---
 
-# 8. Declaration syntax alternatives
+# 9. Declaration syntax
 
-Compare at least:
+Compare:
 
 ```csharp
 var priceRate = links
@@ -292,7 +337,7 @@ var priceRate = links
     .Named("price-rate");
 ```
 
-and:
+and current-builder equivalent:
 
 ```csharp
 var priceRate = model.Derived(links)
@@ -301,127 +346,96 @@ var priceRate = model.Derived(links)
     .Named("price-rate");
 ```
 
-Do **not** use:
+Do not default to:
 
 ```csharp
 Derive(x => x.PriceRate, compute)
 ```
 
-as the default in this candidate, because that syntax strongly suggests the property is the derived value's storage/identity (Model C). This plan is testing mirror/output semantics.
+because that syntax implies property-backed identity/storage (previous Model C), while this plan tests runtime-authoritative value + mirror semantics.
 
-If `MaterializeTo` feels too persistence-specific for Core, compare names:
-
-```text
-MaterializeTo
-StoreTo
-MirrorTo
-ProjectTo
-WriteTo
-```
-
-Do not rename based on taste. Record which name best matches actual semantics.
+If `MaterializeTo` is unclear for Core, compare `MirrorTo`, `StoreTo`, `WriteTo`, and `MaterializeTo`, but do not add aliases.
 
 ---
 
-# 9. Materialize must be idempotent when already synchronized
+# 10. Fresh runtime + stale mirror is first-class
 
-Test:
+After:
 
 ```csharp
-runtime.Materialize(priceRate, link);
-runtime.Materialize(priceRate, link);
+runtime.Evaluate(priceRate, link);
 ```
 
-Second call should:
-
-```text
-not recompute if runtime value is Fresh
-not assign property if target already equals current value, unless setter semantics make equality checks unsafe
-return current TValue
-```
-
-Record how equality is determined:
-
-```text
-EqualityComparer<TValue>.Default?
-configured comparer?
-always assign?
-```
-
-Do not introduce configurable equality without a demonstrated need. But do not assume decimal-only semantics.
-
----
-
-# 10. Fresh cache + stale mirror is a first-class state
-
-This candidate intentionally permits:
+this is valid:
 
 ```text
 runtime value = 5.5 / Fresh
 link.PriceRate = 6
 ```
 
-after `Get`.
+Do not overload Fresh/Dirty/Invalid to describe mirror synchronization.
 
-The implementation must not confuse **value freshness** with **mirror synchronization**.
-
-Therefore determine whether the runtime needs separate mirror state:
+Dogfood whether mirror synchronization needs separate state:
 
 ```text
-ValueState: Fresh / Dirty / Invalid
-MirrorState: Unknown / Synchronized / Stale
+Unknown / Synchronized / Stale
 ```
 
-or whether synchronization can be determined by reading/comparing the target property on each `Materialize`.
+or can be determined by comparing current runtime value to target property at Materialize time.
 
-Dogfood both approaches.
+Prefer no extra state if comparison is sufficient and correct.
 
-Prefer no extra state if equality comparison is sufficient and correct.
-
-But test cases where:
-
-```text
-external code changes target property
-property setter normalizes value
-custom value equality
-nullable target
-```
-
-Do not overload Fresh/Dirty/Invalid to mean mirror synchronization. Those states belong to logical derived correctness.
+Test nullable values, custom equality, external property changes, and setters that normalize values.
 
 ---
 
-# 11. External writes to mirror property
+# 11. Materialize idempotence
 
 Test:
 
 ```csharp
-runtime.Get(priceRate, link); // runtime Fresh 5.5
+runtime.Materialize(priceRate, link);
+runtime.Materialize(priceRate, link);
+```
+
+Second call should not recompute when logical value is Fresh.
+
+Dogfood whether it should avoid redundant assignment when target already equals current value. Record equality semantics. Do not introduce configurable comparers without a demonstrated need.
+
+---
+
+# 12. External writes to mirror
+
+Test:
+
+```csharp
+runtime.Evaluate(priceRate, link); // runtime Fresh 5.5
 link.PriceRate = 999m;
 ```
 
 Then:
 
 ```csharp
-runtime.Get(priceRate, link);         // must still return 5.5
-runtime.Materialize(priceRate, link); // must restore target to 5.5
+runtime.Evaluate(priceRate, link);     // still 5.5
+runtime.Materialize(priceRate, link);  // restores mirror to 5.5
 ```
 
-Under mirror semantics, an external write must **not** become authoritative input to the derived definition.
+Under this candidate, external writes to the mirror never become authoritative inputs.
 
-Decide whether external writes are:
+Analyze protection options:
 
 ```text
-allowed but overwritten on Materialize
-warned/analyzed
-prevented through setter encapsulation
+allow but overwrite
+Roslyn analyzer warning/error
+private/internal setter
+encapsulation/source-generation later
 ```
 
-This candidate does not require hard prohibition for correctness because runtime cache remains authoritative, but direct reads can still observe the rogue value. Record that usability risk.
+Do not implement protection in production during this spike.
 
 ---
 
-# 12. Derived handle versus target-property dependency
+# 13. Derived handle versus mirror-property dependency
 
 Use:
 
@@ -429,35 +443,35 @@ Use:
 PriceRate -> UnitRate
 ```
 
-Preferred declaration:
+Preferred:
 
 ```csharp
 unitRate.Using(priceRate)
 ```
 
-Test accidental declaration:
+Dogfood accidental:
 
 ```csharp
 unitRate.DependsOn(x => x.PriceRate)
 ```
 
-Because `link.PriceRate` is only a mirror, the second declaration has different semantics and can be stale after `Get(priceRate, link)`.
+Because `link.PriceRate` is only a mirror, the latter can observe stale state after `Evaluate(priceRate, link)`.
 
-The experiment must decide whether compilation should:
+Compare compiler policies:
 
 ```text
-A. allow it as an ordinary property dependency and accept mirror semantics
+A. allow and accept split semantics
 B. warn/reject dependencies on registered materialization targets
-C. canonicalize target-property dependency to the derived handle
+C. canonicalize target-property dependency to derived-handle dependency
 ```
 
-Default hypothesis: **B or C**, because allowing both creates a subtle split graph.
+Default hypothesis: B or C.
 
-Do not implement compiler rejection in production during this plan.
+This is mandatory because explicit Evaluate makes the distinction between logical node and physical mirror sharper.
 
 ---
 
-# 13. Transitive Get must not materialize upstream mirrors
+# 14. Transitive Evaluate must not materialize mirrors
 
 Scenario:
 
@@ -470,52 +484,48 @@ UnitRate (materialized mirror)
 After both become stale:
 
 ```csharp
-var unit = runtime.Get(unitRate, link);
+var unit = runtime.Evaluate(unitRate, link);
 ```
 
-Required candidate semantics:
+Required:
 
 ```text
-PriceRate logical value recomputed as needed
-UnitRate logical value recomputed
+PriceRate logical value evaluated as needed
+UnitRate logical value evaluated
 both runtime states Fresh
-link.PriceRate mirror may remain old
-link.UnitRate mirror may remain old
+link.PriceRate may remain old
+link.UnitRate may remain old
 ```
 
-`Get` means evaluation, not materialization, even transitively.
+This is the key semantic benefit of the name `Evaluate`: transitive graph evaluation is allowed; representation writes are not implied.
 
-Then:
+Then dogfood:
 
 ```csharp
 runtime.Materialize(unitRate, link);
 ```
 
-Dogfood two policies:
+Compare:
 
-### T1 — materialize only requested target
+### T1 — requested target only
 
 ```text
 link.UnitRate updated
 link.PriceRate may remain stale
 ```
 
-### T2 — materialize materialized upstream dependency closure
+### T2 — materialized upstream closure
 
 ```text
 link.PriceRate updated
 link.UnitRate updated
 ```
 
-Default hypothesis: **T1**. `Materialize(unitRate)` should synchronize the representation explicitly requested, while evaluation can use runtime values without requiring every intermediate mirror to be written.
-
-But persistence bulk materialization may deliberately choose closure/all affected mappings.
-
-Do not decide without tests.
+Default hypothesis: **T1** for explicit single-node Materialize. Persistence bulk materialization may intentionally process an affected closure.
 
 ---
 
-# 14. Relation-backed incremental aggregate
+# 15. Incremental aggregate
 
 Use:
 
@@ -523,115 +533,122 @@ Use:
 OrderLine + Fulfillments -> FulfilledQuantity -> orderLine.FulfilledQuantity
 ```
 
-When an incremental add keeps the runtime aggregate Fresh:
+When incremental propagation already keeps runtime aggregate Fresh:
 
 ```text
-runtime cache = new current aggregate / Fresh
+runtime cache = current aggregate / Fresh
 property mirror = old aggregate
 ```
 
 Then:
 
 ```csharp
-runtime.Get(fulfilledQuantity, line);
+runtime.Evaluate(fulfilledQuantity, line);
 ```
 
-must not write the property.
+must return the Fresh cache with no full recompute and no property write.
 
 ```csharp
 runtime.Materialize(fulfilledQuantity, line);
 ```
 
-must write the already-Fresh cached aggregate without forcing a full scan/recompute.
+must write that already-Fresh value without a full scan/recompute.
 
-This scenario is mandatory because it demonstrates why evaluation and materialization are independent operations.
+This scenario proves `Evaluate` means “ensure current”, not “execute calculator”.
 
 ---
 
-# 15. Dirty / Invalid and pending repair
+# 16. Dirty / Invalid and pending repair
 
-Use the existing PriceRate -> UnitRate -> link validity -> rematch scenario.
-
-After mutation:
+Use:
 
 ```text
-PriceRate Invalid
+PriceRate change
+    ↓
 UnitRate Invalid
+    ↓
 LinkValidity Invalid
-repair pending
+    ↓
+pending rematch
 ```
 
 Call:
 
 ```csharp
-runtime.Materialize(priceRate, link);
+runtime.Evaluate(priceRate, link);
 ```
 
-Expected:
-
-```text
-PriceRate becomes Fresh
-link.PriceRate becomes current
-UnitRate may remain Invalid
-LinkValidity remains Invalid
-repair remains pending
-```
-
-Materialization must not be interpreted as business repair.
-
-Then dispatch/complete existing policy and prove repair still occurs exactly as required.
-
----
-
-# 16. Setter/materializer failure atomicity
-
-This is the most important implementation-risk test.
-
-Suppose runtime value is stale and target setter throws:
+or:
 
 ```csharp
 runtime.Materialize(priceRate, link);
 ```
 
-There are two stages:
+Required:
 
 ```text
-1. ensure logical value Fresh
-2. assign target property
+PriceRate may become Fresh
+PriceRate mirror changes only for Materialize
+UnitRate may remain Invalid
+LinkValidity remains Invalid
+pending repair remains pending
 ```
 
-If stage 1 succeeds and stage 2 fails, candidate semantics should normally be:
+Evaluation/materialization is not business repair.
+
+---
+
+# 17. Computation failure
+
+If evaluation throws:
+
+```csharp
+runtime.Evaluate(priceRate, link);
+```
+
+prove:
 
 ```text
-runtime value may remain Fresh = 5.5
-property remains 6
+no new value is marked Fresh
+mirror is untouched
+pending consequences are preserved
+exception propagates according to existing conventions
+```
+
+`Materialize` must use the same evaluation semantics and must not assign the target when evaluation failed.
+
+---
+
+# 18. Setter/materializer failure
+
+If logical evaluation succeeds but target setter throws during:
+
+```csharp
+runtime.Materialize(priceRate, link);
+```
+
+candidate semantics should normally be:
+
+```text
+runtime logical value may remain 5.5 / Fresh
+link.PriceRate remains 6
 Materialize throws
 ```
 
-This is **not** necessarily inconsistent because mirror synchronization is separate from logical freshness.
+This is acceptable because logical freshness and mirror synchronization are separate.
 
-That is a major simplification compared with Model B/C, where Get promised the property was synchronized before returning.
+On retry, Materialize should reuse Fresh 5.5 and retry only assignment.
 
-Dogfood whether this simple behavior is sufficient.
-
-On retry:
-
-```csharp
-runtime.Materialize(priceRate, link);
-```
-
-must reuse Fresh 5.5 and retry only the assignment.
-
-Do not roll runtime value back merely to make mirror assignment atomic unless a real invariant requires it.
+This is a major simplification versus designs where logical read itself promises target synchronization.
 
 ---
 
-# 17. EF tracking semantics
+# 19. EF tracking
 
-For tracked entity:
+For a tracked entity:
 
 ```csharp
-runtime.Get(priceRate, link);
+runtime.Evaluate(priceRate, link);
 ```
 
 must not mark `PriceRate` modified.
@@ -640,215 +657,202 @@ must not mark `PriceRate` modified.
 runtime.Materialize(priceRate, link);
 ```
 
-should naturally mark `PriceRate` modified if the setter/property assignment changes it.
+may naturally mark `PriceRate` modified if assignment changes it. This side effect is explicit in the method name.
 
-This side effect is expected because the method explicitly says Materialize.
+Compare this directly with previous B/C evidence where provisional `Get` changed EF state.
 
-Compare this to the previous Model B/C result where `Get` itself unexpectedly changed EF tracking state.
-
-Also prove the existing SaveChanges/EF materialization boundary can reuse the same underlying materialization primitive or at least the same semantics.
-
-Avoid two implementations that can diverge.
+Existing EF persistence materialization should reuse the same underlying semantic primitive where possible. Avoid two materialization implementations that can diverge.
 
 ---
 
-# 18. Persistence without explicit application Materialize
+# 20. Persistence without explicit Materialize
 
-The application must not be required to remember:
+Application code must not be forced to write:
 
 ```csharp
 runtime.Materialize(priceRate, link);
 await db.SaveChangesAsync();
 ```
 
-if the EF mapping declares PriceRate as persisted materialized state.
+when persistence mapping already declares PriceRate as materialized state.
 
-Existing persistence integration should still guarantee:
+Required persistence lifecycle:
 
 ```text
 input mutation
     ↓
-no Get
+no Evaluate
     ↓
 no explicit Materialize
     ↓
 SaveChanges / Complete
     ↓
-logical value evaluated
+evaluate logical value as required
     ↓
-property synchronized
+synchronize mapped property
     ↓
-correct value persisted
+persist current value
 ```
 
-The explicit runtime method is for in-memory/application synchronization, not a mandatory persistence ritual.
-
-Dogfood both paths and assert identical final property/persisted values.
+Explicit runtime Materialize is for in-memory/application synchronization, not a mandatory persistence ritual.
 
 ---
 
-# 19. Plain-object use without EF
+# 21. Plain-object use
 
-This is a key reason to consider materialization a Core-level concept.
-
-Prove a plain object can do:
+Prove or document blocker for:
 
 ```csharp
 var value = runtime.Materialize(priceRate, link);
 Debug.Assert(link.PriceRate == value);
 ```
 
-without DbContext or persistence adapter.
+without DbContext.
 
-If the mapping currently exists only in EF configuration, prototype a concept-only Core mapping registration and compare complexity.
-
-Do not move production mapping yet.
+This determines whether materialization belongs in Core semantics or only persistence adapters.
 
 ---
 
-# 20. Bulk materialization
+# 22. Bulk materialization
 
-Dogfood conceptually:
+Dogfood conceptually, but do not add production APIs:
 
 ```csharp
 runtime.Materialize(priceRate, links);
-```
-
-and/or:
-
-```csharp
 runtime.Materialize(link);
 ```
-
-Do not add either to production.
 
 Questions:
 
 ```text
-Is bulk by definition useful for non-EF workflows?
-Can affected-source tracking make it efficient?
-Should Materialize(link) synchronize every configured derived mirror for one source?
-Can ordering follow the compiled DAG?
-Does persistence already solve the only real bulk use case?
+Is there a concrete non-EF use case?
+Can affected-source tracking avoid scanning everything?
+Should per-source Materialize synchronize every configured mirror?
+Does persistence already cover the only important bulk case?
 ```
 
-If there is no concrete non-EF use case, keep public API single-definition/single-source for now.
+If no concrete use case exists, keep the candidate API single-definition/single-source.
 
 ---
 
-# 21. Naming dogfood
+# 23. Naming experiment: `Evaluate` vs `Get`
 
-Compare only these candidate pairs:
+Although `Evaluate` is now the primary candidate, the agent must collect evidence rather than merely replace strings.
+
+Compare:
+
+```csharp
+runtime.Evaluate(priceRate, link);
+runtime.Materialize(priceRate, link);
+```
+
+with historical:
 
 ```csharp
 runtime.Get(priceRate, link);
 runtime.Materialize(priceRate, link);
 ```
 
-```csharp
-runtime.Get(priceRate, link);
-runtime.GetAndApply(priceRate, link);
-```
-
-```csharp
-runtime.Get(priceRate, link);
-runtime.Sync(priceRate, link);
-```
-
-Evaluate:
+Ask reviewers/readers what each first method implies about:
 
 ```text
-Does the name expose the physical side effect?
-Does it reuse an existing Consistency term with another meaning?
-Does it scale to persistence/bulk operations?
-Does it make sense when called without a prior Get?
-Does returning TValue feel natural?
+cache use
+recomputation
+runtime state mutation
+property mutation
+force recomputation
 ```
 
-Expected hypothesis: `Materialize` is strongest because it names representation synchronization directly and already exists conceptually in the project.
+The desired interpretation for `Evaluate` is:
 
-Do not add aliases.
+> Return the current logical value, evaluating only what is necessary when the cached value is not Fresh.
 
----
-
-# 22. Do we still need `GetState`?
-
-Keep this question separate.
-
-The minimal business-facing API may be only:
-
-```csharp
-runtime.Get(...);
-runtime.Materialize(...);
-```
-
-`GetState` may be diagnostics/advanced control rather than ordinary consumption.
-
-Dogfood whether any D1-D12/GM scenarios require application code to inspect Fresh/Dirty/Invalid before calling Get/Materialize.
-
-If not, recommend keeping `GetState` advanced/internal or exposing it only for diagnostics. Do not implement/remove it in this spike.
-
-`TryGetCached` remains out of the normal public API unless a concrete use case appears.
-
----
-
-# 23. Misuse analysis
-
-The results must explicitly compare these incorrect snippets:
-
-```csharp
-// stale mirror risk
-Use(link.PriceRate);
-```
-
-```csharp
-// unnecessary materialization when only a logical value was needed
-var rate = runtime.Materialize(priceRate, link);
-```
-
-```csharp
-// split dependency graph
-unitRate.DependsOn(x => x.PriceRate);
-```
-
-```csharp
-// rogue mirror write
-link.PriceRate = 999m;
-```
-
-For each, state whether the API:
+Record two possible naming risks:
 
 ```text
-prevents it
-makes it obvious
-can diagnose it
-silently allows it
+Get risk: sounds too passive for an operation that can recompute and mutate runtime state.
+Evaluate risk: may sound like it always executes the computation.
 ```
 
-Do not claim explicit Materialize solves stale direct reads. It only makes synchronization explicit when the caller chooses it.
+Do not add both names to production. The results must recommend one for maintainer approval.
+
+Also compare `Materialize` against `GetAndApply` and `Sync` only as naming evidence. Do not implement aliases.
 
 ---
 
-# 24. Concept project / deliverables
+# 24. Do we need GetState?
 
-Extend the existing storage experiment rather than creating another engine.
+Keep separate from the Evaluate/Materialize decision.
 
-Preferred additions:
+Dogfood whether normal business code ever needs:
+
+```csharp
+runtime.GetState(priceRate, link);
+```
+
+before Evaluate or Materialize.
+
+If not, recommend treating state inspection as diagnostics/advanced API rather than core consumption vocabulary.
+
+`TryGetCached` remains out of the normal public API unless a concrete use case emerges.
+
+---
+
+# 25. Misuse analysis
+
+Explicitly analyze:
+
+```csharp
+Use(link.PriceRate); // may read stale mirror
+```
+
+```csharp
+var rate = runtime.Materialize(priceRate, link); // unnecessary physical write if only logical value needed
+```
+
+```csharp
+unitRate.DependsOn(x => x.PriceRate); // split graph risk
+```
+
+```csharp
+link.PriceRate = 999m; // rogue mirror write
+```
+
+```csharp
+runtime.Evaluate(priceRate, link); // reader incorrectly expects forced recompute
+```
+
+For each state whether the design prevents, diagnoses, makes obvious, or silently permits it.
+
+Do not claim Evaluate/Materialize solves stale direct property reads. It makes the two legitimate operations explicit; direct property access remains a separate misuse/protection problem.
+
+---
+
+# 26. Experiment deliverables
+
+Extend:
 
 ```text
 experiments/Raffinert.Consistency.DerivedStorageConcept/
-    ModelD.ExplicitMaterialize.cs
-    Scenarios/
-        GM01GetThenMaterialize.cs
-        GM02DirectMaterialize.cs
-        GM03RuntimeOnlyDerived.cs
-        GM04TransitiveDerived.cs
-        GM05IncrementalAggregate.cs
-        GM06RepairSurvival.cs
-        GM07SetterFailure.cs
-        GM08EfTracking.cs
-        GM09PersistenceWithoutExplicitMaterialize.cs
-        GM10PlainObject.cs
+```
+
+Preferred additions/renames:
+
+```text
+ModelD.ExplicitEvaluateMaterialize.cs
+Scenarios/
+    EM01EvaluateThenMaterialize.cs
+    EM02DirectMaterialize.cs
+    EM03RepeatedEvaluateUsesCache.cs
+    EM04RuntimeOnlyDerived.cs
+    EM05TransitiveDerived.cs
+    EM06IncrementalAggregate.cs
+    EM07RepairSurvival.cs
+    EM08ComputationFailure.cs
+    EM09SetterFailure.cs
+    EM10EfTracking.cs
+    EM11PersistenceWithoutExplicitMaterialize.cs
+    EM12PlainObject.cs
 ```
 
 Update:
@@ -857,133 +861,142 @@ Update:
 docs/derived-storage-materialization-concept-results.md
 ```
 
-with a new section:
+with:
 
 ```text
-## Model D — explicit Get / Materialize
+## Model D — explicit Evaluate / Materialize
 ```
 
-Do not rewrite the previous A/B/C evidence.
+Do not rewrite previous A/B/C evidence except to clarify that their provisional `Get` terminology corresponds to logical evaluation in the comparison.
 
 ---
 
-# 25. Required Model D results matrix
+# 27. Results matrix
 
-Append this comparison:
+Append:
 
-| Question | A Get-only mirror | B Get syncs mirror | C property-backed | D explicit Materialize |
+| Question | A runtime-authoritative | B read syncs mirror | C property-backed | D Evaluate/Materialize |
 |---|---|---|---|---|
-| Get returns current logical value | | | | |
-| Get has domain-object side effects | | | | |
+| logical read returns current value | | | | |
+| logical read name communicates possible computation | | | | |
+| repeated Fresh logical read avoids recompute | | | | |
+| logical read has domain-object side effects | | | | |
 | caller can explicitly synchronize property | | | | |
-| synchronization operation returns TValue | | | | |
-| direct property read can be stale before synchronization | | | | |
-| Fresh cache + stale mirror representable | | | | |
-| setter failure requires cache rollback | | | | |
-| EF tracking side effect obvious from call name | | | | |
-| supports runtime-only derived | | | | |
-| incremental Fresh cache can materialize without recompute | | | | |
-| transitive Get avoids unwanted upstream writes | | | | |
-| pending repair survives materialization | | | | |
+| synchronization returns TValue | | | | |
+| direct property can be stale before synchronization | | | | |
+| Fresh runtime + stale mirror representable | | | | |
+| setter failure requires logical-cache rollback | | | | |
+| EF tracking side effect obvious from call | | | | |
+| runtime-only derived supported | | | | |
+| incremental Fresh value materializes without recompute | | | | |
+| transitive evaluation avoids unwanted mirror writes | | | | |
+| pending repair survives evaluation/materialization | | | | |
 | plain-object materialization possible | | | | |
-| persistence works without explicit application call | | | | |
+| persistence works without explicit app call | | | | |
 | invasive Core changes required | | | | |
 | invasive EF changes required | | | | |
 
-No numeric scores.
+No numeric scoring.
 
 ---
 
-# 26. Decision criteria
+# 28. Decision criteria
 
-Evaluate Model D primarily against the failure modes identified by the previous experiment:
+Evaluate Model D primarily against:
 
 ```text
-1. hidden mutation inside a method named Get
-2. stale direct property reads
-3. duplicate authoritative representations
-4. setter failure atomicity complexity
-5. EF change-tracking surprise
-6. feedback loops / split dependency graph
-7. persistence ritual burden
-8. runtime-only derived support
-9. implementation invasiveness
+1. hidden physical mutation in logical-read API
+2. clarity that logical read may perform computation
+3. stale direct property reads
+4. duplicate authoritative representations
+5. setter failure/rollback complexity
+6. EF tracking surprise
+7. feedback loops/split dependency graph
+8. persistence ritual burden
+9. runtime-only derived support
+10. implementation invasiveness
 ```
 
-Model D knowingly does **not** eliminate stale direct property reads. Its proposed advantage is that it makes the transition from logical value to object representation explicit and side-effectful by name, while preserving simple runtime-authoritative evaluation.
-
-The results must say whether that trade is actually better than A/B/C.
+Syntax length is secondary.
 
 ---
 
-# 27. Production design gate
+# 29. Production design gate
 
-After Model D dogfood, stop and ask the maintainer to decide:
+After dogfood, stop and ask maintainer decisions:
 
 ```text
-D1. Should `Get` be strictly non-materializing?
-D2. Should `Materialize` return TValue? (default proposal: yes)
-D3. Should Materialize reject definitions without a target?
-D4. Should Materialize synchronize only the requested definition or its materialized upstream closure?
-D5. Should materialization target metadata become a Core concept, an optional Core adapter, or remain persistence-adapter-specific?
-D6. Should dependencies on registered materialization target properties be rejected/canonicalized to derived-handle dependencies?
-D7. Should external writes to mirror properties remain allowed-but-overwritten, or should analyzer/encapsulation protection be recommended?
-D8. Is Model D preferable to property-backed Model C after considering stale direct reads?
+Q1. Is `Evaluate` preferable to `Get` for the logical read?
+Q2. Is Evaluate explicitly cache-aware/lazy rather than force-recompute? (default: yes)
+Q3. Must Evaluate never synchronize a domain-property mirror? (default: yes)
+Q4. Should Materialize return TValue? (default: yes)
+Q5. Should Materialize reject definitions without a target?
+Q6. Should Materialize synchronize only requested target or upstream materialized closure?
+Q7. Does materialization metadata belong in Core, optional Core adapter, or persistence adapter?
+Q8. Should dependencies on registered mirror properties be rejected/canonicalized to derived handles?
+Q9. Should external writes to mirror properties be protected by analyzer/encapsulation?
+Q10. Is Model D preferable to property-backed Model C after considering stale direct reads?
 ```
 
-Do not implement production public APIs before these are answered.
+Do not modify production public API before these are answered.
 
 ---
 
-# 28. If Model D is selected
+# 30. If Model D is selected
 
-Only after approval create/update the production implementation plan. It should likely contain these phases:
+Create/update a separate production implementation plan with phases:
 
 ```text
-Phase 1: public typed runtime.Get
-Phase 2: Core-level optional materialization-target abstraction
+Phase 1: typed runtime.Evaluate
+Phase 2: optional materialization-target abstraction
 Phase 3: runtime.Materialize returning TValue
-Phase 4: unify/reuse materialization semantics from EF adapter
-Phase 5: dependency-target misuse diagnostics
+Phase 4: unify/reuse EF materialization semantics
+Phase 5: target-property dependency diagnostics
 Phase 6: PriceRate/UnitRate dogfood
-Phase 7: API baselines/docs/samples
+Phase 7: public API baselines/docs/samples
 ```
 
-Important implementation principle:
+Core implementation principle:
 
 ```text
-Materialize(derived, source)
+Materialize
     ↓
-Get(derived, source)       // canonical evaluation path
+Evaluate
     ↓
-write configured target    // separate synchronization path
+write target
     ↓
-return TValue
+return same TValue
 ```
 
-Do not create a second computation engine inside Materialize.
+Do not duplicate graph evaluation.
 
 ---
 
-# 29. Completion checklist
+# 31. Completion checklist
 
 ```text
-[ ] previous A/B/C evidence read and preserved
-[ ] Model D concept added without production changes
-[ ] GM01 Get then Materialize proven
-[ ] GM02 direct Materialize proven
-[ ] GM03 runtime-only derived behavior compared M1/M2
-[ ] GM04 transitive derived behavior compared T1/T2
-[ ] GM05 incremental aggregate materializes Fresh cache without recompute
-[ ] GM06 pending repair survives Materialize
-[ ] GM07 setter failure retry semantics proven
-[ ] GM08 EF tracking behavior proven
-[ ] GM09 persistence succeeds without explicit application Materialize
-[ ] GM10 plain-object materialization proven or architectural blocker documented
-[ ] Fresh runtime + stale mirror state explicitly modeled
-[ ] target-property dependency split-graph risk analyzed
+[ ] previous A/B/C evidence preserved
+[ ] provisional Get terminology mapped to Evaluate in Model D
+[ ] Model D added without production API changes
+[ ] Evaluate stale -> recompute -> Fresh proven
+[ ] repeated Fresh Evaluate -> no recompute proven
+[ ] Evaluate -> no property assignment proven
+[ ] Evaluate then Materialize -> no second recompute proven
+[ ] direct Materialize -> evaluate once + assign proven
+[ ] runtime-only derived behavior M1/M2 compared
+[ ] transitive materialization T1/T2 compared
+[ ] incremental aggregate materializes Fresh cache without recompute
+[ ] pending repair survives Evaluate/Materialize
+[ ] computation failure behavior proven
+[ ] setter failure retry behavior proven
+[ ] EF tracking behavior proven
+[ ] persistence succeeds without explicit app Materialize
+[ ] plain-object materialization proven or blocker documented
+[ ] mirror dependency split-graph risk analyzed
 [ ] external mirror writes analyzed
-[ ] GetAndApply / Sync / Materialize naming compared
+[ ] Evaluate vs Get naming evidence recorded
+[ ] Evaluate force-recompute ambiguity explicitly evaluated
+[ ] GetAndApply/Sync/Materialize naming compared
 [ ] GetState necessity reconsidered
 [ ] A/B/C/D results matrix completed
 [ ] no production Core/EF/public API baseline changes made
@@ -992,22 +1005,20 @@ Do not create a second computation engine inside Materialize.
 
 ---
 
-# 30. Final instruction to the coding agent
+# 32. Final instruction to the coding agent
 
-The goal is not to make this compile:
+Do not mechanically rename `Get` to `Evaluate` and call the task complete.
 
-```csharp
-runtime.Materialize(priceRate, link);
-```
-
-The goal is to prove that two explicit operations form a coherent lifecycle:
+Prove that the vocabulary matches behavior:
 
 ```text
 input changes
     ↓
 derived logical value becomes stale
     ↓
-Get
+Evaluate
+    ↓
+evaluate only what is necessary
     ↓
 logical value becomes Fresh
     ↓
@@ -1015,23 +1026,27 @@ logical value becomes Fresh
     ↓
 Materialize
     ↓
+reuse Fresh logical value
+    ↓
 object property becomes synchronized
     ↓
 persistence can reuse the same semantics
 ```
 
-The key developer story must fit in two lines:
+The developer story should fit in two lines:
 
 ```csharp
-var rate = runtime.Get(priceRate, link);          // current value, no property write
+var rate = runtime.Evaluate(priceRate, link);      // current logical value; no property write
 var stored = runtime.Materialize(priceRate, link); // current value + link.PriceRate synchronized
 ```
 
-And, because `Materialize` returns the value, this must also be a complete and natural usage:
+And this must remain true:
 
 ```csharp
 var rate = runtime.Materialize(priceRate, link);
 // rate == link.PriceRate
 ```
 
-If Model D cannot keep those statements true across transitive dependencies, incremental aggregates, setter failures, repair policy, EF tracking, and plain objects, do not recommend it for production.
+The word `Evaluate` must mean **ensure current through lazy/cached graph evaluation**, not **force execution every time**.
+
+If the candidate cannot keep those statements true across transitive dependencies, incremental aggregates, computation/setter failures, repair policy, EF tracking, and plain objects, do not recommend it for production.
