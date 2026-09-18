@@ -104,7 +104,7 @@ return;
 static async Task RunExternalConsumerDiscoveryScenario()
 {
     await using var connection = new SqliteConnection("Data Source=:memory:");
-    connection.Open();
+    await connection.OpenAsync();
     var options = new DbContextOptionsBuilder<DependencyMaintenanceContext>()
         .UseSqlite(connection)
         .Options;
