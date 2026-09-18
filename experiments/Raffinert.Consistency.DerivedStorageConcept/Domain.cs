@@ -16,10 +16,16 @@ internal sealed class PurchaseOrderInvoiceLine
     public int PurchaseOrderLineId { get; set; }
     public required PurchaseOrderLine PurchaseOrderLine { get; set; }
     public bool ThrowPriceRateComputation { get; set; }
+    public bool ThrowUnitRateComputation { get; set; }
     public bool ThrowOnNextPriceRateSet { get; set; }
+    public bool ThrowOnNextUnitRateSet { get; set; }
     public bool NormalizePriceRate { get; set; }
+    public int PriceRateComputations { get; private set; }
+    public int UnitRateComputations { get; private set; }
+    public int RiskScoreComputations { get; private set; }
     public int PriceRateAssignments { get; private set; }
     public int UnitRateAssignments { get; private set; }
+    public int AlternateUnitRateAssignments { get; private set; }
 
     public decimal PriceRate
     {
@@ -41,6 +47,11 @@ internal sealed class PurchaseOrderInvoiceLine
         get => _unitRate;
         set
         {
+            if (ThrowOnNextUnitRateSet)
+            {
+                ThrowOnNextUnitRateSet = false;
+                throw new InvalidOperationException("Injected UnitRate setter failure.");
+            }
             _unitRate = value;
             UnitRateAssignments++;
         }
@@ -49,7 +60,11 @@ internal sealed class PurchaseOrderInvoiceLine
     public decimal AlternateUnitRate
     {
         get => _alternateUnitRate;
-        set => _alternateUnitRate = value;
+        set
+        {
+            _alternateUnitRate = value;
+            AlternateUnitRateAssignments++;
+        }
     }
 
     public decimal? NullablePriceRate
@@ -72,9 +87,24 @@ internal sealed class PurchaseOrderInvoiceLine
 
     public static decimal CalculatePriceRate(PurchaseOrderInvoiceLine link)
     {
+        link.PriceRateComputations++;
         if (link.ThrowPriceRateComputation)
             throw new InvalidOperationException("Injected PriceRate computation failure.");
         return link.InvoiceLine.Price / link.PurchaseOrderLine.Price;
+    }
+
+    public static decimal CalculateUnitRate(PurchaseOrderInvoiceLine link, decimal rate)
+    {
+        link.UnitRateComputations++;
+        if (link.ThrowUnitRateComputation)
+            throw new InvalidOperationException("Injected UnitRate computation failure.");
+        return rate * 2m;
+    }
+
+    public static decimal CalculateRiskScore(PurchaseOrderInvoiceLine link)
+    {
+        link.RiskScoreComputations++;
+        return link.InvoiceLine.Price - link.PurchaseOrderLine.Price;
     }
 }
 
@@ -103,12 +133,33 @@ internal sealed class PurchaseOrderLine
 
 internal sealed class OrderLine
 {
+    private decimal _fulfilledQuantity;
+    private decimal _remainingQuantity;
+
     public int Id { get; set; }
     public string OrderNumber { get; set; } = "PO-1";
     public int ItemNumber { get; set; } = 1;
     public decimal OrderedQuantity { get; set; }
-    public decimal FulfilledQuantity { get; set; }
-    public decimal RemainingQuantity { get; set; }
+    public decimal FulfilledQuantity
+    {
+        get => _fulfilledQuantity;
+        set
+        {
+            _fulfilledQuantity = value;
+            FulfilledQuantityAssignments++;
+        }
+    }
+    public decimal RemainingQuantity
+    {
+        get => _remainingQuantity;
+        set
+        {
+            _remainingQuantity = value;
+            RemainingQuantityAssignments++;
+        }
+    }
+    public int FulfilledQuantityAssignments { get; private set; }
+    public int RemainingQuantityAssignments { get; private set; }
 }
 
 internal sealed class Fulfillment
@@ -145,10 +196,16 @@ internal sealed class StorageDbContext(DbContextOptions<StorageDbContext> option
         modelBuilder.Entity<PurchaseOrderInvoiceLine>()
             .HasOne(x => x.PurchaseOrderLine).WithMany().HasForeignKey(x => x.PurchaseOrderLineId);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.ThrowPriceRateComputation);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.ThrowUnitRateComputation);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.ThrowOnNextPriceRateSet);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.ThrowOnNextUnitRateSet);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.NormalizePriceRate);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.PriceRateComputations);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.UnitRateComputations);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.RiskScoreComputations);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.PriceRateAssignments);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.UnitRateAssignments);
+        modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.AlternateUnitRateAssignments);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.RateToken);
         modelBuilder.Entity<PurchaseOrderInvoiceLine>().Ignore(x => x.RateTokenAssignments);
     }

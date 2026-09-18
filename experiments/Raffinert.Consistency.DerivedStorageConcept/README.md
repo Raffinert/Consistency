@@ -142,6 +142,49 @@ derived definition, evaluating it only when its cached value is not Fresh."
 scenario assertions and remains diagnostics vocabulary rather than a normal
 precondition for either operation.
 
+## Model D2 object-level materialization
+
+`ObjectMaterializeAdapter.cs` and `Scenarios/OM01...OM15` extend Model D with
+the source-wide overload while retaining targeted T1 behavior:
+
+```csharp
+var rate = runtime.Evaluate(priceRate, link);       // logical value; no mirror write
+var rate = runtime.Materialize(priceRate, link);   // one configured mirror; returns TValue
+runtime.Materialize(link);                         // every configured mirror on link; returns void
+Use(link.PriceRate, link.UnitRate);
+```
+
+The concept index is keyed by exact source-instance/object-set membership, not
+CLR type. Lookup is O(1) plus O(k), where k is the number of targets registered
+for the source's exact set memberships. A source in multiple object sets gets
+the deterministic union of those sets' mappings; same-CLR-type sources in only
+one set never receive the other set's mappings.
+
+Object materialization uses the compiled-topology order supplied by concept
+metadata and two phases: evaluate and snapshot every applicable target (O2),
+then write mirrors. Multi-target writes are source-atomic (F2): a setter failure
+restores every attempted target while leaving successfully evaluated logical
+caches Fresh. A registered source with no targets is a no-op (N1); unknown,
+unregistered, removed, null, and foreign-runtime sources are rejected.
+
+The physical scope remains exactly the requested object. Logical evaluation may
+walk upstream or across projected dependencies, but object materialization does
+not write dependency or downstream objects, evaluate unrelated runtime-only
+definitions, dispatch repairs, or report mirror writes as source mutations.
+That last choice avoids feedback loops but reinforces the existing rule that
+dependencies on registered mirror members must be rejected or canonicalized to
+derived handles.
+
+The source-wide overload fits service methods, DTO mapping, post-mutation
+business operations, and explicit in-memory boundaries better than repeated
+targeted calls. Persistence usually has more precise affected-definition data,
+so it should keep targeted orchestration while sharing the same lower-level
+prepare/write/rollback primitive. Object materialization improves explicit
+direct-read ergonomics but cannot make a property safe before the boundary.
+
+No async or collection overload was needed. The operation has the runtime's
+existing non-thread-safe contract and requires external synchronization.
+
 ## Running note
 
 The project is intentionally outside `Raffinert.Consistency.sln` and all

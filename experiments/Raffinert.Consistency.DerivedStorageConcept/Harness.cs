@@ -73,7 +73,9 @@ internal sealed class ConceptModel
             .Compute(x => x.InvoiceLine.Price / x.PurchaseOrderLine.Price)
             .Named("runtime-only-price-rate");
         var riskScore = builder.Derived(links)
-            .Compute(x => x.InvoiceLine.Price - x.PurchaseOrderLine.Price)
+            .DependsOn(x => x.InvoiceLine.Price)
+            .DependsOn(x => x.PurchaseOrderLine.Price)
+            .Compute(x => PurchaseOrderInvoiceLine.CalculateRiskScore(x))
             .Named("risk-score");
         var nullablePriceRate = builder.Derived(links)
             .Compute(x => x.PurchaseOrderLine.Price == 0m
@@ -88,7 +90,8 @@ internal sealed class ConceptModel
         var unitRate = builder.Derived(links)
             .Using(priceRate)
             .Impact(impact => impact.SourceChanged(DependencySeverity.Invalid))
-            .Compute((_, rate) => rate * 2m)
+            .Compute((link, rate) => PurchaseOrderInvoiceLine.CalculateUnitRate(link, rate))
+            .AllowIncompleteDependencies()
             .Named("unit-rate");
         var runtimeOnlyUnitRate = builder.Derived(links)
             .Using(priceRate)
@@ -460,8 +463,24 @@ internal static class Harness
         await EM10EfTracking.RunAsync();
         await EM11PersistenceWithoutExplicitMaterialize.RunAsync();
         EM12PlainObject.Run();
+        OM01PriceAndUnitRate.Run();
+        OM02FreshCacheStaleMirrors.Run();
+        OM03PartialStaleness.Run();
+        OM04RuntimeOnlyIgnored.Run();
+        OM05CrossObjectScope.Run();
+        OM06IncrementalAggregate.Run();
+        OM07EvaluationFailure.Run();
+        OM08SetterFailureAtomicity.Run();
+        OM09RepairSurvival.Run();
+        OM10RogueMirrorWrites.Run();
+        OM11NoTargetsAndInvalidSources.Run();
+        OM12ObjectSetIdentity.Run();
+        await OM13EfTracking.RunAsync();
+        await OM14PersistenceOrchestration.RunAsync();
+        OM15LookupCost.Run();
         Console.WriteLine("Derived storage/materialization concept D1-D12 passed for Models A, B, and C.");
         Console.WriteLine("Explicit Evaluate/Materialize concept EM1-EM12 passed for Model D.");
+        Console.WriteLine("Object-level Materialize concept OM1-OM15 passed for Model D2.");
     }
 
     public static void ForEachPolicy(Action<Fixture> scenario)

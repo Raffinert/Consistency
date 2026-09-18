@@ -455,3 +455,202 @@ Maintainer decisions are required before a production plan:
 8. **Q8.** Should dependencies on registered mirror properties be rejected/canonicalized to derived handles?
 9. **Q9.** Should external writes to mirror properties be protected by analyzer/encapsulation?
 10. **Q10.** Is Model D preferable to property-backed Model C after considering stale direct reads?
+
+## Model D2 — object-level Materialize(source)
+
+Model D2 adds one source-wide boundary without changing Model D's targeted
+contract:
+
+```csharp
+var rate = runtime.Evaluate(priceRate, link);       // current logical value only
+var rate = runtime.Materialize(priceRate, link);   // one target, returns TValue
+runtime.Materialize(link);                         // every target on link, returns void
+```
+
+The executable selected O2 (evaluate/snapshot all targets, then write) and F2
+(source-level physical rollback). Logical caches retain normal runtime semantics
+if evaluation or a setter fails; only mirror writes are rolled back. It selected
+N1 for a registered source with no materialized targets. These are experiment
+outcomes for maintainer approval, not production API decisions.
+
+### PriceRate + UnitRate timeline
+
+```text
+initial
+    runtime PriceRate = 6 / Fresh       link.PriceRate = 6
+    runtime UnitRate  = 12 / Fresh      link.UnitRate  = 12
+
+InvoiceLine.Price 60 -> 55
+    runtime PriceRate = 6 / Invalid     link.PriceRate = 6
+    runtime UnitRate  = 12 / Invalid    link.UnitRate  = 12
+
+runtime.Materialize(link)
+    phase 1: PriceRate evaluates to 5.5 / Fresh
+             UnitRate evaluates through PriceRate to 11 / Fresh
+             every other applicable link target is evaluated/snapshotted
+    phase 2: link.PriceRate = 5.5
+             link.UnitRate = 11
+             other configured link mirrors synchronized in deterministic order
+
+after return
+    Evaluate(PriceRate, link) == link.PriceRate == 5.5
+    Evaluate(UnitRate, link)  == link.UnitRate  == 11
+    no Line, Allocation, or dependency-object mirror was written
+```
+
+### OM1-OM15 evidence
+
+| Scenario | Observed result |
+|---|---|
+| OM1 PriceRate + UnitRate | Source-wide Materialize refreshed and wrote every configured link target. Targeted UnitRate Materialize still left PriceRate mirror at 6 under T1. Runtime-only RiskScore and unrelated objects were untouched. |
+| OM2 Fresh caches, stale mirrors | All link target caches were pre-evaluated. Object Materialize performed zero recomputations, synchronized stale mirrors once, and skipped every equal assignment on a repeated call. |
+| OM3 partial staleness | Equal PriceRate was neither recomputed nor written; stale UnitRate recomputed/wrote once; Fresh AlternateRate overwrote a rogue mirror without recomputation. |
+| OM4 runtime-only ignored | Stale unrelated RiskScore remained unevaluated. RuntimeOnlyPriceRate evaluated only because the materialized AlternateRate depended on it. |
+| OM5 cross-object scope | Evaluation followed nested/projected inputs, but materializing a link wrote no Line, Allocation, or dependency object. |
+| OM6 incremental aggregate | `Materialize(line)` wrote Fresh FulfilledQuantity plus RemainingQuantity without a full aggregate recomputation/relation scan. |
+| OM7 evaluation failure | O1 targeted sequencing wrote PriceRate before later UnitRate evaluation failed. O2 object materialization failed before all writes; PriceRate logical cache remained Fresh under normal runtime semantics. |
+| OM8 setter failure atomicity | F1 separate targeted calls left PriceRate written when UnitRate setter failed. F2 object materialization restored all mirrors, retained Fresh caches, and retried with zero recomputation. |
+| OM9 repair survival | PriceRate/UnitRate mirrors became current while LinkValidity stayed Invalid and the pending repair remained undispatched; normal dispatch later invoked it exactly once. |
+| OM10 rogue mirror writes | Source-wide Materialize restored PriceRate 999 and UnitRate 888 to Fresh 5.5 and 11 without recomputation. |
+| OM11 no targets/invalid sources | A registered source with only runtime-derived state was a no-op and did not evaluate it. Null, unknown-type, known-but-unregistered, removed, and foreign-runtime sources were rejected. |
+| OM12 object-set identity | Two sets with the same CLR type remained isolated. One instance deliberately seeded into both sets received the deterministic union of both mappings. |
+| OM13 EF tracking | Only target properties whose values changed became modified; an already-equal PriceRate and unrelated scalar remained unmodified. |
+| OM14 persistence orchestration | Source-wide save-boundary orchestration persisted PriceRate and UnitRate but visited all five link targets; targeted orchestration visited one affected definition. |
+| OM15 lookup cost | With 40 unrelated same-CLR-type object sets/definitions, one object lookup visited k=1 applicable target and wrote no unrelated source. |
+
+The direct-property control from OM1 remained Fresh at stale 12 after object
+Materialize wrote PriceRate 5.5. Suppressing materializer writes as source
+mutations avoids feedback/double propagation, but direct dependencies on mirror
+members still split the logical graph. Registered target members should be
+rejected as ordinary source dependencies or unambiguously canonicalized to the
+derived handle.
+
+### Targeted versus object-level result matrix
+
+| Question | Targeted `Materialize(def, source)` | Object `Materialize(source)` |
+|---|---|---|
+| synchronization scope | one target | all applicable targets on exact source memberships |
+| return value | TValue | void selected; no diagnostic result use case emerged |
+| evaluates unrelated runtime-only nodes | no | no; only dependencies required by targets |
+| writes dependency objects | no | no |
+| writes downstream objects | no | no |
+| reuses Fresh caches | yes | yes |
+| handles rogue mirror writes | one target | all targets on source |
+| no-target source behavior | explicit definition rejects | N1 no-op for registered source |
+| setter failure physical atomicity | one-property rollback | F2 multi-property rollback |
+| EF tracking side effect | explicit | explicit; only changed targets |
+| persistence orchestration fit | precise and efficient for affected definitions | ergonomic, but may over-materialize |
+| lookup complexity | direct definition | indexed O(1) + O(k) |
+
+### Applicability and ordering
+
+The concept index uses exact identities:
+
+```text
+source reference
+    -> exact registered object-set membership(s)
+        -> materialized target descriptors for those set identities
+```
+
+A descriptor is therefore applicable only to a source registered/alive in its
+own set, for its own runtime/model, with its target physically on that source.
+The experiment does not scan definitions or use reflection per call. OM15's
+counter showed one visited target among 40 unrelated definitions. OM12 proved
+that CLR type is insufficient and established the multiple-membership policy:
+apply the union, without deduplicating distinct definitions merely because they
+target the same CLR instance.
+
+Registration carries compiled topological order into the concept index. Object
+Materialize sorts by that order plus stable registration order, evaluates every
+target first, captures old physical values, then writes in deterministic order.
+Production metadata would obtain this order directly from the compiled DAG; the
+isolated adapter supplies it explicitly to avoid changing Core during dogfood.
+
+O2 was materially safer than O1. A UnitRate computation failure after PriceRate
+evaluation caused no mirror writes under O2, whereas sequential targeted O1
+left PriceRate physically updated. O2 also keeps graph evaluation separate from
+representation writes and avoids target setters becoming accidental inputs to
+later calculations.
+
+F2 was feasible with the shared lower-level primitive. A UnitRate setter failure
+restored the earlier PriceRate write and the attempted UnitRate target, while
+logical PriceRate/UnitRate remained Fresh. Retry wrote only representations and
+performed no recomputation. F2 cannot promise process-wide or cross-thread
+atomicity; it is best-effort in-memory rollback and reports aggregate failure if
+a compensating setter itself fails.
+
+### Source validity and no-target behavior
+
+N1 is intentionally different from targeted M1:
+
+- `Materialize(runtimeOnlyDefinition, source)` rejects an explicitly impossible
+  target request.
+- `Materialize(source)` succeeds as a no-op when the exact registered source has
+  no target descriptors, which supports generic infrastructure loops.
+
+No-op does not mean unknown objects are accepted. Null, unknown CLR type,
+known-type unregistered instance, removed instance, and an instance belonging to
+another runtime were rejected. A production implementation should use runtime
+object-set membership directly rather than the experiment adapter's mirrored
+membership index.
+
+### EF and persistence orchestration
+
+Object Materialize made EF side effects unsurprising: changed mapped targets
+became modified, equal targets did not, and unrelated scalar properties stayed
+untouched. This matches the explicit physical verb better than B/C's mutating
+logical `Get`.
+
+OM14 showed a useful API/orchestration distinction. Application code benefits
+from one source-wide call before direct reads. Persistence already knows affected
+definitions from planning; forcing it through source-wide orchestration visited
+five mappings when targeted orchestration needed one. The recommended candidate
+is therefore:
+
+```text
+application-facing boundary: source-wide Materialize(source)
+persistence planner: targeted affected-definition orchestration
+both: shared target preparation, equality, write, read-back, and rollback primitive
+```
+
+No application-side Materialize ritual is required before SaveChanges when the
+persistence adapter owns its boundary.
+
+### Naming, usage, and remaining stale-read risk
+
+`Materialize(source)` was clearer than `MaterializeAll(source)`, which can imply
+all graph objects, and clearer than directionless `Sync` or recomputation-sounding
+`Refresh`. Overload shape communicates scope: two arguments identify one target;
+one source argument identifies every target physically on that source. No alias,
+collection overload, diagnostic result, or async overload was justified.
+
+The source-wide boundary improves realistic call sites:
+
+- a service method can materialize once before using several derived properties;
+- a controller/handler can materialize before mapping an entity to a DTO;
+- a business operation can materialize its mutated object before direct reads;
+- a persistence adapter can use the same lower-level primitive at save time.
+
+This is less repetitive than evaluating or materializing every definition and
+less invasive than property-backed Model C. It remains possible to forget the
+boundary and read a stale public property. Encapsulation/analyzer protection is
+still complementary; object Materialize improves ergonomics, not intrinsic
+direct-read safety.
+
+The operation is synchronous and physically mutating. It has the current
+runtime's non-thread-safe contract and requires the same external synchronization
+as other runtime operations. No concurrency or async mechanism was added.
+
+No production Core/EF API, public API baseline, or sample was changed.
+Maintainer decisions are required:
+
+1. **Q1.** Should `runtime.Materialize(source)` be part of the public API?
+2. **Q2.** Should its return type be void?
+3. **Q3.** Should it materialize only targets physically located on the requested source? (default: yes)
+4. **Q4.** Should logical evaluation happen for all targets first, then physical writes (O2)?
+5. **Q5.** Should multi-target physical writes be atomic with rollback (F2) or allow partial materialization on exception (F1)?
+6. **Q6.** Should a source with zero materialized targets be a no-op (N1)?
+7. **Q7.** How should one source instance belonging to multiple object sets be resolved?
+8. **Q8.** Should target-property dependencies be rejected/canonicalized to derived handles?
+9. **Q9.** Should persistence use source-wide orchestration or retain targeted affected-definition orchestration?
+10. **Q10.** Does object-level Materialize make Model D sufficiently ergonomic compared with property-backed Model C?
