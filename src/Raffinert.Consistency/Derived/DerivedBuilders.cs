@@ -87,14 +87,14 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return this;
     }
 
-    public DerivedUsingBuilder<TSource, TItem> From<TItem>(Relation<TSource, TItem> relation)
+    public DerivedRelationBuilder<TSource, TItem> From<TItem>(Relation<TSource, TItem> relation)
         where TItem : class
     {
         ArgumentNullException.ThrowIfNull(relation);
         _model.EnsureRelation(relation.Definition);
         if (!ReferenceEquals(relation.Definition.Left, _source.Definition))
             throw new ArgumentException("The relation's left object set must be the derived state's source set.", nameof(relation));
-        return new DerivedUsingBuilder<TSource, TItem>(_model, _source, relation);
+        return new DerivedRelationBuilder<TSource, TItem>(_model, _source, relation);
     }
 
     public DerivedUpstreamBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> upstream)
@@ -462,7 +462,7 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
         DependencySeverity.Dirty, false, []);
 }
 
-public sealed class DerivedUsingBuilder<TSource, TItem>
+public sealed class DerivedRelationBuilder<TSource, TItem>
     where TSource : class
     where TItem : class
 {
@@ -478,7 +478,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         []);
     private bool _useConservativePropagation;
 
-    internal DerivedUsingBuilder(
+    internal DerivedRelationBuilder(
         ConsistencyModelBuilder model,
         ObjectSet<TSource> source,
         Relation<TSource, TItem> relation)
@@ -489,7 +489,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     }
 
     /// <summary>Configures semantic severity independently of the relation's access plan.</summary>
-    public DerivedUsingBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
+    public DerivedRelationBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new DerivedImpactPolicyBuilder<TSource>();
@@ -502,7 +502,7 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
     /// Uses source invalidation instead of retaining exact relation pairs. The computation remains
     /// lazy and may invalidate a safe superset of sources.
     /// </summary>
-    public DerivedUsingBuilder<TSource, TItem> PreferConservativePropagation()
+    public DerivedRelationBuilder<TSource, TItem> PreferConservativePropagation()
     {
         _useConservativePropagation = true;
         return this;
@@ -608,36 +608,36 @@ public sealed class InvariantBuilder<TSource> where TSource : class
         _source = source;
     }
 
-    public InvariantUsingBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> derived)
+    public InvariantValueBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> derived)
     {
         ArgumentNullException.ThrowIfNull(derived);
         _model.EnsureDerived(derived.Definition);
         if (!ReferenceEquals(derived.Definition.SourceSet, _source.Definition))
             throw new ArgumentException("The derived state's source set must match the invariant source set.", nameof(derived));
-        return new InvariantUsingBuilder<TSource, TValue>(_model, derived);
+        return new InvariantValueBuilder<TSource, TValue>(_model, derived);
     }
 
 }
 
-public sealed class InvariantUsingBuilder<TSource, TValue>
+public sealed class InvariantValueBuilder<TSource, TValue>
     where TSource : class
 {
     private readonly ConsistencyModelBuilder _model;
     private readonly Derived<TSource, TValue> _derived;
 
-    internal InvariantUsingBuilder(ConsistencyModelBuilder model, Derived<TSource, TValue> derived)
+    internal InvariantValueBuilder(ConsistencyModelBuilder model, Derived<TSource, TValue> derived)
     {
         _model = model;
         _derived = derived;
     }
 
-    public InvariantUsingBuilder<TSource, TValue, TSecond> From<TSecond>(Derived<TSource, TSecond> second)
+    public InvariantValueBuilder<TSource, TValue, TSecond> From<TSecond>(Derived<TSource, TSecond> second)
     {
         ArgumentNullException.ThrowIfNull(second);
         _model.EnsureDerived(second.Definition);
         if (!ReferenceEquals(second.Definition.SourceSet, _derived.Definition.SourceSet))
             throw new ArgumentException("All derived source sets must match the invariant source set.", nameof(second));
-        return new InvariantUsingBuilder<TSource, TValue, TSecond>(_model, _derived, second);
+        return new InvariantValueBuilder<TSource, TValue, TSecond>(_model, _derived, second);
     }
 
     public Invariant<TSource> Must(Expression<Func<TSource, TValue, bool>> predicate)
@@ -649,13 +649,13 @@ public sealed class InvariantUsingBuilder<TSource, TValue>
     }
 }
 
-public sealed class InvariantUsingBuilder<TSource, TFirst, TSecond> where TSource : class
+public sealed class InvariantValueBuilder<TSource, TFirst, TSecond> where TSource : class
 {
     private readonly ConsistencyModelBuilder _model;
     private readonly Derived<TSource, TFirst> _first;
     private readonly Derived<TSource, TSecond> _second;
 
-    internal InvariantUsingBuilder(ConsistencyModelBuilder model, Derived<TSource, TFirst> first,
+    internal InvariantValueBuilder(ConsistencyModelBuilder model, Derived<TSource, TFirst> first,
         Derived<TSource, TSecond> second) => (_model, _first, _second) = (model, first, second);
 
     public Invariant<TSource> Must(Expression<Func<TSource, TFirst, TSecond, bool>> predicate)

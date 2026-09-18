@@ -200,9 +200,9 @@ Raffinert.Consistency.DerivedMutationImpact.DefinitionKey.init -> void
 Raffinert.Consistency.DerivedMutationImpact.DerivedMutationImpact(int DerivedId, System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>! Sources) -> void
 Raffinert.Consistency.DerivedMutationImpact.Sources.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.SourceDependencyImpact!>!
 Raffinert.Consistency.DerivedMutationImpact.Sources.init -> void
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
 Raffinert.Consistency.DerivedValueState
 Raffinert.Consistency.DerivedValueState.Dirty = 1 -> Raffinert.Consistency.DerivedValueState
 Raffinert.Consistency.DerivedValueState.Fresh = 0 -> Raffinert.Consistency.DerivedValueState
@@ -307,10 +307,10 @@ Raffinert.Consistency.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Con
 Raffinert.Consistency.InvariantReaction.MarkDirty = 1 -> Raffinert.Consistency.InvariantReaction
 Raffinert.Consistency.InvariantReaction.MarkInvalid = 2 -> Raffinert.Consistency.InvariantReaction
 Raffinert.Consistency.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Consistency.InvariantReaction
-Raffinert.Consistency.InvariantUsingBuilder<TSource, TValue>
-Raffinert.Consistency.InvariantUsingBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
-Raffinert.Consistency.InvariantUsingBuilder<TSource, TFirst, TSecond>
-Raffinert.Consistency.InvariantUsingBuilder<TSource, TFirst, TSecond>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.InvariantValueBuilder<TSource, TValue>
+Raffinert.Consistency.InvariantValueBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.InvariantValueBuilder<TSource, TFirst, TSecond>
+Raffinert.Consistency.InvariantValueBuilder<TSource, TFirst, TSecond>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
 Raffinert.Consistency.MutationSet
 Raffinert.Consistency.ObjectAdded
 Raffinert.Consistency.ObjectAdded.Instance.get -> object!

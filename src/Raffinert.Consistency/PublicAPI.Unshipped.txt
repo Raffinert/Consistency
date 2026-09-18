@@ -1,6 +1,6 @@
 #nullable enable
 Raffinert.Consistency.DerivedBuilder<TSource>.DependsOn<TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst>!>! first, System.Linq.Expressions.Expression<System.Func<TSource!, TSecond>!>! second) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
-Raffinert.Consistency.DerivedBuilder<TSource>.From<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.From<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TUpstreamSource, TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TFirst>! first, Raffinert.Consistency.Derived<TUpstreamSource!, TSecond>! second) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! upstream) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TValue>!
@@ -11,16 +11,16 @@ Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.DependsOn<TDepe
 Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.DependsOn<TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst>!>! first, System.Linq.Expressions.Expression<System.Func<TSource!, TSecond>!>! second) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream>!
 Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.From<TSecond>(Raffinert.Consistency.Derived<TSource!, TSecond>! second) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream, TSecond>!
 Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Any() -> Raffinert.Consistency.Derived<TSource!, bool>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Count() -> Raffinert.Consistency.Derived<TSource!, int>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.LongCount() -> Raffinert.Consistency.Derived<TSource!, long>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
-Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Sum<TValue>(System.Linq.Expressions.Expression<System.Func<TItem!, TValue>!>! selector) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Any() -> Raffinert.Consistency.Derived<TSource!, bool>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Count() -> Raffinert.Consistency.Derived<TSource!, int>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.LongCount() -> Raffinert.Consistency.Derived<TSource!, long>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, System.Collections.Generic.IReadOnlyList<TItem!>!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Sum<TValue>(System.Linq.Expressions.Expression<System.Func<TItem!, TValue>!>! selector) -> Raffinert.Consistency.Derived<TSource!, TValue>!
 Raffinert.Consistency.Derived<TSource, TValue>.MaterializeTo(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! target) -> Raffinert.Consistency.Derived<TSource!, TValue>!
 Raffinert.Consistency.DerivedV2Extensions
 static Raffinert.Consistency.DerivedV2Extensions.Select<TSource, TValue>(this Raffinert.Consistency.DerivedBuilder<TSource!>! builder, System.Func<TSource!, TValue>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
-Raffinert.Consistency.InvariantBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived) -> Raffinert.Consistency.InvariantUsingBuilder<TSource!, TValue>!
-Raffinert.Consistency.InvariantUsingBuilder<TSource, TValue>.From<TSecond>(Raffinert.Consistency.Derived<TSource!, TSecond>! second) -> Raffinert.Consistency.InvariantUsingBuilder<TSource!, TValue, TSecond>!
+Raffinert.Consistency.InvariantBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived) -> Raffinert.Consistency.InvariantValueBuilder<TSource!, TValue>!
+Raffinert.Consistency.InvariantValueBuilder<TSource, TValue>.From<TSecond>(Raffinert.Consistency.Derived<TSource!, TSecond>! second) -> Raffinert.Consistency.InvariantValueBuilder<TSource!, TValue, TSecond>!
 Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>
 Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TProjected, TLocal>!
 Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TProjected, TLocal>!
