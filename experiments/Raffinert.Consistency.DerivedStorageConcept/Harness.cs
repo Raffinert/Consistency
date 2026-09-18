@@ -33,6 +33,8 @@ internal sealed class ConceptModel
     public required Derived<PurchaseOrderInvoiceLine, decimal> PriceRate { get; init; }
     public required Derived<PurchaseOrderInvoiceLine, decimal> RuntimeOnlyPriceRate { get; init; }
     public required Derived<PurchaseOrderInvoiceLine, decimal> RiskScore { get; init; }
+    public required Derived<PurchaseOrderInvoiceLine, decimal?> NullablePriceRate { get; init; }
+    public required Derived<PurchaseOrderInvoiceLine, RateToken> RateToken { get; init; }
     public required Derived<PurchaseOrderInvoiceLine, decimal> UnitRate { get; init; }
     public required Derived<PurchaseOrderInvoiceLine, decimal> RuntimeOnlyUnitRate { get; init; }
     public required Derived<PurchaseOrderInvoiceLine, decimal> UnitFromRuntimePrice { get; init; }
@@ -45,6 +47,8 @@ internal sealed class ConceptModel
     public required MaterializedValue<PurchaseOrderInvoiceLine, decimal> PriceRateTarget { get; init; }
     public required MaterializedValue<PurchaseOrderInvoiceLine, decimal> UnitRateTarget { get; init; }
     public required MaterializedValue<PurchaseOrderInvoiceLine, decimal> AlternateUnitRateTarget { get; init; }
+    public required MaterializedValue<PurchaseOrderInvoiceLine, decimal?> NullablePriceRateTarget { get; init; }
+    public required MaterializedValue<PurchaseOrderInvoiceLine, RateToken> RateTokenTarget { get; init; }
     public required MaterializedValue<OrderLine, decimal> FulfilledTarget { get; init; }
     public required MaterializedValue<OrderLine, decimal> RemainingTarget { get; init; }
     public required MaterializedValue<Allocation, bool> AllocationValidityTarget { get; init; }
@@ -71,6 +75,16 @@ internal sealed class ConceptModel
         var riskScore = builder.Derived(links)
             .Compute(x => x.InvoiceLine.Price - x.PurchaseOrderLine.Price)
             .Named("risk-score");
+        var nullablePriceRate = builder.Derived(links)
+            .Compute(x => x.PurchaseOrderLine.Price == 0m
+                ? (decimal?)null
+                : x.InvoiceLine.Price / x.PurchaseOrderLine.Price)
+            .Named("nullable-price-rate");
+        var rateToken = builder.Derived(links)
+            .DependsOn(x => x.InvoiceLine.Price)
+            .DependsOn(x => x.PurchaseOrderLine.Price)
+            .Compute(x => new RateToken(x.InvoiceLine.Price / x.PurchaseOrderLine.Price))
+            .Named("rate-token");
         var unitRate = builder.Derived(links)
             .Using(priceRate)
             .Impact(impact => impact.SourceChanged(DependencySeverity.Invalid))
@@ -132,6 +146,8 @@ internal sealed class ConceptModel
             PriceRate = priceRate,
             RuntimeOnlyPriceRate = runtimeOnlyPriceRate,
             RiskScore = riskScore,
+            NullablePriceRate = nullablePriceRate,
+            RateToken = rateToken,
             UnitRate = unitRate,
             RuntimeOnlyUnitRate = runtimeOnlyUnitRate,
             UnitFromRuntimePrice = unitFromRuntimePrice,
@@ -145,6 +161,10 @@ internal sealed class ConceptModel
             UnitRateTarget = new("unit-rate", unitRate, x => x.UnitRate, (x, value) => x.UnitRate = value),
             AlternateUnitRateTarget = new("unit-from-runtime-price", unitFromRuntimePrice,
                 x => x.AlternateUnitRate, (x, value) => x.AlternateUnitRate = value),
+            NullablePriceRateTarget = new("nullable-price-rate", nullablePriceRate,
+                x => x.NullablePriceRate, (x, value) => x.NullablePriceRate = value),
+            RateTokenTarget = new("rate-token", rateToken,
+                x => x.RateToken, (x, value) => x.RateToken = value),
             FulfilledTarget = new("fulfilled-quantity", fulfilledQuantity,
                 x => x.FulfilledQuantity, (x, value) => x.FulfilledQuantity = value),
             RemainingTarget = new("remaining-quantity", remainingQuantity,
@@ -359,6 +379,8 @@ internal sealed class Fixture
             UnitRate = 12m,
             AlternateUnitRate = 12m
         };
+        link.NullablePriceRate = 6m;
+        link.RateToken = new RateToken(6m);
         var line = new OrderLine { Id = 1, OrderedQuantity = 10m, FulfilledQuantity = 4m, RemainingQuantity = 6m };
         var fulfillment = new Fulfillment { Id = 1, Quantity = 4m };
         var allocation = new Allocation { Id = 1, OrderLineId = line.Id, OrderLine = line, ReservedQuantity = 5m, IsValid = true };
@@ -426,7 +448,20 @@ internal static class Harness
         D10SetterFailure.Run();
         await D11EfTracking.RunAsync();
         D12PlainObject.Run();
+        EM01EvaluateThenMaterialize.Run();
+        EM02DirectMaterialize.Run();
+        EM03RepeatedEvaluateUsesCache.Run();
+        EM04RuntimeOnlyDerived.Run();
+        EM05TransitiveDerived.Run();
+        EM06IncrementalAggregate.Run();
+        EM07RepairSurvival.Run();
+        EM08ComputationFailure.Run();
+        EM09SetterFailure.Run();
+        await EM10EfTracking.RunAsync();
+        await EM11PersistenceWithoutExplicitMaterialize.RunAsync();
+        EM12PlainObject.Run();
         Console.WriteLine("Derived storage/materialization concept D1-D12 passed for Models A, B, and C.");
+        Console.WriteLine("Explicit Evaluate/Materialize concept EM1-EM12 passed for Model D.");
     }
 
     public static void ForEachPolicy(Action<Fixture> scenario)

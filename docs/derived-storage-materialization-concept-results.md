@@ -265,3 +265,193 @@ for stale direct reads. Production `runtime.Get` semantics should remain gated.
 
 Do not update the production runtime-read plan or implement a production API
 until Q1-Q6 are answered. Q7 can remain deferred.
+
+## Model D — explicit Evaluate / Materialize
+
+Model D keeps the runtime-authoritative value and optional output mirror from A,
+but gives the two operations distinct names and return contracts:
+
+```csharp
+var rate = runtime.Evaluate(priceRate, link);       // current logical value; no property write
+var stored = runtime.Materialize(priceRate, link); // current value + link.PriceRate synchronized
+```
+
+The A/B/C evidence above uses the provisional name `Get`. In this comparison it
+occupies the logical-read role now named `Evaluate`; no A/B/C result was rerun
+with changed semantics. The Model D adapter delegates `Evaluate` to the existing
+runtime evaluator and implements `Materialize` as exactly `Evaluate`, compare,
+write the requested target, read back, and return the evaluated value. It does
+not contain a second evaluator.
+
+The canonical lifecycle was observed as follows:
+
+```text
+InvoiceLine.Price 60 -> 55
+PriceRate runtime 6 / Invalid; link.PriceRate 6
+Evaluate: returns 5.5; runtime 5.5 / Fresh; link.PriceRate remains 6
+Materialize: reuses Fresh 5.5; writes link.PriceRate 5.5; returns 5.5
+```
+
+Direct `Materialize` computed once when stale, assigned once, and returned 5.5.
+Repeated `Evaluate` and repeated `Materialize` reused the Fresh cache; an
+equality check avoided redundant target assignment.
+
+For runtime-only definitions, M1 was clearer than M2: making Materialize
+degenerate to Evaluate would report success without materializing anything and
+would make the two verbs behaviorally indistinguishable for that call.
+
+### EM1-EM12 evidence
+
+| Scenario | Observed result |
+|---|---|
+| EM1 Evaluate then Materialize | Evaluate returned 5.5/Fresh without changing property 6. Materialize returned and stored 5.5 without another computation. |
+| EM2 direct Materialize | A stale value computed exactly once and was assigned. A repeated call neither recomputed nor reassigned. Nullable values worked. `EqualityComparer<T>.Default` honored custom `RateToken` equality. |
+| EM3 repeated Evaluate | Two calls returned 5.5 with one computation and no property assignment. Evaluate is lazy/cache-aware, not forced recomputation. |
+| EM4 runtime-only derived | Evaluate returned the runtime-only risk score. M1 rejected Materialize with guidance to use Evaluate because no target was registered. |
+| EM5 transitive derived | Evaluating UnitRate refreshed PriceRate and UnitRate runtime nodes but wrote neither mirror. T1 Materialize updated only UnitRate. A direct PriceRate-property dependency then produced stale 12 rather than logical 11, proving split-graph risk. |
+| EM6 incremental aggregate | Relation-add propagation left FulfilledQuantity Fresh at 7. Evaluate returned it without a scan or write; Materialize wrote 7 without a full recomputation. |
+| EM7 pending repair | Evaluate and Materialize could refresh/synchronize PriceRate while UnitRate remained Invalid. The existing repair request remained pending and later dispatched exactly once. |
+| EM8 computation failure | Evaluate and Materialize propagated the calculator failure, did not publish Fresh state, did not touch the mirror, and preserved the pending repair request. |
+| EM9 setter failure | Evaluation succeeded and stayed Fresh while the setter threw and property stayed 6. Retry reused the cache and wrote 5.5. Read-back detected a normalizing setter and restored 6 rather than accepting stored 5.56 for logical 5.555. |
+| EM10 EF tracking | Evaluate left PriceRate unchanged and unmodified. Materialize changed it and EF naturally marked it modified. |
+| EM11 persistence without app Materialize | Application flow called an adapter-owned save boundary, not runtime Materialize. The boundary reused the Model D primitive and persisted 5.5. |
+| EM12 plain object | An external write of 999 did not affect logical 5.5; Materialize restored and returned 5.5 for a detached object without a DbContext. |
+
+### A/B/C/D comparison
+
+| Question | A runtime-authoritative | B read syncs mirror | C property-backed | D Evaluate/Materialize |
+|---|---|---|---|---|
+| logical read returns current value | Yes | Yes if synchronization succeeds | Yes if recomputation/write succeeds | Yes |
+| logical read name communicates possible computation | No; `Get` sounds passive | No; `Get` also hides a write | No; `Get` sounds passive | Yes; `Evaluate` signals graph work |
+| repeated Fresh logical read avoids recompute | Yes | Yes | Yes | Yes |
+| logical read has domain-object side effects | No | Yes | Yes | No |
+| caller can explicitly synchronize property | Yes, at a separate boundary | Yes | Yes | Yes, with `Materialize` |
+| synchronization returns TValue | Not in the experiment helper | Not in the experiment helper | Not in the experiment helper | Yes |
+| direct property can be stale before synchronization | Yes | Yes | Yes while node is stale | Yes |
+| Fresh runtime + stale mirror representable | Yes | Yes, before read synchronization | No by the property-backed contract | Yes, deliberately |
+| setter failure requires logical-cache rollback | No | Yes to preserve read contract | Yes to preserve storage contract | No; Fresh cache and failed mirror write are separate |
+| EF tracking side effect obvious from call | Logical read has none | No; hidden behind `Get` | No; hidden behind `Get` | Yes; only `Materialize` writes |
+| runtime-only derived supported | Yes | Yes | Yes through hybrid storage | Yes; Evaluate only |
+| incremental Fresh value materializes without recompute | Yes at boundary | Yes | Yes if assignment is integrated | Yes |
+| transitive evaluation avoids unwanted mirror writes | Yes | No; configured upstreams synchronize | No; evaluation owns property storage | Yes |
+| pending repair survives evaluation/materialization | Yes | Yes | Yes | Yes |
+| plain-object materialization possible | Yes with an adapter | Yes | Yes with setter access | Yes with optional Core adapter metadata |
+| persistence works without explicit app call | Yes | Yes | Yes | Yes; persistence boundary invokes primitive |
+| invasive Core changes required | No | High | High | Moderate for typed API plus optional target abstraction |
+| invasive EF changes required | No | Moderate | Moderate | Low to moderate to reuse one primitive |
+
+No numeric score was assigned. Model D is clearer than B because logical reads
+have no hidden physical mutation, and substantially less coupled than C because
+a setter failure does not require rolling back logical freshness. Like A, it
+still permits a stale direct property read and stores duplicate representations.
+The experiment therefore supports Model D as the strongest API candidate if an
+output mirror is accepted, not as a solution to stale public property access.
+
+### Target metadata and mirror state
+
+Two metadata placements are viable in Core terms:
+
+- A compiled-model `MaterializeTo` mapping would make `runtime.Materialize`
+  direct, but adds target access, equality, setter failure, and reflection or
+  generated-access concerns to Core definitions.
+- An optional Core adapter/extension can register those mappings while leaving
+  derived identity and evaluation unchanged. The executable used this shape and
+  proved the plain-object story.
+
+Persistence-only metadata cannot power plain-object Materialize. Production EF
+already has independent mapped materialization; a future implementation should
+reuse one semantic primitive where possible, but this spike deliberately did
+not move or alter it.
+
+No persistent `Unknown/Synchronized/Stale` mirror state was needed. On each
+Materialize, comparing the Fresh logical value with the target was enough to
+skip equal writes or decide to assign. Nullable equality and custom value
+equality worked with `EqualityComparer<T>.Default`; there was no evidence for a
+configurable comparer. A normalizing setter is different: it cannot uphold
+`returned value == stored value`, so read-back detected and rejected it and the
+adapter restored the prior mirror. The runtime value remained Fresh, making
+retry behavior explicit and independent. Mirror rollback is still local
+materialization complexity; it does not require rolling back logical cache state.
+
+External mirror writes are silently permitted but never authoritative:
+Evaluate continues to return the runtime value, and Materialize overwrites the
+rogue value. Encapsulation/private setters are the strongest simple protection;
+an analyzer could diagnose writes in anemic models. Source generation or
+interception is a later, more invasive option.
+
+### Dependency, scope, and persistence choices
+
+The experiment selected T1: single-node Materialize writes only the requested
+target. Materializing UnitRate did not implicitly write its PriceRate upstream
+mirror. T2 (materialized upstream closure) is reasonable for an explicitly bulk
+persistence operation, but would make a single-target call's physical scope
+surprising.
+
+A dependency on the derived handle observes the current logical graph. A direct
+dependency on `link.PriceRate` observes a potentially stale mirror and creates a
+split graph if mirror writes are also reported as mutations. The preferred
+compiler policy is to reject a dependency on a registered target and require
+the derived handle. Canonicalization could be considered only if it remains
+unambiguous; silently allowing both is the unsafe choice.
+
+The EM11 boundary proves that application code need not call Materialize before
+SaveChanges. Persistence can invoke the same per-definition/per-source primitive
+for mapped affected objects. No concrete non-EF bulk use case emerged, so this
+spike does not justify `Materialize(source)` or collection overloads.
+
+### Naming and diagnostics
+
+`Evaluate` is preferred over `Get` for maintainer approval. `Get` understates
+dependency traversal, stale recomputation, and runtime cache/state mutation.
+`Evaluate` has the opposite risk—it may sound like forced execution—so its
+contract must say:
+
+> Returns the current logical value of the derived definition, evaluating it only when its cached value is not Fresh.
+
+EM3 and EM6 demonstrate that lazy meaning. A future force operation should be
+named separately, such as `Recompute`.
+
+`Materialize` is clearer than `Sync`, whose direction and scope are ambiguous,
+and `GetAndApply`, which does not identify what is applied. It already implies
+evaluation as necessary and returns the value, so `EvaluateAndMaterialize` and
+other aliases add no value. `GetState` was useful for diagnostics and executable
+assertions only; normal code needed neither a state pre-read nor `TryGetCached`.
+
+### Misuse analysis
+
+- `Use(link.PriceRate)` is silently permitted and may read a stale mirror. The
+  API makes the legitimate alternatives clearer but cannot intercept this read.
+- `Materialize` when only a logical value is needed is permitted and visibly
+  requests an unnecessary physical write; use Evaluate instead.
+- `DependsOn(x => x.PriceRate)` is silently dangerous without compiler help;
+  target registration should diagnose/reject or safely canonicalize it.
+- `link.PriceRate = 999m` is permitted by a public setter and later overwritten;
+  encapsulation or an analyzer should diagnose/prohibit rogue writes.
+- Expecting Evaluate to force recomputation is a naming risk, diagnosed by the
+  required cache-aware documentation and examples; repeated calls do not run
+  the calculator.
+
+### Decision against the plan criteria
+
+Model D removes hidden physical mutation from logical reads, names possible
+computation, makes EF tracking effects explicit, supports runtime-only and
+incremental values, and decouples setter failure from cache rollback. It does
+not solve stale direct reads, duplicate mirror/cache storage, or split-property
+dependencies. It avoids an application persistence ritual when adapters own the
+save boundary. Its likely implementation cost is below property-backed C but
+above current A because Core needs a typed Evaluate surface and either Core or
+an optional adapter needs materialization metadata.
+
+No production API, EF behavior, sample, or public API baseline was changed.
+Maintainer decisions are required before a production plan:
+
+1. **Q1.** Is `Evaluate` preferable to `Get` for the logical read?
+2. **Q2.** Is Evaluate explicitly cache-aware/lazy rather than force-recompute? (default: yes)
+3. **Q3.** Must Evaluate never synchronize a domain-property mirror? (default: yes)
+4. **Q4.** Should Materialize return TValue? (default: yes)
+5. **Q5.** Should Materialize reject definitions without a target?
+6. **Q6.** Should Materialize synchronize only requested target or upstream materialized closure?
+7. **Q7.** Does materialization metadata belong in Core, optional Core adapter, or persistence adapter?
+8. **Q8.** Should dependencies on registered mirror properties be rejected/canonicalized to derived handles?
+9. **Q9.** Should external writes to mirror properties be protected by analyzer/encapsulation?
+10. **Q10.** Is Model D preferable to property-backed Model C after considering stale direct reads?

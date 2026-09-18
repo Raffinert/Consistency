@@ -1,7 +1,7 @@
 # Derived storage and materialization concept
 
-This disposable executable compares three storage policies without changing
-Core, EF integration, or public API baselines:
+This disposable executable compares three storage policies and an explicit
+consumption API without changing Core, EF integration, or public API baselines:
 
 Repository baseline inspected: `6a47cbd9ef6744512105d108c9b3fb3e7339bf7a`.
 
@@ -11,6 +11,9 @@ Repository baseline inspected: `6a47cbd9ef6744512105d108c9b3fb3e7339bf7a`.
   properties.
 - C-Hybrid: a configured property is treated as storage, while runtime-only
   derived values retain runtime cache storage.
+- D: `Evaluate` returns the current runtime-authoritative logical value without
+  writing a mirror; `Materialize` evaluates as needed, writes one configured
+  target, and returns that same value.
 
 The C simulator deliberately uses the existing runtime underneath for graph
 routing and therefore still has an implementation cache. Its policy layer reads
@@ -79,6 +82,19 @@ uses actual SQLite-backed EF metadata/change tracking; it remains in this
 isolated project because the setup is small and avoids concept-only production
 tests.
 
+`ModelD.ExplicitEvaluateMaterialize.cs` and `Scenarios/EM01...EM12` reuse that
+same DAG and runtime. Model D's optional registry is a stand-in for a Core
+materialization adapter: the derived definition remains runtime-authoritative,
+and target metadata remains usable for detached objects. Conceptually, putting
+the same target metadata directly on the compiled Core definition would also
+work but would make setter and materialization concerns part of Core itself.
+EF-only metadata cannot provide the demonstrated plain-object operation.
+
+The A/B/C scenarios retain their historical `Get` name. In the Model D
+comparison, that operation is the logical-read role now named `Evaluate`.
+Model D chooses M1 (reject `Materialize` for runtime-only values) and T1
+(`Materialize` writes only the requested target) for the experiment.
+
 ## Declaration pressure against API v2
 
 The hybrid API-v2 shape remains readable for runtime-only values:
@@ -110,6 +126,21 @@ var priceRate = links.Derive(
 The experiment does not treat these as aliases. `MaterializeTo` describes an
 output mirror; `Derive(target, compute)` would make target ownership, write
 protection, atomicity, and snapshot behavior part of the derived definition.
+
+For consumption, the two-line Model D story is:
+
+```csharp
+var rate = runtime.Evaluate(priceRate, link);       // logical value; no mirror write
+var stored = runtime.Materialize(priceRate, link); // same value + requested mirror write
+```
+
+`Evaluate` is deliberately cache-aware, not a force-recompute operation. Its
+dogfooded documentation sentence is: "Returns the current logical value of the
+derived definition, evaluating it only when its cached value is not Fresh."
+`Materialize` was clearer than `Sync` (direction and scope are ambiguous) and
+`GetAndApply` (the applied effect is unspecified). `GetState` was useful only in
+scenario assertions and remains diagnostics vocabulary rather than a normal
+precondition for either operation.
 
 ## Running note
 
