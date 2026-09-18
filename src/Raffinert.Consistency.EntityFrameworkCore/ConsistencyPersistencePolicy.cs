@@ -35,7 +35,9 @@ internal static class ConsistencyPersistencePolicyEngine
         ConsistencyRuntime runtime,
         ConsistencyUnitOfWork unit,
         ConsistencyPersistencePolicySnapshot policy,
-        out MaterializationRollback? materializationRollback)
+        out MaterializationRollback? materializationRollback,
+        bool forceMaterialization = false,
+        Func<MaterializationDescriptor, object, bool>? materializationSelector = null)
     {
         materializationRollback = null;
         unit.Prepare(runtime);
@@ -43,8 +45,8 @@ internal static class ConsistencyPersistencePolicyEngine
             policy.EnforcedInvariantIds.Count > 0
                 ? PlannedInvariantEvaluationMode.Affected
                 : PlannedInvariantEvaluationMode.None,
-            policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate &&
-            policy.Materializations.Count > 0
+            policy.Materializations.Count > 0 &&
+            (forceMaterialization || policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
                 ? PlannedDerivedEvaluationMode.Affected
                 : PlannedDerivedEvaluationMode.None);
         if (plan is not null)
@@ -53,18 +55,28 @@ internal static class ConsistencyPersistencePolicyEngine
                 policy.EnforcedInvariantIds.Contains(evaluation.InvariantId) &&
                 evaluation.State == InvariantEvaluationState.Violated).ToArray();
             if (violations.Length > 0) throw new ConsistencyInvariantViolationException(violations);
-            if (policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
-                materializationRollback = ApplyMaterializations(context, runtime, policy.Materializations, plan);
+            if (forceMaterialization || policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
+                materializationRollback = ApplyMaterializations(
+                    context, runtime, policy.Materializations, plan, materializationSelector);
         }
         context.ChangeTracker.DetectChanges();
         return plan;
     }
 
+    internal static MaterializationRollback ApplyPlannedMaterializations(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        IReadOnlyList<MaterializationDescriptor> mappings,
+        PreparedImpactPlan plan,
+        Func<MaterializationDescriptor, object, bool>? materializationSelector = null) =>
+        ApplyMaterializations(context, runtime, mappings, plan, materializationSelector);
+
     private static MaterializationRollback ApplyMaterializations(
         DbContext context,
         ConsistencyRuntime runtime,
         IReadOnlyList<MaterializationDescriptor> mappings,
-        PreparedImpactPlan plan)
+        PreparedImpactPlan plan,
+        Func<MaterializationDescriptor, object, bool>? materializationSelector)
     {
         var applied = new Stack<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
             object Source, object? Value, bool Modified)>();
@@ -76,6 +88,9 @@ internal static class ConsistencyPersistencePolicyEngine
                 foreach (var evaluation in plan.DerivedEvaluations.Where(x => x.DerivedId == id))
                 {
                     if (evaluation.State != DerivedValueState.Fresh) continue;
+                    if (materializationSelector is not null &&
+                        !materializationSelector(mapping, evaluation.Source))
+                        continue;
                     var entry = context.ChangeTracker.Entries()
                         .SingleOrDefault(x => ReferenceEquals(x.Entity, evaluation.Source));
                     if (entry is null || entry.State == EntityState.Detached)
@@ -127,7 +142,7 @@ internal sealed class MaterializationRollback
 {
     internal static MaterializationRollback Empty { get; } = new([]);
 
-    private readonly IReadOnlyList<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
+    private IReadOnlyList<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
         object Source, object? Value, bool Modified)> _writes;
 
     internal MaterializationRollback(
@@ -143,6 +158,14 @@ internal sealed class MaterializationRollback
                 write.Descriptor.Write(write.Source, write.Value);
             write.Entry.IsModified = write.Modified;
         }
+    }
+
+    internal void Append(MaterializationRollback additional)
+    {
+        ArgumentNullException.ThrowIfNull(additional);
+        if (additional._writes.Count == 0)
+            return;
+        _writes = additional._writes.Concat(_writes).ToArray();
     }
 }
 

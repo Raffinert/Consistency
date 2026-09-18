@@ -173,6 +173,18 @@ Verify:
 
 ## 7. EF policy
 
+For injected EF applications, additionally verify:
+
+```text
+[ ] AddRaffinertConsistency<TDbContext>(...) is registered once with the compiled model and mappings.
+[ ] The application service injects only DbContext + ConsistencyRuntime.
+[ ] Runtime and DbContext resolution works in either order without a circular dependency.
+[ ] The service runtime and EF session/interceptor runtime are reference-equal within a scope.
+[ ] A new scope receives a new runtime and DbContext.
+[ ] Mapped entities tracked before and after runtime resolution are baseline-admitted automatically.
+[ ] Application code does not call runtime.Add/runtime.Apply for ordinary EF mutations.
+```
+
 Verify:
 
 ```text
@@ -286,6 +298,32 @@ When the required shape is outside supported discovery semantics, establish genu
 ---
 
 ## 11. Persistence ordering
+
+Injected EF flow:
+
+```text
+tracked mutation
+    ↓
+optional runtime.Materialize(entity)
+    ↓
+pending plan / requested physical mirrors
+    ↓
+ordinary SaveChanges[Async]
+    ↓
+SQL success
+    ↓
+install exact runtime plan and dispatch once
+```
+
+Verify:
+
+```text
+[ ] Materialize(entity) does not advance runtime state or dispatch callbacks.
+[ ] SaveChanges reuses the pending plan when semantic tracked inputs are unchanged.
+[ ] An intervening semantic change discards and rebuilds the pending plan.
+[ ] Library-owned mirror writes are excluded from semantic mutation fingerprinting.
+[ ] Failed SQL does not commit or dispatch the pending plan and a retry rebuilds safely.
+```
 
 Ordinary flow:
 

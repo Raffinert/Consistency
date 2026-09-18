@@ -114,6 +114,49 @@ unrelated runtime-only values. Reading `link.PriceRate` directly is not guarante
 
 ## EF Core consistent saves
 
+For dependency-injected EF applications, register the compiled model and mappings once. The adapter
+provides one scoped runtime/session pair, admits mapped tracked entities automatically, and attaches its
+save interceptor without exposing EF consistency plumbing to application services:
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
+services.AddScoped<LinkService>();
+```
+
+An application service only needs its `DbContext` and the scoped `ConsistencyRuntime`:
+
+```csharp
+public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+{
+    public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
+    {
+        var link = await db.Links
+            .Include(x => x.Left)
+            .Include(x => x.Right)
+            .SingleAsync(x => x.Id == id, cancellationToken);
+
+        link.Left.Value = value;
+        consistency.Materialize(link); // needed only when mirrors are read before saving
+        Use(link.Ratio, link.NormalizedRatio);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+The short rule is:
+
+```text
+Need a materialized property before SaveChanges?  runtime.Materialize(entity)
+Only saving?                                         db.SaveChanges / SaveChangesAsync
+```
+
+`Materialize(entity)` prepares the pending consistency plan and updates only configured mirrors on that
+entity. Runtime state is installed and policy callbacks dispatch only after a successful SQL save. If
+the service changes a semantic input again before saving, the adapter discards the stale pending plan and
+rebuilds it. Cross-object graphs still require the authoritative `ConsistencyScope` or
+`DiscoverConsumers` proof described below.
+
 The EF Core adapter can reject configured invariant violations before SQL and persist sink-only mirrors
 of affected derived values:
 

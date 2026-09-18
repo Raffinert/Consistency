@@ -4,6 +4,43 @@ These recipes show current declaration, runtime, and EF Core patterns for downst
 
 ---
 
+## Recipe 0 — injected EF runtime and one-call materialization
+
+Register the compiled model and mappings once per application:
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
+services.AddScoped<LinkService>();
+```
+
+Keep the service constructor limited to the context and scoped runtime:
+
+```csharp
+public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+{
+    public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
+    {
+        var link = await db.Links
+            .Include(x => x.Left)
+            .Include(x => x.Right)
+            .SingleAsync(x => x.Id == id, cancellationToken);
+
+        link.Left.Value = value;
+        consistency.Materialize(link);
+        Use(link.Ratio, link.NormalizedRatio);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+Use `Materialize(entity)` only when a mirror is needed before saving. If the service only persists the
+mutation, call ordinary `SaveChanges`/`SaveChangesAsync`. The integration admits mapped tracked entities,
+reuses an unchanged pending plan, rebuilds after intervening changes, and commits runtime state only after
+SQL succeeds.
+
+---
+
 ## Recipe 1 — source-local materialized value
 
 ```csharp

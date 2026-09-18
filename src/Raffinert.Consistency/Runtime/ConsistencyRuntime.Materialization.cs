@@ -2,6 +2,7 @@ namespace Raffinert.Consistency;
 
 public sealed partial class ConsistencyRuntime
 {
+    private IRuntimeMaterializationIntegration? _materializationIntegration;
     private IReadOnlyList<MaterializationDescriptor> _materializations = [];
     private IReadOnlyDictionary<IDerivedDefinition, MaterializationDescriptor> _materializationByDefinition =
         new Dictionary<IDerivedDefinition, MaterializationDescriptor>();
@@ -14,6 +15,15 @@ public sealed partial class ConsistencyRuntime
         new(ReferenceEqualityComparer.Instance);
 
     internal IReadOnlyList<MaterializationDescriptor> Materializations => _materializations;
+
+    internal void AttachMaterializationIntegration(IRuntimeMaterializationIntegration integration)
+    {
+        ArgumentNullException.ThrowIfNull(integration);
+        if (_materializationIntegration is not null &&
+            !ReferenceEquals(_materializationIntegration, integration))
+            throw new InvalidOperationException("A materialization integration is already attached to this runtime.");
+        _materializationIntegration = integration;
+    }
 
     private void InitializeMaterializations(IReadOnlyList<MaterializationDescriptor> materializations)
     {
@@ -47,6 +57,9 @@ public sealed partial class ConsistencyRuntime
     {
         ArgumentNullException.ThrowIfNull(derived);
         ArgumentNullException.ThrowIfNull(source);
+        if (_materializationIntegration?.TryMaterializeDerived(
+                this, derived.Definition, source, out var integratedValue) == true)
+            return (TValue)integratedValue!;
         if (!_derivedStates.ContainsKey(derived.Definition))
             throw new ArgumentException("The derived definition belongs to another compiled model.", nameof(derived));
         if (!_materializationByDefinition.TryGetValue(derived.Definition, out var descriptor))
@@ -65,6 +78,8 @@ public sealed partial class ConsistencyRuntime
     public void Materialize<TSource>(TSource source) where TSource : class
     {
         ArgumentNullException.ThrowIfNull(source);
+        if (_materializationIntegration?.TryMaterializeObject(this, source) == true)
+            return;
         if (!_sourceMemberships.TryGetValue(source, out var memberships) || memberships.Count == 0)
             throw new InvalidOperationException("The source instance is not registered in this runtime.");
         var descriptors = memberships

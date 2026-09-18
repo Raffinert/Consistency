@@ -248,7 +248,8 @@ public static class ChangeTrackerAdapter
 {
     internal static CapturedEfMutationSnapshot CapturePolicyAwareSnapshot(
         ChangeTracker changeTracker,
-        ConsistencyUnitOfWorkMappings mappings)
+        ConsistencyUnitOfWorkMappings mappings,
+        Func<EntityEntry, IProperty, bool>? includeProperty = null)
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
@@ -269,6 +270,7 @@ public static class ChangeTrackerAdapter
             {
                 var member = GetMember(property.Metadata);
                 if (member is null) continue;
+                if (includeProperty is not null && !includeProperty(entry, property.Metadata)) continue;
                 var mutation = mapping is null
                     ? Change.Property(entry.Entity, member, property.OriginalValue, property.CurrentValue)
                     : mapping.Property(entry.Entity, member, property.OriginalValue, property.CurrentValue);
@@ -321,6 +323,39 @@ public static class ChangeTrackerAdapter
         }
 
         var propertyChanges = ReadModifiedProperties(changeTracker, mappings);
+        var mutations = additions
+            .Concat(propertyChanges)
+            .Concat(navigationChanges)
+            .Concat(removals)
+            .ToArray();
+        return new ConsistencyUnitOfWork(mutations.Length == 0 ? null : MutationSet.Create(mutations));
+    }
+
+    internal static ConsistencyUnitOfWork CaptureUnitOfWork(
+        ChangeTracker changeTracker,
+        ConsistencyUnitOfWorkMappings mappings,
+        Func<EntityEntry, IProperty, bool> includeProperty)
+    {
+        ArgumentNullException.ThrowIfNull(changeTracker);
+        ArgumentNullException.ThrowIfNull(mappings);
+        ArgumentNullException.ThrowIfNull(includeProperty);
+        var navigationChanges = CaptureNavigationChanges(changeTracker, mappings);
+        changeTracker.DetectChanges();
+        var additions = new List<RuntimeMutation>();
+        var removals = new List<RuntimeMutation>();
+        foreach (var entry in changeTracker.Entries())
+        {
+            var mapping = mappings.Resolve(entry);
+            if (mapping is not null)
+            {
+                if (entry.State == EntityState.Added)
+                    additions.Add(mapping.Add(entry.Entity));
+                else if (entry.State == EntityState.Deleted)
+                    removals.Add(mapping.Remove(entry.Entity));
+            }
+        }
+
+        var propertyChanges = ReadModifiedProperties(changeTracker, mappings, includeProperty);
         var mutations = additions
             .Concat(propertyChanges)
             .Concat(navigationChanges)
@@ -386,7 +421,8 @@ public static class ChangeTrackerAdapter
 
     private static List<PropertyChange> ReadModifiedProperties(
         ChangeTracker changeTracker,
-        ConsistencyUnitOfWorkMappings? mappings)
+        ConsistencyUnitOfWorkMappings? mappings,
+        Func<EntityEntry, IProperty, bool>? includeProperty = null)
     {
         var changes = new List<PropertyChange>();
         foreach (var entry in changeTracker.Entries().Where(entry => entry.State == EntityState.Modified))
@@ -394,6 +430,8 @@ public static class ChangeTrackerAdapter
             var mapping = mappings?.Resolve(entry);
             foreach (var property in entry.Properties.Where(property => property.IsModified))
             {
+                if (includeProperty is not null && !includeProperty(entry, property.Metadata))
+                    continue;
                 var member = GetMember(property.Metadata);
                 if (member is null)
                     continue;

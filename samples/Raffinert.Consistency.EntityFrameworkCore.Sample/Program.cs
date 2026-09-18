@@ -1,90 +1,100 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Raffinert.Consistency;
 using Raffinert.Consistency.EntityFrameworkCore;
 
-using var connection = new SqliteConnection("Data Source=:memory:");
-connection.Open();
-var options = new DbContextOptionsBuilder<OrdersContext>().UseSqlite(connection).Options;
-using var context = new OrdersContext(options);
-context.Database.EnsureCreated();
-
-var line = new OrderLine
-{
-    Id = Guid.NewGuid(),
-    OrderedQuantity = 10,
-    FulfilledQuantity = 2,
-    RemainingQuantity = 8
-};
-context.Add(line);
-context.SaveChanges();
+await using var connection = new SqliteConnection("Data Source=:memory:");
+await connection.OpenAsync();
 
 var builder = new ConsistencyModelBuilder();
 var lines = builder.Objects<OrderLine>().Key(x => x.Id);
-var remaining = builder.Derived(lines).Select(x => x.OrderedQuantity - x.FulfilledQuantity)
-    .MaterializeTo(x => x.RemainingQuantity);
-var nonNegativeRemaining = builder.Invariant(lines).From(remaining).Must((_, value) => value >= 0);
-var runtime = builder.Build().CreateRuntime(seed => seed.Add(lines, [line]));
+var remaining = builder.Derived(lines)
+    .Select(x => x.OrderedQuantity - x.FulfilledQuantity)
+    .MaterializeTo(x => x.RemainingQuantity)
+    .Named("remaining-quantity");
+var nonNegativeRemaining = builder.Invariant(lines)
+    .From(remaining)
+    .Must((_, value) => value >= 0)
+    .Named("non-negative-remaining");
+var compiled = builder.Build();
 var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Enforce(nonNegativeRemaining);
 
-line.FulfilledQuantity = 12;
-try
+await using (var seed = new OrdersContext(
+                 new DbContextOptionsBuilder<OrdersContext>().UseSqlite(connection).Options))
 {
-    context.SaveChangesConsistently(runtime, mappings);
-    throw new InvalidOperationException("The enforced invariant should have rejected this save.");
-}
-catch (ConsistencyInvariantViolationException)
-{
-    Console.WriteLine("Rejected invalid fulfillment before SQL; database and runtime remain unchanged.");
-}
-
-line.FulfilledQuantity = 4;
-context.SaveChangesConsistently(runtime, mappings);
-var persisted = context.Set<OrderLine>().AsNoTracking().Single();
-Console.WriteLine($"Persisted RemainingQuantity={persisted.RemainingQuantity}; runtime version={runtime.Version}.");
-
-var generatedBuilder = new ConsistencyModelBuilder();
-var generatedOrders = generatedBuilder.Objects<GeneratedOrder>().Key(x => x.Id);
-var doubledAmount = generatedBuilder.Derived(generatedOrders).Select(x => x.Amount * 2)
-    .MaterializeTo(x => x.AmountMirror);
-var generatedRuntime = generatedBuilder.Build().CreateRuntime();
-var generatedMappings = new ConsistencyEfCoreMappings().Map(generatedOrders);
-var generated = new GeneratedOrder { Amount = 7 };
-context.Add(generated);
-var work = context.CaptureConsistencyUnitOfWork(generatedRuntime, generatedMappings);
-
-using (var transaction = context.Database.BeginTransaction())
-{
-    context.SaveChanges(); // Finalize the generated consistency key.
-    _ = work.PrepareAndPlan();
-    context.SaveChanges(); // Persist the calculated mirror.
-    transaction.Commit();
-}
-work.CommitAfterDatabaseCommit();
-work.Dispatch();
-Console.WriteLine($"Manual generated-key workflow persisted mirror={generated.AmountMirror}.");
-
-internal sealed class OrdersContext(DbContextOptions<OrdersContext> options) : DbContext(options)
-{
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    await seed.Database.EnsureCreatedAsync();
+    seed.Add(new OrderLine
     {
-        modelBuilder.Entity<OrderLine>();
-        modelBuilder.Entity<GeneratedOrder>().Property(x => x.Id).ValueGeneratedOnAdd();
+        Id = Guid.NewGuid(),
+        OrderedQuantity = 10,
+        FulfilledQuantity = 2,
+        RemainingQuantity = 8
+    });
+    await seed.SaveChangesAsync();
+}
+
+var services = new ServiceCollection();
+services.AddDbContext<OrdersContext>(options => options.UseSqlite(connection));
+services.AddRaffinertConsistency<OrdersContext>(compiled, mappings);
+services.AddScoped<OrderLineService>();
+await using var provider = services.BuildServiceProvider();
+
+await using (var scope = provider.CreateAsyncScope())
+{
+    var service = scope.ServiceProvider.GetRequiredService<OrderLineService>();
+    var id = await scope.ServiceProvider.GetRequiredService<OrdersContext>().OrderLines
+        .Select(x => x.Id)
+        .SingleAsync();
+
+    try
+    {
+        await service.ChangeFulfilledQuantityAsync(id, 12, CancellationToken.None);
+    }
+    catch (ConsistencyInvariantViolationException)
+    {
+        Console.WriteLine("Rejected invalid fulfillment before SQL; database and runtime remain unchanged.");
+    }
+
+    await service.ChangeFulfilledQuantityAsync(id, 4, CancellationToken.None);
+    var runtimeVersion = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>().Version;
+    Console.WriteLine($"Observed RemainingQuantity={service.ObservedRemaining}; runtime version={runtimeVersion}.");
+}
+
+await using (var verification = new OrdersContext(
+                 new DbContextOptionsBuilder<OrdersContext>().UseSqlite(connection).Options))
+{
+    var persisted = await verification.OrderLines.AsNoTracking().SingleAsync();
+    Console.WriteLine($"Persisted RemainingQuantity={persisted.RemainingQuantity}.");
+}
+
+public sealed class OrderLineService(OrdersContext db, ConsistencyRuntime consistency)
+{
+    public int ObservedRemaining { get; private set; }
+
+    public async Task ChangeFulfilledQuantityAsync(
+        Guid id,
+        int fulfilledQuantity,
+        CancellationToken cancellationToken)
+    {
+        var line = await db.OrderLines.SingleAsync(x => x.Id == id, cancellationToken);
+        line.FulfilledQuantity = fulfilledQuantity;
+        consistency.Materialize(line);
+        ObservedRemaining = line.RemainingQuantity;
+        await db.SaveChangesAsync(cancellationToken);
     }
 }
 
-internal sealed class GeneratedOrder
+public sealed class OrdersContext(DbContextOptions<OrdersContext> options) : DbContext(options)
 {
-    public int Id { get; set; }
-    public int Amount { get; set; }
-    public int AmountMirror { get; set; }
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 }
 
-internal sealed class OrderLine
+public sealed class OrderLine
 {
-    public Guid Id { get; init; }
+    public Guid Id { get; set; }
     public int OrderedQuantity { get; set; }
     public int FulfilledQuantity { get; set; }
     public int RemainingQuantity { get; set; }

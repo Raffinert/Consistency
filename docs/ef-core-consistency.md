@@ -4,6 +4,54 @@
 Core determines affected dependency consequences; the adapter decides which invariant states block SQL
 and which derived values are persisted as mirrors.
 
+## Injected runtime and one-call materialization
+
+Register the compiled model and EF mappings with the application container:
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
+services.AddScoped<LinkService>();
+```
+
+This creates one scoped `ConsistencyRuntime` and EF session for each `AppDbContext`. Mapped entities
+already tracked when the runtime is resolved, and entities tracked later by queries, are admitted to the
+runtime baseline automatically. The runtime injected into an application service is the same instance
+used by the save interceptor.
+
+The application-facing service remains ordinary EF code:
+
+```csharp
+public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+{
+    public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
+    {
+        var link = await db.Links
+            .Include(x => x.Left)
+            .Include(x => x.Right)
+            .SingleAsync(x => x.Id == id, cancellationToken);
+
+        link.Left.Value = value;
+        consistency.Materialize(link);
+        Use(link.Ratio, link.NormalizedRatio);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+Use this rule:
+
+```text
+Need a materialized property before SaveChanges?  runtime.Materialize(entity)
+Only saving?                                         db.SaveChanges / SaveChangesAsync
+```
+
+The explicit call prepares a binding plan, evaluates the affected logical graph, and writes only the
+requested object's physical mirrors. It does not commit runtime state or dispatch repairs. SaveChanges
+reuses an unchanged pending plan, rebuilds it if tracked semantic inputs changed, writes any remaining
+persisted mirrors, and installs the plan only after SQL succeeds. Library-owned mirror writes are excluded
+from the semantic mutation evidence used for that reuse decision.
+
 ## Stable-key workflow
 
 Configure the exact object sets, enforced invariants, and persisted mirrors:

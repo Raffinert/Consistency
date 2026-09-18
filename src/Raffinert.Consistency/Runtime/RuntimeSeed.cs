@@ -25,6 +25,31 @@ internal sealed record RuntimeSeedEntry(
 
 public sealed partial class ConsistencyRuntime
 {
+    internal void RefreshBaseline(IObjectSetDefinition set, object instance)
+    {
+        if (!_sets.TryGetValue(set, out var state))
+            throw new ArgumentException("The object set belongs to another compiled model.", nameof(set));
+        if (!state.Contains(instance))
+            return;
+        _navigation.RefreshRoot(set, instance);
+        _projections.RefreshRoot(set, instance);
+    }
+
+    internal void AdmitBaseline(IObjectSetDefinition set, object instance)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(instance);
+        if (!_sets.TryGetValue(set, out var state))
+            throw new ArgumentException("The object set belongs to another compiled model.", nameof(set));
+        if (state.Contains(instance))
+            return;
+
+        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
+        CommitAdd(new ObjectAdded(set, instance), deltas);
+        _dependencyGraph.RebaseCoverageAdmissions(deltas);
+        _projections.ValidateAll();
+    }
+
     internal void Bootstrap(IReadOnlyList<RuntimeSeedEntry> entries)
     {
         var collected = _sets.Keys.ToDictionary(

@@ -20,6 +20,8 @@ patch versions remain backward-compatible bug fixes where practical.
 
 ### Added and preserved
 
+- Added scoped EF Core DI integration with automatic tracked-entity baseline admission and one-call
+  `runtime.Materialize(entity)` support before ordinary `SaveChanges`/`SaveChangesAsync`.
 - Added v2 chaining for two local inputs, mixed projected/local inputs, and two projected inputs so the
   removed aliases do not reduce declaration capability.
 - Preserved incremental aggregate plans, logical freshness and invalidation behavior, repair dispatch,

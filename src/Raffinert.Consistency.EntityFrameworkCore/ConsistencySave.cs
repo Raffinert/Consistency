@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Transactions;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
@@ -176,7 +177,8 @@ public static class ConsistencyDbContextExtensions
 internal sealed record PendingConsistencySave(
     ConsistencyUnitOfWork Unit,
     PreparedImpactPlan? Plan,
-    MaterializationRollback? MaterializationRollback);
+    MaterializationRollback? MaterializationRollback,
+    EfMutationFingerprint Fingerprint);
 
 internal static class ConsistencyCoordinator
 {
@@ -187,7 +189,10 @@ internal static class ConsistencyCoordinator
         pending.Unit.Dispatch(runtime);
     }
     public static PendingConsistencySave Prepare(DbContext context, ConsistencyRuntime runtime,
-        ConsistencyEfCoreMappings mappings, ConsistencySaveOptions options)
+        ConsistencyEfCoreMappings mappings, ConsistencySaveOptions options,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null,
+        bool forceMaterialization = false,
+        Func<MaterializationDescriptor, object, bool>? materializationSelector = null)
     {
         ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
@@ -198,13 +203,15 @@ internal static class ConsistencyCoordinator
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
             context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
-        var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        var captured = CaptureUnitOfWork(context, mappings, includeProperty);
         var admissions = ExternalConsumerDiscovery.Discover(
             context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
         var unit = Combine(captured, admissions);
         var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback);
-        return new PendingConsistencySave(unit, plan, materializationRollback);
+            context, runtime, unit, policy, out var materializationRollback,
+            forceMaterialization, materializationSelector);
+        return new PendingConsistencySave(
+            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations));
     }
 
     public static async Task<PendingConsistencySave> PrepareAsync(
@@ -212,7 +219,10 @@ internal static class ConsistencyCoordinator
         ConsistencyRuntime runtime,
         ConsistencyEfCoreMappings mappings,
         ConsistencySaveOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null,
+        bool forceMaterialization = false,
+        Func<MaterializationDescriptor, object, bool>? materializationSelector = null)
     {
         ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
@@ -222,14 +232,73 @@ internal static class ConsistencyCoordinator
         ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(context, runtime, mappings.UnitOfWorkMappings);
         var policy = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
-        var captured = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings);
+        var captured = CaptureUnitOfWork(context, mappings, includeProperty);
         var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
         var unit = Combine(captured, admissions);
         var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback);
-        return new PendingConsistencySave(unit, plan, materializationRollback);
+            context, runtime, unit, policy, out var materializationRollback,
+            forceMaterialization, materializationSelector);
+        return new PendingConsistencySave(
+            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations));
+    }
+
+    public static EfMutationFingerprint CaptureFingerprint(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        ConsistencyEfCoreMappings mappings,
+        ConsistencySaveOptions options,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
+        if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
+            throw new ConsistencyUnsupportedTransactionException();
+        context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
+            context, runtime, mappings.UnitOfWorkMappings);
+        _ = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
+        var captured = CaptureUnitOfWork(context, mappings, includeProperty);
+        var admissions = ExternalConsumerDiscovery.Discover(
+            context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
+        return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+    }
+
+    public static async Task<EfMutationFingerprint> CaptureFingerprintAsync(
+        DbContext context,
+        ConsistencyRuntime runtime,
+        ConsistencyEfCoreMappings mappings,
+        ConsistencySaveOptions options,
+        CancellationToken cancellationToken,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
+        if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
+            throw new ConsistencyUnsupportedTransactionException();
+        context.ChangeTracker.DetectChanges();
+        ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
+        ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
+            context, runtime, mappings.UnitOfWorkMappings);
+        _ = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
+        var captured = CaptureUnitOfWork(context, mappings, includeProperty);
+        var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
+            context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
+            .ConfigureAwait(false);
+        return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+    }
+
+    private static ConsistencyUnitOfWork CaptureUnitOfWork(
+        DbContext context,
+        ConsistencyEfCoreMappings mappings,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty)
+    {
+        return includeProperty is null
+            ? ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings)
+            : ChangeTrackerAdapter.CaptureUnitOfWork(
+                context.ChangeTracker, mappings.UnitOfWorkMappings, includeProperty);
     }
 
     private static ConsistencyUnitOfWork Combine(

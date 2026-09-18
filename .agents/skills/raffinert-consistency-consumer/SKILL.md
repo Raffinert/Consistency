@@ -386,6 +386,18 @@ The runtime is mutable and not thread-safe. Its lifetime must match an explicit 
 
 # 10. EF Core policy
 
+For dependency-injected applications, prefer the scoped integration registration:
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
+```
+
+The application service should inject only its `DbContext` and `ConsistencyRuntime`. The EF integration
+uses the same scoped runtime for baseline admission, explicit materialization, and SaveChanges commit.
+Mapped tracked entities are admitted automatically; application code must not call `runtime.Add(...)` or
+`runtime.Apply(...)` for ordinary EF changes.
+
 Map sets whose tracked lifecycle/property changes participate in persistence orchestration:
 
 ```csharp
@@ -457,6 +469,18 @@ Targeted discovery is not whole-set completeness.
 ---
 
 # 13. Consistent save boundary
+
+With the injected EF integration, ordinary persistence remains the application boundary:
+
+```text
+Need a materialized property before SaveChanges?  runtime.Materialize(entity)
+Only saving?                                         db.SaveChanges / SaveChangesAsync
+```
+
+`runtime.Materialize(entity)` is the only explicit pre-save Raffinert call needed when the application
+must read a materialized property immediately. It prepares and stores a pending plan without committing
+runtime state. `SaveChanges` reuses that plan when semantic EF inputs are unchanged, rebuilds it after an
+intervening semantic change, and commits/dispatches only after SQL succeeds.
 
 For ordinary stable-key EF workflows:
 
