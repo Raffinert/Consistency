@@ -19,6 +19,8 @@ internal sealed class ObjectSetRuntime
     public IEnumerable<(object Instance, object Key)> RegisteredEntries =>
         _registeredKeys.Select(pair => (pair.Key, pair.Value));
     public bool Contains(object instance) => _instances.Contains(instance);
+    public IReadOnlyList<object> GetCapturedInstances(object snapshot) =>
+        ((EntryState[])snapshot).Select(value => value.Instance).ToArray();
     public object GetRegisteredKey(object instance) => _registeredKeys.TryGetValue(instance, out var key)
         ? key
         : throw new InvalidOperationException("The source instance is not registered in its object set.");

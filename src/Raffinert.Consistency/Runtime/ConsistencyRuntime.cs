@@ -179,6 +179,7 @@ public sealed partial class ConsistencyRuntime
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
         IReadOnlyList<IInvariantDefinition> invariants,
+        IReadOnlyList<MaterializationDescriptor> materializations,
         CompiledDependencyGraph compiledDependencyGraph,
         IDependencyImpactPolicy? dependencyImpactPolicy = null,
         RuntimeDiagnosticOptions? diagnosticOptions = null)
@@ -194,6 +195,7 @@ public sealed partial class ConsistencyRuntime
             .ToDictionary(pair => pair.definition, pair => pair.id);
         _invariantIds = invariants.Select((definition, id) => (definition, id))
             .ToDictionary(pair => pair.definition, pair => pair.id);
+        InitializeMaterializations(materializations);
         foreach (var relation in relations.Where(relation =>
                      relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized))
             _relations[relation].EnableExactPropagation();

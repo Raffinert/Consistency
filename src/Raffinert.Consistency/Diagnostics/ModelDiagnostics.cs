@@ -30,6 +30,32 @@ public enum DerivedLinqSemantics
     Ordering = 4
 }
 
+public enum DerivedDependencyKind
+{
+    DirectMember,
+    DerivedValue,
+    ProjectedDerivedValue,
+    RelationValue
+}
+
+public sealed record DerivedDependencyModelDiagnostics(
+    DerivedDependencyKind Kind,
+    string? Path,
+    int? UpstreamDerivedId,
+    int? RelationId,
+    bool HasSourceMemberClassifier,
+    DependencySeverity SourceChangedSeverity,
+    DependencySeverity MembershipAddedSeverity,
+    DependencySeverity MembershipRemovedSeverity,
+    DependencySeverity ItemChangedSeverity);
+
+public sealed record MaterializationModelDiagnostics(
+    int SourceObjectSetId,
+    int DerivedId,
+    Type SourceType,
+    Type ValueType,
+    string TargetMember);
+
 public sealed record ObjectSetModelDiagnostics(
     int ObjectSetId,
     Type ObjectType,
@@ -80,6 +106,7 @@ public sealed record DerivedModelDiagnostics(
     public bool HasConditionalSourcePolicy { get; init; }
     public int SourceMemberRuleCount { get; init; }
     public IReadOnlyList<string> SourceMemberRuleNames { get; init; } = [];
+    public IReadOnlyList<DerivedDependencyModelDiagnostics> SemanticDependencies { get; init; } = [];
 }
 
 public sealed record InvariantModelDiagnostics(
@@ -99,4 +126,7 @@ public sealed record CompiledModelDiagnostics(
     IReadOnlyList<ObjectSetModelDiagnostics> ObjectSets,
     IReadOnlyList<RelationModelDiagnostics> Relations,
     IReadOnlyList<DerivedModelDiagnostics> DerivedValues,
-    IReadOnlyList<InvariantModelDiagnostics> Invariants);
+    IReadOnlyList<InvariantModelDiagnostics> Invariants)
+{
+    public IReadOnlyList<MaterializationModelDiagnostics> Materializations { get; init; } = [];
+}

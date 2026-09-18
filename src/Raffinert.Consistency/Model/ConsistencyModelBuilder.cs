@@ -12,6 +12,7 @@ public sealed class ConsistencyModelBuilder
     private readonly List<IRelationDefinition> _relations = [];
     private readonly List<IDerivedDefinition> _derivedStates = [];
     private readonly List<IInvariantDefinition> _invariants = [];
+    private readonly List<MaterializationDescriptor> _materializations = [];
     private bool _built;
 
     internal bool ForceScanPlansForTesting { get; private set; }
@@ -73,6 +74,7 @@ public sealed class ConsistencyModelBuilder
     {
         ThrowIfBuilt();
         ValidateDefinitionKeys();
+        ValidateMaterializationDependencies();
         foreach (var set in _objectSets)
         {
             if (!set.HasKey)
@@ -120,6 +122,7 @@ public sealed class ConsistencyModelBuilder
             _relations.ToArray(),
             _derivedStates.ToArray(),
             _invariants.ToArray(),
+            _materializations.ToArray(),
             dependencyGraph);
     }
 
@@ -156,6 +159,23 @@ public sealed class ConsistencyModelBuilder
         _invariants.Add(invariant);
     }
 
+    internal void AddMaterialization<TSource, TValue>(
+        IDerivedDefinition definition,
+        Expression<Func<TSource, TValue>> target)
+        where TSource : class
+    {
+        ThrowIfBuilt();
+        EnsureDerived(definition);
+        if (_materializations.Any(value => ReferenceEquals(value.Definition, definition)))
+            throw new InvalidOperationException("A derived definition can have only one materialization target.");
+        var descriptor = MaterializationDescriptor.Create(definition, target);
+        if (_materializations.Any(value =>
+                ReferenceEquals(value.SourceSet, descriptor.SourceSet) && value.Target == descriptor.Target))
+            throw new InvalidOperationException(
+                $"Materialization target '{descriptor.Target.Name}' is already registered for this object set.");
+        _materializations.Add(descriptor);
+    }
+
     internal void EnsureRelation(IRelationDefinition relation)
     {
         ThrowIfBuilt();
@@ -171,6 +191,28 @@ public sealed class ConsistencyModelBuilder
     }
 
     internal void EnsureMutable() => ThrowIfBuilt();
+
+    private void ValidateMaterializationDependencies()
+    {
+        foreach (var derived in _derivedStates)
+        {
+            foreach (var dependency in derived.Analysis.Dependencies.Where(value =>
+                         value.Role == ExpressionParameterRole.DerivedSource &&
+                         value.Path.Segments.Count == 1))
+            {
+                var target = _materializations.FirstOrDefault(value =>
+                    ReferenceEquals(value.SourceSet, derived.SourceSet) &&
+                    value.Target == dependency.Path.Segments[0].Member);
+                if (target is null)
+                    continue;
+                var name = target.Definition.DefinitionKey ?? "<unnamed>";
+                throw new InvalidOperationException(
+                    $"'{target.Target.Name}' is a materialization target of derived definition '{name}'. " +
+                    $"Depend on the logical definition with From({name}) instead of treating the mirror property " +
+                    "as an independent source dependency.");
+            }
+        }
+    }
 
     private static void ValidateComplete(
         string consumerKind,

@@ -124,6 +124,21 @@ internal static class ExpressionDependencyAnalyzer
         return Analyze(expression.Body, parameters);
     }
 
+    public static ExpressionDependencyAnalysis AnalyzeComposedDerived(
+        LambdaExpression expression,
+        IReadOnlyList<TrackedExpressionDependency> declaredDependencies)
+    {
+        var inferred = AnalyzeComposedDerived(expression);
+        return new ExpressionDependencyAnalysis(
+            inferred.Dependencies.Concat(declaredDependencies)
+                .Distinct(TrackedDependencyComparer.Instance).ToArray(),
+            declaredDependencies.Count == 0
+                ? inferred.Flags
+                : inferred.Flags & ~DependencyAnalysisFlags.ContainsOpaqueCode,
+            inferred.HasRelationMembershipDependency,
+            inferred.LinqSemantics);
+    }
+
     public static ExpressionDependencyAnalysis AnalyzeInvariant(LambdaExpression expression) =>
         Analyze(
             expression.Body,

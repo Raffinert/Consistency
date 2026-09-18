@@ -12,6 +12,7 @@ public sealed class CompiledConsistencyModel
     private readonly IReadOnlyList<IRelationDefinition> _relations;
     private readonly IReadOnlyList<IDerivedDefinition> _derivedStates;
     private readonly IReadOnlyList<IInvariantDefinition> _invariants;
+    private readonly IReadOnlyList<MaterializationDescriptor> _materializations;
     private readonly CompiledDependencyGraph _dependencyGraph;
 
     internal CompiledConsistencyModel(
@@ -19,12 +20,14 @@ public sealed class CompiledConsistencyModel
         IReadOnlyList<IRelationDefinition> relations,
         IReadOnlyList<IDerivedDefinition> derivedStates,
         IReadOnlyList<IInvariantDefinition> invariants,
+        IReadOnlyList<MaterializationDescriptor> materializations,
         CompiledDependencyGraph dependencyGraph)
     {
         _sets = sets;
         _relations = relations;
         _derivedStates = derivedStates;
         _invariants = invariants;
+        _materializations = materializations;
         _dependencyGraph = dependencyGraph;
         Diagnostics = CreateDiagnostics();
         DebugView = CreateDebugView();
@@ -32,7 +35,9 @@ public sealed class CompiledConsistencyModel
 
     public string DebugView { get; }
     public CompiledModelDiagnostics Diagnostics { get; }
-    public ConsistencyRuntime CreateRuntime() => new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph);
+    internal IReadOnlyList<MaterializationDescriptor> Materializations => _materializations;
+    public ConsistencyRuntime CreateRuntime() =>
+        new(_sets, _relations, _derivedStates, _invariants, _materializations, _dependencyGraph);
     public ConsistencyRuntime CreateRuntime(Action<RuntimeSeedBuilder> configureSeed)
     {
         ArgumentNullException.ThrowIfNull(configureSeed);
@@ -45,7 +50,9 @@ public sealed class CompiledConsistencyModel
     public ConsistencyRuntime CreateRuntime(RuntimeDiagnosticOptions diagnosticOptions)
     {
         ArgumentNullException.ThrowIfNull(diagnosticOptions);
-        return new ConsistencyRuntime(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, null, diagnosticOptions);
+        return new ConsistencyRuntime(
+            _sets, _relations, _derivedStates, _invariants, _materializations, _dependencyGraph, null,
+            diagnosticOptions);
     }
     public ConsistencyRuntime CreateRuntime(
         RuntimeDiagnosticOptions diagnosticOptions,
@@ -60,7 +67,8 @@ public sealed class CompiledConsistencyModel
         return runtime;
     }
     internal ConsistencyRuntime CreateRuntime(IDependencyImpactPolicy dependencyImpactPolicy) =>
-        new(_sets, _relations, _derivedStates, _invariants, _dependencyGraph, dependencyImpactPolicy);
+        new(_sets, _relations, _derivedStates, _invariants, _materializations, _dependencyGraph,
+            dependencyImpactPolicy);
 
     private string CreateDebugView()
     {
@@ -144,6 +152,42 @@ public sealed class CompiledConsistencyModel
             foreach (var dependency in invariant.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
         }
+        lines.Add("Logical v2 graph:");
+        foreach (var derived in _derivedStates)
+        {
+            var name = derived.DefinitionKey ?? "<unnamed>";
+            lines.Add($"  {name} [Derived<{derived.SourceSet.ObjectType.Name}, {derived.ComputationExpression.ReturnType.Name}>]");
+            var projectedPaths = derived.Inputs.OfType<ProjectedUpstreamDerivedInput>()
+                .Select(value => FormatPath(value.SelectorPath))
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var dependency in derived.Analysis.Dependencies.Where(value =>
+                         value.Role == ExpressionParameterRole.DerivedSource &&
+                         !projectedPaths.Contains(FormatPath(value.Path))))
+                lines.Add($"    depends-on {FormatPath(dependency.Path)}");
+            foreach (var input in derived.Inputs)
+            {
+                switch (input)
+                {
+                    case RelationDerivedInput relation:
+                        lines.Add($"    from {relation.Relation.DefinitionKey ?? relation.Relation.RightSet.ObjectType.Name}");
+                        break;
+                    case ProjectedUpstreamDerivedInput projected:
+                        lines.Add($"    from {projected.Upstream.DefinitionKey ?? "<unnamed>"}");
+                        lines.Add($"    projection {FormatPath(projected.SelectorPath)} -> " +
+                            $"{projected.Upstream.DefinitionKey ?? "<unnamed>"}");
+                        break;
+                    case UpstreamDerivedInput upstream:
+                        lines.Add($"    from {upstream.Upstream.DefinitionKey ?? "<unnamed>"}");
+                        break;
+                }
+            }
+            var materialization = _materializations.FirstOrDefault(value =>
+                ReferenceEquals(value.Definition, derived));
+            if (materialization is not null)
+                lines.Add($"    materializes-to {materialization.Target.Name}");
+            if (derived.ComputationPlanName.StartsWith("Incremental", StringComparison.Ordinal))
+                lines.Add($"    operator {derived.ComputationPlanName}");
+        }
         lines.Add("Dependency DAG:");
         foreach (var node in _dependencyGraph.Nodes)
             lines.Add($"  [{node.TopologicalOrder}] {node.Kind}: {node.Id}");
@@ -211,7 +255,9 @@ public sealed class CompiledConsistencyModel
                 HasConditionalSourcePolicy = derived.ImpactPolicy.SourceMemberRules.Count > 0,
                 SourceMemberRuleCount = derived.ImpactPolicy.SourceMemberRules.Count,
                 SourceMemberRuleNames = derived.ImpactPolicy.SourceMemberRules
-                    .Select(rule => rule.Member.Name).ToArray()
+                    .Select(rule => rule.Member.Name).ToArray(),
+                SemanticDependencies = CreateSemanticDependencies(
+                    derived, relationIds, derivedIds)
             })
                 .ToArray(),
             _invariants.Select((invariant, id) => new InvariantModelDiagnostics(
@@ -225,8 +271,79 @@ public sealed class CompiledConsistencyModel
                 invariant.AllowIncompleteDependencies,
                 invariant.Reaction)
             { DefinitionKey = invariant.DefinitionKey })
-                .ToArray());
+                .ToArray())
+        {
+            Materializations = _materializations.Select(value => new MaterializationModelDiagnostics(
+                value.SourceSet.Id,
+                derivedIds[value.Definition],
+                value.SourceType,
+                value.ValueType,
+                value.Target.Name)).ToArray()
+        };
     }
+
+    private static IReadOnlyList<DerivedDependencyModelDiagnostics> CreateSemanticDependencies(
+        IDerivedDefinition derived,
+        IReadOnlyDictionary<IRelationDefinition, int> relationIds,
+        IReadOnlyDictionary<IDerivedDefinition, int> derivedIds)
+    {
+        var policy = derived.ImpactPolicy;
+        var values = new List<DerivedDependencyModelDiagnostics>();
+        values.AddRange(derived.Analysis.Dependencies
+            .Where(value => value.Role == ExpressionParameterRole.DerivedSource)
+            .Select(value => new DerivedDependencyModelDiagnostics(
+                DerivedDependencyKind.DirectMember,
+                FormatPath(value.Path),
+                null,
+                null,
+                value.Path.Segments.Count == 1 && policy.SourceMemberRules.Any(rule =>
+                    rule.Member == value.Path.Segments[0].Member),
+                policy.SourceChanged,
+                policy.MembershipAdded,
+                policy.MembershipRemoved,
+                policy.ItemChanged)));
+        foreach (var input in derived.Inputs)
+        {
+            values.Add(input switch
+            {
+                RelationDerivedInput relation => new DerivedDependencyModelDiagnostics(
+                    DerivedDependencyKind.RelationValue,
+                    null,
+                    null,
+                    relationIds[relation.Relation],
+                    false,
+                    policy.SourceChanged,
+                    policy.MembershipAdded,
+                    policy.MembershipRemoved,
+                    policy.ItemChanged),
+                ProjectedUpstreamDerivedInput projected => new DerivedDependencyModelDiagnostics(
+                    DerivedDependencyKind.ProjectedDerivedValue,
+                    FormatPath(projected.SelectorPath),
+                    derivedIds[projected.Upstream],
+                    null,
+                    false,
+                    policy.SourceChanged,
+                    policy.MembershipAdded,
+                    policy.MembershipRemoved,
+                    policy.ItemChanged),
+                UpstreamDerivedInput upstream => new DerivedDependencyModelDiagnostics(
+                    DerivedDependencyKind.DerivedValue,
+                    null,
+                    derivedIds[upstream.Upstream],
+                    null,
+                    false,
+                    policy.SourceChanged,
+                    policy.MembershipAdded,
+                    policy.MembershipRemoved,
+                    policy.ItemChanged),
+                _ => throw new NotSupportedException($"Unknown derived input '{input.GetType().Name}'.")
+            });
+        }
+        return values;
+    }
+
+    private static string FormatPath(DependencyPath path) =>
+        string.Join('.', path.Segments.Select(value => value.Member.Name));
 
     private static RelationAccessPlanKind ToPublicAccessPlan(RelationAccessPlan plan) => plan switch
     {

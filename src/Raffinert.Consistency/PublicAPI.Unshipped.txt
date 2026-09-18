@@ -1,1 +1,71 @@
 #nullable enable
+Raffinert.Consistency.DerivedBuilder<TSource>.DependsOn<TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst>!>! first, System.Linq.Expressions.Expression<System.Func<TSource!, TSecond>!>! second) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.From<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedUsingBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.From<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! upstream) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TValue>!
+Raffinert.Consistency.DerivedBuilder<TSource>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TFirst, TSecond>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TFirst, TSecond>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst, TSecond, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.DependsOn<TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst>!>! first, System.Linq.Expressions.Expression<System.Func<TSource!, TSecond>!>! second) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.From<TSecond>(Raffinert.Consistency.Derived<TSource!, TSecond>! second) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TUpstream, TSecond>!
+Raffinert.Consistency.DerivedUpstreamBuilder<TSource, TUpstream>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Any() -> Raffinert.Consistency.Derived<TSource!, bool>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Count() -> Raffinert.Consistency.Derived<TSource!, int>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.LongCount() -> Raffinert.Consistency.Derived<TSource!, long>!
+Raffinert.Consistency.DerivedUsingBuilder<TSource, TItem>.Sum<TValue>(System.Linq.Expressions.Expression<System.Func<TItem!, TValue>!>! selector) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.Derived<TSource, TValue>.MaterializeTo(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! target) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.DerivedV2Extensions
+static Raffinert.Consistency.DerivedV2Extensions.Select<TSource, TValue>(this Raffinert.Consistency.DerivedBuilder<TSource!>! builder, System.Func<TSource!, TValue>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.InvariantBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived) -> Raffinert.Consistency.InvariantUsingBuilder<TSource!, TValue>!
+Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>
+Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TProjected, TLocal>!
+Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TProjected, TLocal>!
+Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TProjected, TLocal, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.DependsOn<TDependency>(System.Linq.Expressions.Expression<System.Func<TSource!, TDependency>!>! dependency) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TUpstream>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.From<TLocal>(Raffinert.Consistency.Derived<TSource!, TLocal>! local) -> Raffinert.Consistency.MixedProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TUpstream, TLocal>!
+Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream>.Select<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstream, TValue>!>! computation) -> Raffinert.Consistency.Derived<TSource!, TValue>!
+Raffinert.Consistency.ConsistencyRuntime.Evaluate<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Consistency.ConsistencyRuntime.Materialize<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Consistency.ConsistencyRuntime.Materialize<TSource>(TSource! source) -> void
+Raffinert.Consistency.CompiledModelDiagnostics.Materializations.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.MaterializationModelDiagnostics!>!
+Raffinert.Consistency.CompiledModelDiagnostics.Materializations.init -> void
+Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyKind.DerivedValue = 1 -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyKind.DirectMember = 0 -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyKind.ProjectedDerivedValue = 2 -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyKind.RelationValue = 3 -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyModelDiagnostics
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.DerivedDependencyModelDiagnostics(Raffinert.Consistency.DerivedDependencyKind Kind, string? Path, int? UpstreamDerivedId, int? RelationId, bool HasSourceMemberClassifier, Raffinert.Consistency.DependencySeverity SourceChangedSeverity, Raffinert.Consistency.DependencySeverity MembershipAddedSeverity, Raffinert.Consistency.DependencySeverity MembershipRemovedSeverity, Raffinert.Consistency.DependencySeverity ItemChangedSeverity) -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.HasSourceMemberClassifier.get -> bool
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.HasSourceMemberClassifier.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.ItemChangedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.ItemChangedSeverity.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.Kind.get -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.Kind.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipAddedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipAddedSeverity.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipRemovedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipRemovedSeverity.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.Path.get -> string?
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.Path.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.RelationId.get -> int?
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.RelationId.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Consistency.DependencySeverity
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.SourceChangedSeverity.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.UpstreamDerivedId.get -> int?
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.UpstreamDerivedId.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.SemanticDependencies.get -> System.Collections.Generic.IReadOnlyList<Raffinert.Consistency.DerivedDependencyModelDiagnostics!>!
+Raffinert.Consistency.DerivedModelDiagnostics.SemanticDependencies.init -> void
+Raffinert.Consistency.MaterializationModelDiagnostics
+Raffinert.Consistency.MaterializationModelDiagnostics.DerivedId.get -> int
+Raffinert.Consistency.MaterializationModelDiagnostics.DerivedId.init -> void
+Raffinert.Consistency.MaterializationModelDiagnostics.MaterializationModelDiagnostics(int SourceObjectSetId, int DerivedId, System.Type! SourceType, System.Type! ValueType, string! TargetMember) -> void
+Raffinert.Consistency.MaterializationModelDiagnostics.SourceObjectSetId.get -> int
+Raffinert.Consistency.MaterializationModelDiagnostics.SourceObjectSetId.init -> void
+Raffinert.Consistency.MaterializationModelDiagnostics.SourceType.get -> System.Type!
+Raffinert.Consistency.MaterializationModelDiagnostics.SourceType.init -> void
+Raffinert.Consistency.MaterializationModelDiagnostics.TargetMember.get -> string!
+Raffinert.Consistency.MaterializationModelDiagnostics.TargetMember.init -> void
+Raffinert.Consistency.MaterializationModelDiagnostics.ValueType.get -> System.Type!
+Raffinert.Consistency.MaterializationModelDiagnostics.ValueType.init -> void

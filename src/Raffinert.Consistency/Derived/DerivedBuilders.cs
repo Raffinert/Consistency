@@ -68,6 +68,15 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return this;
     }
 
+    public DerivedBuilder<TSource> DependsOn<TFirst, TSecond>(
+        Expression<Func<TSource, TFirst>> first,
+        Expression<Func<TSource, TSecond>> second)
+    {
+        DependsOn(first);
+        DependsOn(second);
+        return this;
+    }
+
     /// <summary>Configures semantic severity for direct source-member changes.</summary>
     public DerivedBuilder<TSource> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
@@ -88,14 +97,21 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         return new DerivedUsingBuilder<TSource, TItem>(_model, _source, relation);
     }
 
+    public DerivedUsingBuilder<TSource, TItem> From<TItem>(Relation<TSource, TItem> relation)
+        where TItem : class => Using(relation);
+
     public DerivedUpstreamBuilder<TSource, TValue> Using<TValue>(Derived<TSource, TValue> upstream)
     {
         ArgumentNullException.ThrowIfNull(upstream);
         _model.EnsureDerived(upstream.Definition);
         if (!ReferenceEquals(upstream.Definition.SourceSet, _source.Definition))
             throw new ArgumentException("The upstream source set must match the derived source set.", nameof(upstream));
-        return new DerivedUpstreamBuilder<TSource, TValue>(_model, _source, upstream);
+        return new DerivedUpstreamBuilder<TSource, TValue>(
+            _model, _source, upstream, _declaredDependencies.ToArray());
     }
+
+    public DerivedUpstreamBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> upstream) =>
+        Using(upstream);
 
     /// <summary>Uses a derived value owned by an object reached through a tracked reference.</summary>
     public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> Using<TUpstreamSource, TValue>(
@@ -107,8 +123,13 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         ArgumentNullException.ThrowIfNull(upstream);
         _model.EnsureDerived(upstream.Definition);
         return new ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue>(
-            _model, _source, selector, upstream);
+            _model, _source, selector, upstream, _declaredDependencies.ToArray());
     }
+
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TValue> From<TUpstreamSource, TValue>(
+        Expression<Func<TSource, TUpstreamSource>> selector,
+        Derived<TUpstreamSource, TValue> upstream)
+        where TUpstreamSource : class => Using(selector, upstream);
 
     public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
         Using<TUpstreamSource, TFirst, TSecond>(
@@ -153,7 +174,18 @@ public sealed class DerivedBuilder<TSource> where TSource : class
             _impactPolicy,
             _declaredDependencies);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
+    }
+
+    public Derived<TSource, TValue> Select<TValue>(Expression<Func<TSource, TValue>> computation) =>
+        Compute(computation);
+
+    internal Derived<TSource, TValue> SelectOpaque<TValue>(Func<TSource, TValue> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var source = Expression.Parameter(typeof(TSource), "source");
+        var invocation = Expression.Invoke(Expression.Constant(computation), source);
+        return Compute(Expression.Lambda<Func<TSource, TValue>>(invocation, source));
     }
 }
 
@@ -165,6 +197,7 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
     private readonly ObjectSet<TSource> _source;
     private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
     private readonly Derived<TUpstreamSource, TUpstream> _upstream;
+    private readonly List<TrackedExpressionDependency> _declaredDependencies;
     private DerivedImpactPolicy _impactPolicy = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
         DependencySeverity.Dirty, false, []);
@@ -173,8 +206,32 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         ConsistencyModelBuilder model,
         ObjectSet<TSource> source,
         Expression<Func<TSource, TUpstreamSource>> selector,
-        Derived<TUpstreamSource, TUpstream> upstream) =>
+        Derived<TUpstreamSource, TUpstream> upstream,
+        IReadOnlyList<TrackedExpressionDependency>? declaredDependencies = null)
+    {
         (_model, _source, _selector, _upstream) = (model, source, selector, upstream);
+        _declaredDependencies = declaredDependencies?.ToList() ?? [];
+    }
+
+    public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream> DependsOn<TDependency>(
+        Expression<Func<TSource, TDependency>> dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        _declaredDependencies.Add(ExpressionDependencyAnalyzer.AnalyzeDeclaredSourceDependency(dependency));
+        return this;
+    }
+
+    public MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream, TLocal> From<TLocal>(
+        Derived<TSource, TLocal> local)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        _model.EnsureDerived(local.Definition);
+        if (!ReferenceEquals(local.Definition.SourceSet, _source.Definition))
+            throw new ArgumentException(
+                "The local upstream source set must match the derived source set.", nameof(local));
+        return new MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream, TLocal>(
+            _model, _source, _selector, _upstream, local, _declaredDependencies);
+    }
 
     public ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TUpstream> Impact(
         Action<DerivedImpactPolicyBuilder<TSource>> configure)
@@ -191,10 +248,13 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TU
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
             _source.Definition, _upstream.Definition, _selector, _selector.Compile(),
-            computation, computation.Compile(), _impactPolicy);
+            computation, computation.Compile(), _impactPolicy, _declaredDependencies);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
     }
+
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TUpstream, TValue>> computation) => Compute(computation);
 }
 
 public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TFirst, TSecond>
@@ -236,7 +296,73 @@ public sealed class ProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TF
             _source.Definition, _first.Definition, _second.Definition, _selector, _selector.Compile(),
             computation, computation.Compile(), _impactPolicy);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
+    }
+}
+
+public sealed class MixedProjectedDerivedUpstreamBuilder<
+    TSource, TUpstreamSource, TProjected, TLocal>
+    where TSource : class
+    where TUpstreamSource : class
+{
+    private readonly ConsistencyModelBuilder _model;
+    private readonly ObjectSet<TSource> _source;
+    private readonly Expression<Func<TSource, TUpstreamSource>> _selector;
+    private readonly Derived<TUpstreamSource, TProjected> _projected;
+    private readonly Derived<TSource, TLocal> _local;
+    private readonly List<TrackedExpressionDependency> _declaredDependencies;
+    private DerivedImpactPolicy _impactPolicy = new(
+        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
+        DependencySeverity.Dirty, false, []);
+
+    internal MixedProjectedDerivedUpstreamBuilder(
+        ConsistencyModelBuilder model,
+        ObjectSet<TSource> source,
+        Expression<Func<TSource, TUpstreamSource>> selector,
+        Derived<TUpstreamSource, TProjected> projected,
+        Derived<TSource, TLocal> local,
+        IReadOnlyList<TrackedExpressionDependency> declaredDependencies)
+    {
+        (_model, _source, _selector, _projected, _local) =
+            (model, source, selector, projected, local);
+        _declaredDependencies = declaredDependencies.ToList();
+    }
+
+    public MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal>
+        DependsOn<TDependency>(Expression<Func<TSource, TDependency>> dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        _declaredDependencies.Add(ExpressionDependencyAnalyzer.AnalyzeDeclaredSourceDependency(dependency));
+        return this;
+    }
+
+    public MixedProjectedDerivedUpstreamBuilder<TSource, TUpstreamSource, TProjected, TLocal> Impact(
+        Action<DerivedImpactPolicyBuilder<TSource>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new DerivedImpactPolicyBuilder<TSource>();
+        configure(builder);
+        _impactPolicy = builder.Build();
+        return this;
+    }
+
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TProjected, TLocal, TValue>> computation)
+    {
+        ArgumentNullException.ThrowIfNull(computation);
+        var definition = new MixedProjectedComposedDerivedDefinition<
+            TSource, TUpstreamSource, TProjected, TLocal, TValue>(
+            _source.Definition,
+            _projected.Definition,
+            _local.Definition,
+            _selector,
+            _selector.Compile(),
+            computation,
+            computation.Compile(),
+            _impactPolicy,
+            _declaredDependencies);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model);
     }
 }
 
@@ -245,10 +371,47 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
     private readonly ConsistencyModelBuilder _model;
     private readonly ObjectSet<TSource> _source;
     private readonly Derived<TSource, TUpstream> _upstream;
+    private readonly List<TrackedExpressionDependency> _declaredDependencies;
     private DerivedImpactPolicy _impactPolicy = DefaultImpact;
 
-    internal DerivedUpstreamBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source,
-        Derived<TSource, TUpstream> upstream) => (_model, _source, _upstream) = (model, source, upstream);
+    internal DerivedUpstreamBuilder(
+        ConsistencyModelBuilder model,
+        ObjectSet<TSource> source,
+        Derived<TSource, TUpstream> upstream,
+        IReadOnlyList<TrackedExpressionDependency>? declaredDependencies = null)
+    {
+        (_model, _source, _upstream) = (model, source, upstream);
+        _declaredDependencies = declaredDependencies?.ToList() ?? [];
+    }
+
+    public DerivedUpstreamBuilder<TSource, TUpstream> DependsOn<TDependency>(
+        Expression<Func<TSource, TDependency>> dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        _declaredDependencies.Add(ExpressionDependencyAnalyzer.AnalyzeDeclaredSourceDependency(dependency));
+        return this;
+    }
+
+    public DerivedUpstreamBuilder<TSource, TUpstream> DependsOn<TFirst, TSecond>(
+        Expression<Func<TSource, TFirst>> first,
+        Expression<Func<TSource, TSecond>> second)
+    {
+        DependsOn(first);
+        DependsOn(second);
+        return this;
+    }
+
+    public DerivedUpstreamBuilder<TSource, TUpstream, TSecond> From<TSecond>(
+        Derived<TSource, TSecond> second)
+    {
+        ArgumentNullException.ThrowIfNull(second);
+        _model.EnsureDerived(second.Definition);
+        if (!ReferenceEquals(second.Definition.SourceSet, _source.Definition))
+            throw new ArgumentException(
+                "The upstream source set must match the derived source set.", nameof(second));
+        return new DerivedUpstreamBuilder<TSource, TUpstream, TSecond>(
+            _model, _source, _upstream, second, _declaredDependencies);
+    }
 
     public DerivedUpstreamBuilder<TSource, TUpstream> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
@@ -263,10 +426,14 @@ public sealed class DerivedUpstreamBuilder<TSource, TUpstream> where TSource : c
     {
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ComposedDerivedDefinition<TSource, TUpstream, TValue>(
-            _source.Definition, _upstream.Definition, computation, computation.Compile(), _impactPolicy);
+            _source.Definition, _upstream.Definition, computation, computation.Compile(), _impactPolicy,
+            _declaredDependencies);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
     }
+
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TUpstream, TValue>> computation) => Compute(computation);
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
@@ -279,11 +446,27 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
     private readonly ObjectSet<TSource> _source;
     private readonly Derived<TSource, TFirst> _first;
     private readonly Derived<TSource, TSecond> _second;
+    private readonly List<TrackedExpressionDependency> _declaredDependencies;
     private DerivedImpactPolicy _impactPolicy = DefaultImpact;
 
-    internal DerivedUpstreamBuilder(ConsistencyModelBuilder model, ObjectSet<TSource> source,
-        Derived<TSource, TFirst> first, Derived<TSource, TSecond> second) =>
+    internal DerivedUpstreamBuilder(
+        ConsistencyModelBuilder model,
+        ObjectSet<TSource> source,
+        Derived<TSource, TFirst> first,
+        Derived<TSource, TSecond> second,
+        IReadOnlyList<TrackedExpressionDependency>? declaredDependencies = null)
+    {
         (_model, _source, _first, _second) = (model, source, first, second);
+        _declaredDependencies = declaredDependencies?.ToList() ?? [];
+    }
+
+    public DerivedUpstreamBuilder<TSource, TFirst, TSecond> DependsOn<TDependency>(
+        Expression<Func<TSource, TDependency>> dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        _declaredDependencies.Add(ExpressionDependencyAnalyzer.AnalyzeDeclaredSourceDependency(dependency));
+        return this;
+    }
 
     public DerivedUpstreamBuilder<TSource, TFirst, TSecond> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
     {
@@ -300,10 +483,13 @@ public sealed class DerivedUpstreamBuilder<TSource, TFirst, TSecond> where TSour
         ArgumentNullException.ThrowIfNull(computation);
         var definition = new ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue>(
             _source.Definition, _first.Definition, _second.Definition, computation, computation.Compile(),
-            _impactPolicy);
+            _impactPolicy, _declaredDependencies);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
     }
+
+    public Derived<TSource, TValue> Select<TValue>(
+        Expression<Func<TSource, TFirst, TSecond, TValue>> computation) => Compute(computation);
 
     private static DerivedImpactPolicy DefaultImpact { get; } = new(
         DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
@@ -371,6 +557,21 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
         return this;
     }
 
+    public Derived<TSource, TValue> Sum<TValue>(Expression<Func<TItem, TValue>> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        return ComputeRecognized(RecognizedAggregateExpressions.Sum<TSource, TItem, TValue>(selector));
+    }
+
+    public Derived<TSource, int> Count() =>
+        ComputeRecognized(RecognizedAggregateExpressions.Count<TSource, TItem>());
+
+    public Derived<TSource, long> LongCount() =>
+        ComputeRecognized(RecognizedAggregateExpressions.LongCount<TSource, TItem>());
+
+    public Derived<TSource, bool> Any() =>
+        ComputeRecognized(RecognizedAggregateExpressions.Any<TSource, TItem>());
+
     public Derived<TSource, TValue> Compute<TValue>(
         Expression<Func<TSource, IReadOnlyList<TItem>, TValue>> computation)
     {
@@ -384,19 +585,34 @@ public sealed class DerivedUsingBuilder<TSource, TItem>
             _model.ForceFullRecomputePlansForTesting || !_useIncrementalComputation,
             _useConservativePropagation);
         _model.AddDerived(definition);
-        return new Derived<TSource, TValue>(definition, _model.EnsureMutable);
+        return new Derived<TSource, TValue>(definition, _model);
+    }
+
+    private Derived<TSource, TValue> ComputeRecognized<TValue>(
+        Expression<Func<TSource, IReadOnlyList<TItem>, TValue>> computation)
+    {
+        var definition = new DerivedDefinition<TSource, TItem, TValue>(
+            _source.Definition,
+            _relation.Definition,
+            computation,
+            computation.Compile(),
+            _impactPolicy,
+            _model.ForceFullRecomputePlansForTesting,
+            preferConservativePropagation: false);
+        _model.AddDerived(definition);
+        return new Derived<TSource, TValue>(definition, _model);
     }
 }
 
 public sealed class Derived<TSource, TValue>
     where TSource : class
 {
-    private readonly Action _ensureMutable;
+    private readonly ConsistencyModelBuilder _model;
 
-    internal Derived(IDerivedDefinition definition, Action ensureMutable)
+    internal Derived(IDerivedDefinition definition, ConsistencyModelBuilder model)
     {
         Definition = definition;
-        _ensureMutable = ensureMutable;
+        _model = model;
     }
     internal IDerivedDefinition Definition { get; }
 
@@ -406,8 +622,15 @@ public sealed class Derived<TSource, TValue>
     /// <summary>Assigns a stable logical key for diagnostics and durable integration messages.</summary>
     public Derived<TSource, TValue> Named(string definitionKey)
     {
-        _ensureMutable();
+        _model.EnsureMutable();
         Definition.DefinitionKey = ObjectSetBuilder<TSource>.ValidateDefinitionKey(definitionKey);
+        return this;
+    }
+
+    /// <summary>Configures a writable source property as the physical mirror of this logical value.</summary>
+    public Derived<TSource, TValue> MaterializeTo(Expression<Func<TSource, TValue>> target)
+    {
+        _model.AddMaterialization(Definition, target);
         return this;
     }
 
@@ -417,7 +640,7 @@ public sealed class Derived<TSource, TValue>
     /// </summary>
     public Derived<TSource, TValue> AllowIncompleteDependencies()
     {
-        _ensureMutable();
+        _model.EnsureMutable();
         Definition.AllowIncompleteDependencies = true;
         return this;
     }
@@ -442,6 +665,9 @@ public sealed class InvariantBuilder<TSource> where TSource : class
             throw new ArgumentException("The derived state's source set must match the invariant source set.", nameof(derived));
         return new InvariantUsingBuilder<TSource, TValue>(_model, derived);
     }
+
+    public InvariantUsingBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> derived) =>
+        Using(derived);
 
     public InvariantUsingBuilder<TSource, TFirst, TSecond> Using<TFirst, TSecond>(
         Derived<TSource, TFirst> first,

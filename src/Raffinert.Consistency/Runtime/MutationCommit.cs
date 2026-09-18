@@ -225,7 +225,12 @@ public sealed partial class ConsistencyRuntime
     private void ApplyPatch(IRuntimePatchScope patch)
     {
         foreach (var pair in patch.Sets)
+        {
+            var instances = _sets[pair.Key].GetCapturedInstances(pair.Value);
             _sets[pair.Key].RestoreEntriesState(pair.Value);
+            foreach (var instance in instances)
+                SynchronizeSourceMembership(pair.Key, instance);
+        }
         foreach (var pair in patch.Relations)
             _relations[pair.Key].RestoreTouchedState(pair.Value);
         if (patch.Navigation is not null)
@@ -858,6 +863,7 @@ public sealed partial class ConsistencyRuntime
     {
         var state = GetSet(mutation.Set);
         state.Add(mutation.Instance);
+        AddSourceMembership(mutation.Set, mutation.Instance);
         NotifySourceAdded(mutation.Set, mutation.Instance);
         _navigation.AddRoot(mutation.Set, mutation.Instance);
         _projections.AddRoot(mutation.Set, mutation.Instance);
@@ -873,6 +879,7 @@ public sealed partial class ConsistencyRuntime
     {
         var state = GetSet(admission.Set);
         state.Add(admission.Instance);
+        AddSourceMembership(admission.Set, admission.Instance);
         NotifySourceAdded(admission.Set, admission.Instance);
         _navigation.AddRoot(admission.Set, admission.Instance);
         _projections.AddRoot(admission.Set, admission.Instance);
@@ -894,6 +901,7 @@ public sealed partial class ConsistencyRuntime
         _projections.RemoveRoot(mutation.Set, mutation.Instance);
         NotifySourceRemoved(mutation.Set, mutation.Instance);
         GetSet(mutation.Set).Remove(mutation.Instance);
+        RemoveSourceMembership(mutation.Set, mutation.Instance);
     }
 
     private IReadOnlyDictionary<IRelationDefinition, RelationDelta> ResolveRelationDeltas(
