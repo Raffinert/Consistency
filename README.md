@@ -10,7 +10,7 @@ logic across setters, handlers, services, and persistence code.
 var unitRate = model.Derived(associations)
     .DependsOn(x => x.Source.UnitValue)
     .DependsOn(x => x.Target.UnitValue)
-    .Compute(x => UnitRateCalculator.Calculate(
+    .Select(x => UnitRateCalculator.Calculate(
         x.Source.UnitValue,
         x.Target.UnitValue));
 ```
@@ -64,6 +64,53 @@ Raffinert makes that dependency graph explicit and executable.
 - Compiled-model and runtime diagnostics
 
 The core package has no EF Core or dependency-injection dependency.
+
+## Logical values and physical mirrors
+
+API v2 keeps calculation, invalidation, storage, and consequences as separate concepts:
+
+| API | Meaning |
+| --- | --- |
+| `From(...)` | Flow a current logical relation or derived value into another definition. |
+| `DependsOn(...)` | Track a source member read by opaque calculator code. |
+| `MaterializeTo(...)` | Configure an optional physical mirror of a logical value. |
+| `Evaluate(...)` | Make a logical value current and return it without writing its mirror. |
+| `Materialize(...)` | Synchronize configured physical mirrors. |
+| `Invariant(...)` | Declare required truth. |
+| `ScheduleRepairWith(...)` | Handle a consistency consequence after mutation commit. |
+
+For example, `UnitRate` receives the logical `PriceRate`; it never reads the potentially stale mirror:
+
+```csharp
+var priceRate = model.Derived(links)
+    .DependsOn(
+        x => x.InvoiceLine.Price,
+        x => x.PurchaseOrderLine.Price)
+    .Select(CalculatePriceRate)
+    .MaterializeTo(x => x.PriceRate)
+    .Named("price-rate");
+
+var unitRate = model.Derived(links)
+    .From(priceRate)
+    .DependsOn(
+        x => x.InvoiceLine.Quantity,
+        x => x.PurchaseOrderLine.OrderedQuantity)
+    .Select((link, rate) => CalculateUnitRate(link, rate))
+    .MaterializeTo(x => x.UnitRate)
+    .Named("unit-rate");
+```
+
+Logical evaluation and physical synchronization are deliberately different operations:
+
+```csharp
+var currentRate = runtime.Evaluate(priceRate, link); // link.PriceRate is unchanged
+runtime.Materialize(link);                          // synchronizes PriceRate and UnitRate
+```
+
+`runtime.Materialize(priceRate, link)` synchronizes only that definition. Object-level materialization
+evaluates all configured values first, writes only mirrors on that registered object, skips equal assignments,
+and rolls back earlier physical writes if a later setter fails. It does not dispatch repair or evaluate
+unrelated runtime-only values. Reading `link.PriceRate` directly is not guaranteed fresh before materialization.
 
 ## EF Core consistent saves
 
@@ -184,21 +231,24 @@ For example, an order line can derive its fulfilled quantity from matching fulfi
 
 ```csharp
 var fulfilledQuantity = model.Derived(orderLines)
-    .Using(fulfillments)
-    .Incrementally()
-    .Compute((line, matches) =>
-        matches.Sum(fulfillment => fulfillment.Quantity));
+    .From(fulfillments)
+    .Impact(policy => policy
+        .MembershipAdded(DependencySeverity.Dirty)
+        .MembershipRemoved(DependencySeverity.Invalid)
+        .ItemChanged(DependencySeverity.Invalid))
+    .Sum(fulfillment => fulfillment.Quantity);
 ```
 
-Recognized exact aggregates can update already-fresh cache entries directly from relation/item deltas.
-Unrecognized expressions retain the original compiled computation as the semantic fallback.
+`Sum`, `Count`, `LongCount`, and `Any` select the existing incremental execution plans directly. Recognized
+exact aggregates can update already-fresh cache entries from relation/item deltas. The legacy
+`.Using(...).Incrementally().Compute(...)` spelling remains supported for compatibility.
 
 Derived values can depend on other derived values and form a compiled dependency DAG:
 
 ```csharp
 var remainingQuantity = model.Derived(orderLines)
-    .Using(fulfilledQuantity)
-    .Compute((line, fulfilled) =>
+    .From(fulfilledQuantity)
+    .Select((line, fulfilled) =>
         line.OrderedQuantity - fulfilled);
 ```
 
@@ -206,8 +256,9 @@ They can also consume upstream values through tracked object references:
 
 ```csharp
 var allocationValidity = model.Derived(allocations)
-    .Using(allocation => allocation.OrderLine, remainingQuantity, unitRate)
-    .Compute((allocation, remaining, rate) =>
+    .From(allocation => allocation.OrderLine, remainingQuantity)
+    .From(unitRate)
+    .Select((allocation, remaining, rate) =>
         allocation.ReservedQuantity <= remaining &&
         allocation.CapturedRate == rate);
 ```
@@ -239,13 +290,12 @@ A relation-backed derived value can classify different kinds of impact independe
 
 ```csharp
 var fulfilled = model.Derived(orderLines)
-    .Using(fulfillments)
+    .From(fulfillments)
     .Impact(policy => policy
         .MembershipAdded(DependencySeverity.Dirty)
         .MembershipRemoved(DependencySeverity.Invalid)
         .ItemChanged(DependencySeverity.Invalid))
-    .Compute((line, matches) =>
-        matches.Sum(fulfillment => fulfillment.Quantity));
+    .Sum(fulfillment => fulfillment.Quantity);
 ```
 
 Typed source-member policies can also classify value transitions—for example, a quantity decrease can be
@@ -388,7 +438,7 @@ declare every hidden member path explicitly:
 var score = model.Derived(items)
     .DependsOn(x => x.InputA)
     .DependsOn(x => x.Config.Value)
-    .Compute(x => ExistingCalculator.Calculate(x.InputA, x.Config.Value));
+    .Select(x => ExistingCalculator.Calculate(x.InputA, x.Config.Value));
 ```
 
 Ordinary analyzable expressions need no declarations. `DependsOn` augments inferred dependencies, including
@@ -440,12 +490,15 @@ planning, bootstrap/projection, commit safety, and related runtime costs.
 - A prepared mutation is versioned and rejected if the runtime advances before commit.
 - Policy callbacks are dispatched only after runtime-owned state commits.
 - `ConsistencyRuntime` is not thread-safe; callers must externally synchronize mutations and queries.
+- Evaluate-first/write-second rollback applies to one externally synchronized materialization call; it does
+  not provide cross-thread atomicity.
 
 The detailed edge-case contracts live in the architecture documentation rather than this landing page.
 
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)
+- [API v2 production implementation notes](docs/api-v2-production-implementation-notes.md)
 - [End-to-end order fulfillment and allocation example](docs/order-fulfillment-example.md)
 - [Current implementation roadmap](docs/roadmaps/README.md)
 - [Measured-workload optimizer policy](docs/optimizer-policy.md)

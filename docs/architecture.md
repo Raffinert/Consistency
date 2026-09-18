@@ -88,9 +88,15 @@ Direct source members may additionally declare typed old/new classifiers. Classi
 normalized net transition during commit, applies only to members tracked by the computation, and merges
 multiple changes with `Invalid` dominance. Classifiers are deterministic, side-effect-free model logic.
 Per-derived impact configuration determines whether membership additions/removals and related-item
-changes make a cache stale or unusable. Exact standalone `Count`, `LongCount`, parameterless `Any`, and
-numeric `Sum` expressions may opt into incremental maintenance; all other expressions use the original
-full computation.
+changes make a cache stale or unusable. API-v2 `Count`, `LongCount`, `Any`, and numeric `Sum` operators
+select incremental maintenance directly; the legacy explicit opt-in remains supported. All other expressions
+use the original full computation.
+
+Core also owns optional materialization descriptors attached to derived definitions. `Evaluate` only makes
+the logical cache current. Targeted `Materialize` synchronizes one descriptor, while object-level
+`Materialize` resolves descriptors through exact object-set membership, prepares all logical values, and only
+then writes mirrors on that object. Equal assignments are skipped and prior writes are physically restored if
+a later setter fails; logical caches are retained for retry. Materialization never dispatches repair.
 
 Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or represented as a
 repair request. `ApplyDetailed` exposes requests as data for an outbox/queue. In-process callbacks run
@@ -100,8 +106,9 @@ only through explicit post-commit dispatch.
 
 The EF adapter translates tracked entity lifecycle, scalar/reference changes, and collection resets into
 the same core mutation protocol. Relationship evidence is captured before EF change detection can discard
-old owned/reference targets. The adapter's `Enforce` and `Materialize` mappings are persistence policy;
-the core remains EF-agnostic. Materialized properties are sink-only and cannot feed a consistency key,
+old owned/reference targets. The adapter's `Enforce` mappings and legacy explicit `Materialize` mappings are
+persistence policy. It also consumes Core-owned `MaterializeTo` descriptors automatically; Core remains
+EF-agnostic. Materialized properties are sink-only and cannot feed a consistency key,
 relation, derived value, invariant, or projected selector.
 
 The convenience save methods, interceptor, and low-level save-and-apply methods prepare before `SaveChanges`,

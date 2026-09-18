@@ -108,6 +108,21 @@ The source must be the same object instance tracked by the saving `DbContext`. W
 and skip equal values. If a mirror setter fails before SQL, earlier adapter-owned mirror writes are restored;
 caller-owned POCO mutations are not rolled back.
 
+The preferred declaration places the descriptor in Core:
+
+```csharp
+var priceRate = model.Derived(links)
+    .DependsOn(x => x.InvoiceLine.Price, x => x.PurchaseOrderLine.Price)
+    .Select(CalculatePriceRate)
+    .MaterializeTo(x => x.PriceRate)
+    .Named("price-rate");
+```
+
+Policy-aware save/capture validation automatically consumes compiled Core descriptors for mapped source sets.
+The older `.Materialize(priceRate, x => x.PriceRate)` mapping remains available and follows the same lower-level
+descriptor and write path. Declaring both forms for the same definition and target is treated as the same
+mapping; conflicting targets are rejected.
+
 ## Transactions and generated keys
 
 Convenience saves and the interceptor reject ambient or externally controlled transactions. All convenience

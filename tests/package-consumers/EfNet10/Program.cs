@@ -5,8 +5,9 @@ using Raffinert.Consistency.EntityFrameworkCore;
 
 var model = new ConsistencyModelBuilder();
 var values = model.Objects<Value>().Named("values").Key(value => value.Id);
-var doubled = model.Derived(values).Compute(value => value.Amount * 2).Named("doubled");
-model.Invariant(values).Using(doubled).Must((_, amount) => amount <= 6)
+var doubled = model.Derived(values).Select(value => value.Amount * 2)
+    .MaterializeTo(value => value.Mirror).Named("doubled");
+var invariant = model.Invariant(values).From(doubled).Must((_, amount) => amount <= 6)
     .ScheduleRepairWith(_ => { }).Named("repair");
 await using var connection = new SqliteConnection("Data Source=:memory:");
 await connection.OpenAsync();
@@ -17,25 +18,23 @@ context.Add(value);
 await context.SaveChangesAsync();
 var runtime = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
 value.Amount = 2;
-var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
-    context.ChangeTracker, new ConsistencyUnitOfWorkMappings().Map(values));
-unit.Prepare(runtime);
+var mappings = new ConsistencyEfCoreMappings().Map(values).Enforce(invariant);
+var work = context.CaptureConsistencyUnitOfWork(runtime, mappings);
 
 await using var transaction = await context.Database.BeginTransactionAsync();
-await context.SaveChangesAsync();
-
-// PreviewDetailed is a non-binding diagnostic. PlanDetailed is the binding outbox contract.
-var plan = unit.PlanDetailed(runtime, RuntimeImpactDetailLevel.Causal,
-    PlannedInvariantEvaluationMode.Affected);
+var plan = work.PrepareAndPlan();
 if (plan is null)
     return 1;
 if (plan.HasInvariantViolations || plan.InvariantEvaluations.Single().State != InvariantEvaluationState.Valid)
     return 1;
+if (value.Mirror != 4)
+    return 1;
 
+await context.SaveChangesAsync();
 await transaction.CommitAsync();
-unit.Commit(runtime);
-unit.Dispatch(runtime);
-return plan.IsCommitted && runtime.Version == 1 ? 0 : 1;
+work.CommitAfterDatabaseCommit();
+work.Dispatch();
+return runtime.Version == 1 ? 0 : 1;
 
 internal sealed class ConsumerContext(SqliteConnection connection) : DbContext
 {
@@ -49,6 +48,7 @@ internal sealed class Value
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public int Amount { get; set; }
+    public int Mirror { get; set; }
 }
 
 internal sealed class OutboxRow

@@ -8,6 +8,13 @@ patch versions remain backward-compatible bug fixes where practical.
 
 ### Added
 
+- Additive API-v2 value-flow declarations with `From` and `Select`, including typed local and projected
+  derived composition and opaque method-group calculators backed by explicit `DependsOn` declarations.
+- Recognized `Sum`, `Count`, `LongCount`, and `Any` operators that select existing incremental plans without an
+  explicit `.Incrementally()` step.
+- Core-owned `MaterializeTo` metadata plus logical `Evaluate`, targeted `Materialize`, and indexed object-level
+  `Materialize` runtime operations.
+- Logical dependency and materialization diagnostics covering direct, derived, projected, and relation edges.
 - Explicit `DependsOn(...)` declarations for opaque source-derived calculations.
 - Authoritative EF consistency-scope validation for cross-object enforcement and materialization.
 - Targeted, batched `DiscoverConsumers(...)` support for eligible direct EF reference-navigation consumers,
@@ -19,6 +26,8 @@ patch versions remain backward-compatible bug fixes where practical.
 
 ### Correctness and hardening
 
+- Evaluate-first/write-second object materialization, skipped equal assignments, physical rollback on setter
+  failure, exact object-set identity validation, and automatic EF consumption of Core materialization targets.
 - Exact binding-plan installation after database durability, with structural coverage admission kept separate
   from domain `ObjectAdded` semantics.
 - ChangeTracker overlay handling for added, deleted, and retargeted consumers, plus evaluation-closure
