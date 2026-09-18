@@ -39,13 +39,13 @@ var associations = builder.Objects<Association>()
 var unitRate = builder.Derived(associations)
     .DependsOn(a => a.SourceItem.UnitValue)
     .DependsOn(a => a.TargetItem.UnitValue)
-    .Compute(a => UnitRateCalculator.Calculate(
+    .Select(a => UnitRateCalculator.Calculate(
         a.SourceItem.UnitValue,
-        a.TargetItem.UnitValue));
+        a.TargetItem.UnitValue))
+    .MaterializeTo(a => a.UnitRate);
 
 var mappings = new ConsistencyEfCoreMappings()
     .Map(associations)
-    .Materialize(unitRate, a => a.UnitRate)
     .DiscoverConsumers(associations, a => a.SourceItem, (db, sources) =>
         db.Set<Association>().Where(a => sources.Select(s => s.Id).Contains(a.SourceItemId))
             .Include(a => a.SourceItem).Include(a => a.TargetItem))
@@ -69,7 +69,7 @@ await db.SaveChangesConsistentlyAsync(...);
 | Reverse affected-association discovery | ID collection and queries | Declared dependency graph and reverse navigation index |
 | Relationship retargeting maintenance | Explicit repair of indexes | Runtime routing updates from navigation changes |
 | Derived recomputation selection | Loop over a hand-built affected set | Incremental impact propagation |
-| Persisted mirror update | Application writes each mirror | EF materialization mapping |
+| Persisted mirror update | Application writes each mirror | Core `MaterializeTo` descriptor consumed by EF |
 
 ## What did not disappear
 

@@ -9,11 +9,12 @@ and which derived values are persisted as mirrors.
 Configure the exact object sets, enforced invariants, and persisted mirrors:
 
 ```csharp
+availableQuantity.MaterializeTo(x => x.AvailableQuantity);
+
 var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Map(fulfillments)
-    .Enforce(availabilityInvariant)
-    .Materialize(availableQuantity, x => x.AvailableQuantity);
+    .Enforce(availabilityInvariant);
 
 var scope = new ConsistencyScope()
     .Complete(lines)
@@ -56,8 +57,8 @@ that mode does not calculate or write mirrors.
 Source-local computations read only the known source, so they need no complete-set declaration:
 
 ```csharp
-var positive = model.Derived(lines).Compute(line => line.Quantity >= 0);
-var invariant = model.Invariant(lines).Using(positive).Must((_, value) => value);
+var positive = model.Derived(lines).Select(line => line.Quantity >= 0);
+var invariant = model.Invariant(lines).From(positive).Must((_, value) => value);
 
 var mappings = new ConsistencyEfCoreMappings().Map(lines).Enforce(invariant);
 await db.SaveChangesConsistentlyAsync(runtime, mappings);
@@ -84,7 +85,7 @@ is intentionally coarse in this version; key- or partition-scoped completeness i
 Ordinary navigation traversal also requires consumer coverage:
 
 ```csharp
-var price = model.Derived(lines).Compute(line => line.Product.Price);
+var price = model.Derived(lines).Select(line => line.Product.Price);
 var scope = new ConsistencyScope().Complete(lines);
 ```
 
@@ -108,7 +109,7 @@ The source must be the same object instance tracked by the saving `DbContext`. W
 and skip equal values. If a mirror setter fails before SQL, earlier adapter-owned mirror writes are restored;
 caller-owned POCO mutations are not rolled back.
 
-The preferred declaration places the descriptor in Core:
+The declaration places the descriptor in Core:
 
 ```csharp
 var priceRate = model.Derived(links)
@@ -119,9 +120,6 @@ var priceRate = model.Derived(links)
 ```
 
 Policy-aware save/capture validation automatically consumes compiled Core descriptors for mapped source sets.
-The older `.Materialize(priceRate, x => x.PriceRate)` mapping remains available and follows the same lower-level
-descriptor and write path. Declaring both forms for the same definition and target is treated as the same
-mapping; conflicting targets are rejected.
 
 ## Transactions and generated keys
 

@@ -4,6 +4,31 @@ All notable package changes are recorded here. This project follows Semantic Ver
 `1.0.0` release exists; during `0.x`, minor versions may contain deliberate breaking API changes and
 patch versions remain backward-compatible bug fixes where practical.
 
+## 0.2.0-alpha.1
+
+### Breaking changes
+
+- Removed the pre-v2 derived declaration aliases `Using`, `Compute`, and `Incrementally`; use `From`,
+  `Select`, and the recognized `Sum`/`Count`/`LongCount`/`Any` operators instead.
+- Removed invariant `Using`; compose invariant values with `From`.
+- Removed the logical derived-value `ConsistencyRuntime.Get` alias; use `Evaluate`. `GetState` remains
+  available for cache-state inspection.
+- Removed explicit EF `ConsistencyEfCoreMappings.Materialize`; declare physical mirrors once with Core
+  `MaterializeTo`, which the EF adapter consumes automatically.
+
+### Added and preserved
+
+- Added v2 chaining for two local inputs, mixed projected/local inputs, and two projected inputs so the
+  removed aliases do not reduce declaration capability.
+- Preserved incremental aggregate plans, logical freshness and invalidation behavior, repair dispatch,
+  targeted and object materialization, physical rollback, and exact object-set ownership checks.
+
+### Compatibility review
+
+- This deliberate shipped-surface break was reviewed against `RELEASING.md` and advances the pre-1.0 minor
+  version from `0.1` to `0.2`. Public API baseline removals are limited to the compatibility aliases listed
+  above; shared runtime primitives and v2 builder return types remain public.
+
 ## 0.1.0-rc.1
 
 ### Added

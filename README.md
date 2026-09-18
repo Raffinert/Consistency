@@ -118,10 +118,11 @@ The EF Core adapter can reject configured invariant violations before SQL and pe
 of affected derived values:
 
 ```csharp
+availableQuantity.MaterializeTo(x => x.AvailableQuantity);
+
 var mappings = new ConsistencyEfCoreMappings()
     .Map(lines)
     .Map(fulfillments)
-    .Materialize(availableQuantity, x => x.AvailableQuantity)
     .Enforce(availability);
 
 var scope = new ConsistencyScope()
@@ -239,9 +240,8 @@ var fulfilledQuantity = model.Derived(orderLines)
     .Sum(fulfillment => fulfillment.Quantity);
 ```
 
-`Sum`, `Count`, `LongCount`, and `Any` select the existing incremental execution plans directly. Recognized
-exact aggregates can update already-fresh cache entries from relation/item deltas. The legacy
-`.Using(...).Incrementally().Compute(...)` spelling remains supported for compatibility.
+`Sum`, `Count`, `LongCount`, and `Any` select the incremental execution plans directly. Recognized exact
+aggregates can update already-fresh cache entries from relation/item deltas.
 
 Derived values can depend on other derived values and form a compiled dependency DAG:
 

@@ -1,7 +1,7 @@
 # API v2 production implementation notes
 
-API v2 is an additive declaration and consumption facade over the existing consistency engine. It does not
-introduce a second graph or execution runtime.
+API v2 is the declaration and consumption facade over the existing consistency engine. It does not introduce
+a second graph or execution runtime.
 
 ## Production primitive mapping
 
@@ -15,10 +15,10 @@ introduce a second graph or execution runtime.
 | `Sum`, `Count`, `LongCount`, `Any` | Existing incremental aggregate planners | Compile recognized operators directly to their existing plans without requiring `.Incrementally()`. |
 | `Impact` | `DerivedImpactPolicy` and typed source-member classifiers | Retain dependency-specific semantic diagnostics and apply group policy to each represented dependency edge. |
 | `MaterializeTo` | Derived definition identity plus compiled property access | Add one Core-owned descriptor containing exact source set, target, read/write delegates, and equality behavior. |
-| `Evaluate` | Existing runtime `Get` and cache state machinery | Add a non-writing semantic alias. |
+| `Evaluate` | Existing cache state machinery | Expose the non-writing logical read operation. |
 | Targeted/object `Materialize` | Derived state lookup and runtime object-set membership | Add exact-target and indexed source-object synchronization with evaluate-first/write-second rollback. |
 | Invariant `From` | Existing invariant derived-value composition | Add a thin alias; `Must` and repair scheduling remain separate. |
-| EF materialization | Existing affected-derived persistence planning | Consume Core descriptors automatically while preserving explicit legacy mappings. |
+| EF materialization | Existing affected-derived persistence planning | Consume Core descriptors automatically. |
 | Logical diagnostics | Existing compiled model IDs and debug view | Retain direct, local-derived, projected-derived, and relation-valued edge kinds plus materialization metadata. |
 
 ## Runtime semantics
@@ -46,12 +46,8 @@ source instances.
 `DebugView` includes a logical API-v2 section with stable names, `depends-on`, `from`, `projection`, recognized
 operator plan, and `materializes-to` entries. Existing low-level diagnostics remain available.
 
-## Compatibility
+## API surface
 
-The old and new declarations compile to the same production definitions and execution plans. Compatibility
-tests cover direct and transitive values, projected flow, all recognized aggregates, invariant/repair behavior,
-Core materialization, and EF persistence. Existing `.Using`, `.Compute`, `.Incrementally`, and explicit EF
-`.Materialize` APIs remain supported.
-
-Those legacy members are candidates for a separate future deprecation plan only after a release migration
-window. No API is deprecated or removed by this implementation.
+The public declaration vocabulary is `From`, `DependsOn`, `Select`, recognized aggregate operators,
+`MaterializeTo`, and invariant `From`/`Must`. Pre-v2 compatibility aliases were removed for the `0.2` line;
+all declarations continue to compile into the same production definitions and execution plans.
