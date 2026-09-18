@@ -6,7 +6,7 @@ namespace Raffinert.Consistency.EntityFrameworkCore;
 
 internal sealed record ConsistencyPersistencePolicySnapshot(
     IReadOnlySet<int> EnforcedInvariantIds,
-    IReadOnlyList<ConsistencyEfCoreMappings.Materialization> Materializations,
+    IReadOnlyList<MaterializationDescriptor> Materializations,
     ConsistencySaveBehavior SaveBehavior,
     RuntimeImpactDetailLevel DetailLevel,
     ConsistencyScope? Scope);
@@ -63,10 +63,10 @@ internal static class ConsistencyPersistencePolicyEngine
     private static MaterializationRollback ApplyMaterializations(
         DbContext context,
         ConsistencyRuntime runtime,
-        IReadOnlyList<ConsistencyEfCoreMappings.Materialization> mappings,
+        IReadOnlyList<MaterializationDescriptor> mappings,
         PreparedImpactPlan plan)
     {
-        var applied = new Stack<(PropertyEntry Entry, System.Reflection.PropertyInfo Property,
+        var applied = new Stack<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
             object Source, object? Value, bool Modified)>();
         try
         {
@@ -80,14 +80,14 @@ internal static class ConsistencyPersistencePolicyEngine
                         .SingleOrDefault(x => ReferenceEquals(x.Entity, evaluation.Source));
                     if (entry is null || entry.State == EntityState.Detached)
                         throw new ConsistencyMaterializationSourceNotTrackedException();
-                    var property = entry.Property(mapping.Property.Name);
+                    var property = entry.Property(mapping.Target.Name);
                     var comparer = property.Metadata.GetValueComparer();
                     if (comparer?.Equals(property.CurrentValue, evaluation.Value) ??
                         Equals(property.CurrentValue, evaluation.Value))
                         continue;
-                    applied.Push((property, mapping.Property, evaluation.Source,
+                    applied.Push((property, mapping, evaluation.Source,
                         property.CurrentValue, property.IsModified));
-                    mapping.Property.SetValue(evaluation.Source, evaluation.Value);
+                    mapping.Write(evaluation.Source, evaluation.Value);
                     property.IsModified = true;
                 }
             }
@@ -95,11 +95,27 @@ internal static class ConsistencyPersistencePolicyEngine
         }
         catch (Exception error)
         {
+            var rollbackErrors = new List<Exception>();
             while (applied.TryPop(out var write))
             {
-                write.Property.SetValue(write.Source, write.Value);
-                write.Entry.IsModified = write.Modified;
+                try
+                {
+                    if (!write.Descriptor.ValuesEqual(write.Descriptor.Read(write.Source), write.Value))
+                        write.Descriptor.Write(write.Source, write.Value);
+                }
+                catch (Exception rollbackError)
+                {
+                    rollbackErrors.Add(rollbackError);
+                }
+                finally
+                {
+                    write.Entry.IsModified = write.Modified;
+                }
             }
+            if (rollbackErrors.Count > 0)
+                throw new AggregateException(
+                    "EF materialization failed and physical rollback was incomplete.",
+                    [error, .. rollbackErrors]);
             if (error is System.Reflection.TargetInvocationException { InnerException: { } inner })
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(inner).Throw();
             throw;
@@ -111,17 +127,20 @@ internal sealed class MaterializationRollback
 {
     internal static MaterializationRollback Empty { get; } = new([]);
 
-    private readonly IReadOnlyList<(PropertyEntry Entry, object Source, object? Value, bool Modified)> _writes;
+    private readonly IReadOnlyList<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
+        object Source, object? Value, bool Modified)> _writes;
 
     internal MaterializationRollback(
-        IReadOnlyList<(PropertyEntry Entry, System.Reflection.PropertyInfo Property, object Source, object? Value, bool Modified)> writes) =>
-        _writes = writes.Select(write => (write.Entry, write.Source, write.Value, write.Modified)).ToArray();
+        IReadOnlyList<(PropertyEntry Entry, MaterializationDescriptor Descriptor,
+            object Source, object? Value, bool Modified)> writes) =>
+        _writes = writes.ToArray();
 
     internal void Restore()
     {
         foreach (var write in _writes)
         {
-            write.Entry.CurrentValue = write.Value;
+            if (!write.Descriptor.ValuesEqual(write.Descriptor.Read(write.Source), write.Value))
+                write.Descriptor.Write(write.Source, write.Value);
             write.Entry.IsModified = write.Modified;
         }
     }
