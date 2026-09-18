@@ -15,6 +15,8 @@ patch versions remain backward-compatible bug fixes where practical.
   available for cache-state inspection.
 - Removed explicit EF `ConsistencyEfCoreMappings.Materialize`; declare physical mirrors once with Core
   `MaterializeTo`, which the EF adapter consumes automatically.
+- Removed the remaining pre-v2 `*UsingBuilder` public type names; v2 fluent stages now expose
+  `DerivedRelationBuilder` and `InvariantValueBuilder`.
 
 ### Added and preserved
 
