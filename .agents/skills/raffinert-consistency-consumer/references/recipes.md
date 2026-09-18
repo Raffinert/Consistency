@@ -1,14 +1,10 @@
 # Raffinert.Consistency consumer recipes
 
-These are downstream-application patterns for the **0.2 API line**.
-
-Do not copy removed v1 API such as `Using`, `Compute`, `Incrementally`, runtime `Get`, or EF mappings `.Materialize(...)`.
+These recipes show current declaration, runtime, and EF Core patterns for downstream applications.
 
 ---
 
-## Recipe 1 — source-local derived mirror
-
-Use when a persisted value depends only on properties of the same source object.
+## Recipe 1 — source-local materialized value
 
 ```csharp
 var model = new ConsistencyModelBuilder();
@@ -22,34 +18,25 @@ var total = model.Derived(records)
     .Named("total");
 
 var compiled = model.Build();
-
 var mappings = new ConsistencyEfCoreMappings()
     .Map(records);
 ```
 
-Typical save:
+Logical read:
 
 ```csharp
-await db.SaveChangesConsistentlyAsync(
-    runtime,
-    mappings,
-    cancellationToken: cancellationToken);
+var value = runtime.Evaluate(total, record);
 ```
 
-No whole-set completeness is normally required merely for a source-local formula.
-
-Useful runtime distinction:
+Synchronize physical mirrors on the object:
 
 ```csharp
-var logical = runtime.Evaluate(total, record); // does not write record.Total
-runtime.Materialize(record);                  // synchronizes configured mirrors on record
+runtime.Materialize(record);
 ```
 
 ---
 
 ## Recipe 2 — relation aggregate
-
-Use when a root depends on all matching items.
 
 ```csharp
 var containers = model.Objects<Container>()
@@ -69,7 +56,7 @@ var usedCapacity = model.Derived(containers)
     .Named("used-capacity");
 ```
 
-Recognized operators:
+Recognized relation aggregates:
 
 ```text
 Sum
@@ -78,21 +65,11 @@ LongCount
 Any
 ```
 
-Do not add `.Incrementally()`; recognized operators select the incremental plans automatically.
-
-For authoritative EF materialization/enforcement involving the relation, both relation sets must be genuinely covered for the operation:
-
-```csharp
-var scope = new ConsistencyScope()
-    .Complete(containers)
-    .Complete(contributions);
-```
-
-`DiscoverConsumers` does not replace relation-source/target completeness.
+For authoritative EF work involving the relation, establish real coverage of both participating sets.
 
 ---
 
-## Recipe 3 — Dirty on additive, Invalid on subtractive
+## Recipe 3 — additive vs subtractive impact
 
 ```csharp
 var usedCapacity = model.Derived(containers)
@@ -105,15 +82,11 @@ var usedCapacity = model.Derived(containers)
     .Named("used-capacity");
 ```
 
-Use this shape when additions can safely postpone expensive work but removals/cancellations can make existing decisions unsafe.
-
-Do not choose `Dirty` or `Invalid` based on performance preference alone; choose based on whether the stale value is safe to use.
+Choose severity from correctness semantics: whether stale state may remain temporarily usable or must be treated as unsafe.
 
 ---
 
 ## Recipe 4 — opaque calculator with explicit dependencies
-
-Use when the calculator is normal application code and Raffinert cannot infer its reads.
 
 ```csharp
 var combinedValue = model.Derived(associations)
@@ -124,27 +97,13 @@ var combinedValue = model.Derived(associations)
     .Named("combined-value");
 ```
 
-Bad:
+Every hidden modeled member read in opaque application code must have a corresponding tracked dependency.
 
-```csharp
-var combinedValue = model.Derived(associations)
-    .Select(x => _calculator.Calculate(x));
-```
-
-when `_calculator.Calculate(x)` secretly reads modeled members Raffinert cannot infer.
-
-Rule:
-
-```text
-every hidden modeled source-state input used by opaque code
-    -> explicit DependsOn member path
-```
-
-Do not use `DependsOn` for external time, randomness, service calls, or database lookups.
+Keep calculators deterministic from modeled state.
 
 ---
 
-## Recipe 5 — derived chain uses logical handles
+## Recipe 5 — derived chain through logical handles
 
 ```csharp
 var combinedValue = model.Derived(associations)
@@ -161,15 +120,7 @@ var normalizedValue = model.Derived(associations)
     .Named("normalized-value");
 ```
 
-Important: `normalizedValue` consumes the logical `combinedValue` handle, not `association.CombinedValue`.
-
-This remains correct even if the mirror is stale:
-
-```text
-logical CombinedValue = current
-association.CombinedValue = old mirror
-Evaluate(normalizedValue) uses logical current value
-```
+`normalizedValue` receives the logical `combinedValue`. Its correctness does not depend on whether the physical mirror has already been synchronized.
 
 ---
 
@@ -183,21 +134,16 @@ var remainingCapacity = model.Derived(containers)
 
 var assignmentValid = model.Derived(assignments)
     .From(x => x.Container, remainingCapacity)
-    .Select((assignment, remaining) => assignment.Amount <= remaining)
+    .Select((assignment, remaining) =>
+        assignment.Amount <= remaining)
     .Named("assignment-valid");
 ```
 
-Meaning:
-
-```text
-Assignment -> Container -> logical RemainingCapacity
-```
-
-Projected-consumer completeness must be authoritative. Do not assume `DiscoverConsumers` proves projected completeness.
+The selector identifies which upstream owner supplies the logical value for each assignment.
 
 ---
 
-## Recipe 7 — mixed projected and local logical values
+## Recipe 7 — mixed projected and local logical inputs
 
 ```csharp
 var actualQuantity = model.Derived(links)
@@ -208,9 +154,7 @@ var actualQuantity = model.Derived(links)
     .Named("actual-quantity");
 ```
 
-Chain `From` calls rather than flattening ownership into an ambiguous helper.
-
-The first value belongs to the referenced PO line. The second belongs to the link itself.
+Chained `From` calls preserve ownership: one value belongs to the referenced PO line, the other belongs to the link.
 
 ---
 
@@ -231,15 +175,11 @@ var mappings = new ConsistencyEfCoreMappings()
     .Enforce(capacityValid);
 ```
 
-Use `.Enforce(...)` only when violation must block SQL.
-
-If temporary inconsistency is allowed and later repair is desired, use reaction/repair policy instead of enforcing every violation synchronously.
+Use `Enforce` only when violation must block persistence.
 
 ---
 
-## Recipe 9 — materialized mirror is sink-only
-
-Declare the mirror in Core:
+## Recipe 9 — physical mirror is sink-only
 
 ```csharp
 var total = model.Derived(records)
@@ -248,73 +188,52 @@ var total = model.Derived(records)
     .Named("total");
 ```
 
-Good graph:
+Correct graph:
 
 ```text
 Quantity + UnitValue
         ↓
 logical Total
         ↓
-Total property mirror
+Total mirror
 ```
 
-Bad graph:
-
-```text
-logical Total
-        ↓
-Total property mirror
-        ↓
-other derived computation reads mirror
-```
-
-If another computation needs total:
+A downstream value consumes the logical handle:
 
 ```csharp
 var adjustedTotal = model.Derived(records)
     .From(total)
-    .Select((record, totalValue) => totalValue * record.Multiplier);
+    .Select((record, totalValue) =>
+        totalValue * record.Multiplier);
 ```
-
-Do not use removed EF mapping `.Materialize(total, x => x.Total)`.
 
 ---
 
-## Recipe 10 — targeted vs object materialization
+## Recipe 10 — logical evaluation and materialization
 
-Logical read only:
+Logical value only:
 
 ```csharp
 var totalValue = runtime.Evaluate(total, record);
 ```
 
-Synchronize one known mirror:
+Synchronize one definition's representation:
 
 ```csharp
 var totalValue = runtime.Materialize(total, record);
 ```
 
-Synchronize all configured mirrors on the object:
+Synchronize every configured representation on one source object:
 
 ```csharp
 runtime.Materialize(record);
 ```
 
-Object materialization does **not** mean:
-
-```text
-repair everything reachable from record
-materialize dependency objects
-materialize downstream objects
-```
-
-It only synchronizes configured representations physically located on the requested source object.
+Object materialization writes only representations physically located on the requested object and does not execute repair.
 
 ---
 
 ## Recipe 11 — direct-reference consumer discovery
-
-Use when an association/root reads referenced objects and some roots may be unloaded.
 
 ```csharp
 var associations = model.Objects<Association>()
@@ -356,31 +275,25 @@ var mappings = new ConsistencyEfCoreMappings()
         });
 ```
 
-Why load both references? Because every discovered root must be evaluation-complete for all active formulas.
-
-The resolver must be tracked and authoritative for the requested targets.
+Every discovered root must be evaluation-complete for the active formulas.
 
 ---
 
 ## Recipe 12 — targeted discovery is not whole-set completeness
 
-A resolver may load exactly the roots affected by requested targets.
+A resolver may load exactly the roots affected by requested targets. That proves the discovery obligation for those targets; it does not prove every object in the set is represented.
 
-After that, do **not** claim:
+Declare:
 
 ```csharp
 scope.Complete(associations);
 ```
 
-unless the operation really has authoritative coverage of the entire set.
-
-Targeted discovery proves coverage for the discovery obligation, not all rows in the set.
+only when the operation genuinely has authoritative coverage of the whole set.
 
 ---
 
-## Recipe 13 — safe resolver superset
-
-A resolver may return an authoritative superset:
+## Recipe 13 — safe discovery superset
 
 ```csharp
 mappings.DiscoverConsumers(
@@ -400,35 +313,29 @@ mappings.DiscoverConsumers(
     });
 ```
 
-Superset is safe if it cannot omit an authoritative consumer for any requested target. Under-fetch is unsafe.
+An authoritative superset is acceptable. Under-fetch is not.
 
 ---
 
 ## Recipe 14 — retargeting overlay
 
-Database state:
+Database relationship:
 
 ```text
 Association X -> Source A
 ```
 
-Tracked current state:
+Current tracked relationship:
 
 ```text
 Association X -> Source B
 ```
 
-If A changes, a database query may still return X; current tracked state must exclude it from A's effective consumers.
-
-If B changes, X may not yet appear in the database query for B; if X is already tracked/known, current tracked state must include it.
-
-Do not build custom reconciliation around `DiscoverConsumers` unless the application has a genuinely unsupported scenario.
+Consistency planning must honor current tracked state. A database discovery query may still reflect the stored relationship, so the tracked overlay determines effective consumers for the pending operation.
 
 ---
 
 ## Recipe 15 — closed-world scope
-
-Use only when whole-set coverage is genuinely authoritative.
 
 ```csharp
 var allAssociations = await db.Associations
@@ -443,9 +350,7 @@ var scope = new ConsistencyScope()
     .Complete(associations);
 ```
 
-Good for bounded aggregates, complete import batches, and test fixtures.
-
-Do not load a huge table merely to make Raffinert work if targeted discovery or a better consistency partition is possible.
+This is suitable for bounded aggregates, complete batches, and test fixtures where whole-set authority is real.
 
 ---
 
@@ -465,25 +370,13 @@ await db.SaveChangesConsistentlyAsync(
     cancellationToken);
 ```
 
-Meaning:
+Validation mode evaluates affected enforced invariants without synchronizing configured mirrors.
 
-```text
-affected enforced invariants evaluated
-configured materialized mirrors not written
-```
-
-Default `RecalculateAndValidate`:
-
-```text
-affected enforced invariants evaluated
-affected Core MaterializeTo mirrors synchronized and persisted
-```
-
-A discovery resolver needed only by a materialization should not run in `Validate` mode.
+The default recalculation-and-validation flow synchronizes affected `MaterializeTo` representations before persistence.
 
 ---
 
-## Recipe 17 — manual transaction/outbox
+## Recipe 17 — manual transaction and durable policy work
 
 ```csharp
 var work = db.CaptureConsistencyUnitOfWork(
@@ -493,7 +386,6 @@ var work = db.CaptureConsistencyUnitOfWork(
 
 await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-// Optional first save only if semantic generated values must become final.
 await db.SaveChangesAsync(cancellationToken);
 
 var plan = work.PrepareAndPlan();
@@ -511,40 +403,31 @@ work.CommitAfterDatabaseCommit();
 work.Dispatch();
 ```
 
-Do not install the runtime plan or dispatch repair before database commit.
+The first save is appropriate only when semantic store-generated values must become final before planning.
 
 ---
 
-## Recipe 18 — migration from manual orchestration
+## Recipe 18 — replacing manual maintenance orchestration
 
-Before:
+Typical manual flow:
 
 ```text
-ChangeTracker.DetectChanges
-collect changed referenced-object IDs
+collect changed endpoint IDs
 query affected roots
 union tracked roots
-load missing references
-calculate derived value
-write persisted mirror
+load required references
+recalculate
+write mirror
 ```
 
-After:
+Declarative flow:
 
 ```text
-DependsOn(Source.Value)
-DependsOn(Target.Value)
-Select(calculator)
-MaterializeTo(root mirror)
-DiscoverConsumers(Source)
-DiscoverConsumers(Target)
-SaveChangesConsistently
+DependsOn / From declarations
+Select / semantic aggregate
+MaterializeTo
+DiscoverConsumers where needed
+consistent save boundary
 ```
 
-Migration rule:
-
-1. preserve old behavior;
-2. declare the Raffinert graph;
-3. add parity tests including unloaded consumers;
-4. prove persisted outcomes from a separate DbContext;
-5. remove duplicated old orchestration only after parity is demonstrated.
+Keep parity tests until affected roots, logical calculations, persisted outcomes, and unloaded-consumer behavior are proven equivalent.
