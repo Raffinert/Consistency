@@ -67,7 +67,7 @@ The core package has no EF Core or dependency-injection dependency.
 
 ## Logical values and physical mirrors
 
-API v2 keeps calculation, invalidation, storage, and consequences as separate concepts:
+Calculation, invalidation, storage, and consequences are separate concepts:
 
 | API | Meaning |
 | --- | --- |
@@ -498,7 +498,6 @@ The detailed edge-case contracts live in the architecture documentation rather t
 ## Documentation
 
 - [Architecture and runtime contracts](docs/architecture.md)
-- [API v2 production implementation notes](docs/api-v2-production-implementation-notes.md)
 - [End-to-end order fulfillment and allocation example](docs/order-fulfillment-example.md)
 - [Current implementation roadmap](docs/roadmaps/README.md)
 - [Measured-workload optimizer policy](docs/optimizer-policy.md)
