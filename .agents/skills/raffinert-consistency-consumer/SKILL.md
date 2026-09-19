@@ -394,10 +394,11 @@ services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 ```
 
 Register `AddRaffinertConsistency<TDbContext>` exactly once per `IServiceCollection`. Resolve or inject the
-scoped runtime before application code mutates mapped tracked entities. Clean tracked entities may be
-admitted during first binding; dirty mapped scalar, navigation, collection, added, or removed state must be
-rejected rather than admitted as baseline state. Dirty EF state unrelated to the consistency mappings and
-dependency graph does not block binding.
+scoped runtime before application code mutates consistency-relevant tracked state. Clean tracked entities may
+be admitted during first binding. Pending scalar, navigation, or collection changes block first binding only
+when the changed member is used by a consistency key, dependency, invariant, relation, or projected selector;
+mapped additions and removals remain conservative. Ordinary mapped properties unused by the consistency
+model, and dirty EF state outside its mappings and dependency graph, do not block binding.
 
 The application service should inject only its `DbContext` and `ConsistencyRuntime`. The EF integration
 uses the same scoped runtime for baseline admission, explicit materialization, and SaveChanges commit.
@@ -490,7 +491,9 @@ intervening semantic change, and commits/dispatches only after SQL succeeds. Pen
 must not rebase committed navigation or projection indexes before SQL; failure leaves the durable baseline
 unchanged and retry prepares a fresh plan. Pending plans are also bound to tracked baseline/coverage state:
 new mapped tracking invalidates an older plan, restores its owned mirror writes, and forces preparation
-against the final baseline before persistence.
+against the final baseline before persistence. Clean tracking admission and relationship-fixup stabilization
+finish before the first pending plan; once stable, `Materialize` followed by `SaveChanges` reuses that plan
+when no further semantic mutation or mapped tracking occurs.
 
 For ordinary stable-key EF workflows:
 

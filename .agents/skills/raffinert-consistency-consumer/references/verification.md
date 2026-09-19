@@ -183,9 +183,12 @@ For injected EF applications, additionally verify:
 [ ] The service runtime and EF session/interceptor runtime are reference-equal within a scope.
 [ ] A new scope receives a new runtime and DbContext.
 [ ] Mapped entities tracked before and after runtime resolution are baseline-admitted automatically.
-[ ] Runtime first binding happens before mapped tracked state is mutated.
-[ ] Clean late binding is supported and dirty late binding is rejected explicitly.
+[ ] Runtime first binding happens before consistency-relevant tracked state is mutated.
+[ ] Clean late binding is supported and relevant dirty late binding is rejected explicitly.
+[ ] First-binding relevance comes from consistency keys, dependencies, invariants, relations, and projected selectors.
+[ ] Ordinary mapped properties unused by the consistency model do not block first binding.
 [ ] Dirty unrelated entities outside the consistency graph do not block first binding.
+[ ] Mapped additions and removals before first binding remain conservatively rejected.
 [ ] Application code does not call runtime.Add/runtime.Apply for ordinary EF mutations.
 ```
 
@@ -326,7 +329,9 @@ Verify:
 [ ] Materialize(entity) leaves committed navigation/projection indexes at the durable baseline before SQL.
 [ ] Pending plans are invalidated when later mapped tracking changes baseline/coverage state.
 [ ] Stale pending mirror writes are restored before a replacement plan is prepared.
+[ ] Clean tracking admission and relationship-fixup stabilization finish before the first pending plan.
 [ ] SaveChanges reuses the pending plan when semantic tracked inputs are unchanged.
+[ ] Materialize followed by SaveChanges without further semantic mutation or mapped tracking evaluates and writes once.
 [ ] Repeated Materialize calls without intervening tracking reuse the same pending plan.
 [ ] An intervening semantic change discards and rebuilds the pending plan.
 [ ] Library-owned mirror writes are excluded from semantic mutation fingerprinting.

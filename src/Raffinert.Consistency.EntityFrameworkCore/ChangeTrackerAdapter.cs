@@ -57,6 +57,7 @@ public sealed class ConsistencyUnitOfWorkMappings
         ObjectAdded Add(object entity);
         ObjectRemoved Remove(object entity);
         PropertyChange Property(object entity, MemberInfo member, object? oldValue, object? newValue);
+        CollectionChange CollectionReset(object entity, MemberInfo member);
     }
 
     private sealed class EntitySetMapping<TEntity>(
@@ -80,6 +81,9 @@ public sealed class ConsistencyUnitOfWorkMappings
             object? oldValue,
             object? newValue) =>
             Change.Property(set, (TEntity)entity, member, oldValue, newValue);
+
+        public CollectionChange CollectionReset(object entity, MemberInfo member) =>
+            CollectionChange.Create(set.Definition, (TEntity)entity, member, CollectionChangeKind.Reset, null);
     }
 }
 
@@ -462,7 +466,8 @@ public static class ChangeTrackerAdapter
         ChangeTracker changeTracker, ConsistencyUnitOfWorkMappings? mappings)
     {
         var changes = new List<RuntimeMutation>();
-        var resets = new HashSet<(object Owner, MemberInfo Member)>(ReferenceMemberPairComparer.Instance);
+        var resets = new Dictionary<(object Owner, MemberInfo Member),
+            ConsistencyUnitOfWorkMappings.IEntitySetMapping?>(ReferenceMemberPairComparer.Instance);
         foreach (var owner in changeTracker.Entries())
         {
             var mapping = mappings?.Resolve(owner);
@@ -483,10 +488,12 @@ public static class ChangeTrackerAdapter
                 var member = GetMember(collection.Metadata);
                 if (member is null) continue;
                 if (collection.IsModified || CollectionRelationshipChanged(changeTracker, owner, collection.Metadata))
-                    resets.Add((owner.Entity, member));
+                    resets.TryAdd((owner.Entity, member), mapping);
             }
         }
-        changes.AddRange(resets.Select(x => Change.CollectionReset(x.Owner, x.Member)));
+        changes.AddRange(resets.Select(reset => reset.Value is null
+            ? Change.CollectionReset(reset.Key.Owner, reset.Key.Member)
+            : reset.Value.CollectionReset(reset.Key.Owner, reset.Key.Member)));
         return changes;
     }
 

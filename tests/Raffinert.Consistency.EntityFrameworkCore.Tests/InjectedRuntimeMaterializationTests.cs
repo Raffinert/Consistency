@@ -255,6 +255,37 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
+    public async Task Mapped_irrelevant_scalar_before_first_runtime_resolution_does_not_block_binding()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeRepairPolicy: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+
+        link.Comment = "changed";
+
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+
+        Assert.True(runtime.IsRegistered(fixture.Links.Definition, link));
+        Assert.True(runtime.IsRegistered(fixture.Items.Definition, link.Left));
+        Assert.True(runtime.IsRegistered(fixture.Items.Definition, link.Right));
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
+
+        link.Left.Value = 55m;
+        runtime.Materialize(link);
+        await context.SaveChangesAsync();
+
+        await using var verification = fixture.CreateContext();
+        var persisted = await verification.Links.AsNoTracking()
+            .Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        Assert.Equal("changed", persisted.Comment);
+        Assert.Equal(55m, persisted.Left.Value);
+        Assert.Equal(5.5m, persisted.Ratio);
+        Assert.Equal(5.5m, persisted.NormalizedRatio);
+    }
+
+    [Fact]
     public async Task Dirty_navigation_before_first_runtime_resolution_is_rejected()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -274,7 +305,7 @@ public sealed class InjectedRuntimeMaterializationTests
     [Fact]
     public async Task Dirty_collection_before_first_runtime_resolution_is_rejected()
     {
-        await using var fixture = await Fixture.CreateAsync();
+        await using var fixture = await Fixture.CreateAsync(includeCollectionDependency: true);
         await using var scope = fixture.Provider.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
         var left = await context.Items.SingleAsync(value => value.Id == 1);
@@ -292,6 +323,37 @@ public sealed class InjectedRuntimeMaterializationTests
 
         var error = Assert.Throws<InvalidOperationException>(
             () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+        Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Added_mapped_entity_before_first_runtime_resolution_is_rejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var left = await context.Items.SingleAsync(value => value.Id == 1);
+        var right = await context.Items.SingleAsync(value => value.Id == 2);
+        context.Add(new Link { Id = 2, Left = left, Right = right });
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+
+        Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Removed_mapped_entity_before_first_runtime_resolution_is_rejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        context.Remove(link);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+
         Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -363,6 +425,49 @@ public sealed class InjectedRuntimeMaterializationTests
         await context.SaveChangesAsync();
         Assert.True(runtime.Version > version);
         Assert.Equal(5.5m, link.Ratio);
+    }
+
+    [Fact]
+    public async Task Clean_tracking_before_first_pending_plan_reuses_materialized_plan_at_save()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetMaterialization();
+        var revisionBeforeMaterialize = runtime.BaselineRevision;
+        var version = runtime.Version;
+
+        Assert.True(revisionBeforeMaterialize > 0);
+        Assert.Equal(0, version);
+
+        link.Left.Value = 55m;
+        runtime.Materialize(link);
+        var materializedRevision = runtime.BaselineRevision;
+
+        Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+        Assert.Equal(version, runtime.Version);
+
+        await context.SaveChangesAsync();
+
+        Assert.Equal(materializedRevision, runtime.BaselineRevision);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+        Assert.Equal(version + 1, runtime.Version);
+
+        await using var verification = fixture.CreateContext();
+        var persisted = await verification.Links.AsNoTracking()
+            .Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        Assert.Equal(55m, persisted.Left.Value);
+        Assert.Equal(5.5m, persisted.Ratio);
+        Assert.Equal(5.5m, persisted.NormalizedRatio);
     }
 
     [Fact]
@@ -770,6 +875,7 @@ public sealed class InjectedRuntimeMaterializationTests
             EvaluationCounter evaluationCounter,
             Derived<Link, decimal>? projectedLeft,
             ObjectSet<Item> items,
+            ObjectSet<Link> links,
             Derived<Link, decimal?> ratio)
         {
             Provider = provider;
@@ -780,6 +886,7 @@ public sealed class InjectedRuntimeMaterializationTests
             EvaluationCounter = evaluationCounter;
             ProjectedLeft = projectedLeft;
             Items = items;
+            Links = links;
             Ratio = ratio;
         }
 
@@ -791,6 +898,7 @@ public sealed class InjectedRuntimeMaterializationTests
         public EvaluationCounter EvaluationCounter { get; }
         public Derived<Link, decimal>? ProjectedLeft { get; }
         public ObjectSet<Item> Items { get; }
+        public ObjectSet<Link> Links { get; }
         public Derived<Link, decimal?> Ratio { get; }
 
         public static async Task<Fixture> CreateAsync(
@@ -799,12 +907,16 @@ public sealed class InjectedRuntimeMaterializationTests
             bool enforceRatioInvariant = false,
             bool completeScope = true,
             bool includeSecondLink = false,
-            bool useConsumerDiscovery = false)
+            bool useConsumerDiscovery = false,
+            bool includeCollectionDependency = false)
         {
             var modelBuilder = new ConsistencyModelBuilder();
             var evaluationCounter = new EvaluationCounter();
             var items = modelBuilder.Objects<Item>().Named("items").Key(value => value.Id);
             var links = modelBuilder.Objects<Link>().Named("links").Key(value => value.Id);
+            if (includeCollectionDependency)
+                _ = modelBuilder.Relation(items, links).Where((item, link) =>
+                    item.LeftLinks.Any(candidate => candidate.Id == link.Id));
             var ratio = modelBuilder.Derived(links)
                 .DependsOn(value => value.Left.Value, value => value.Right.Value)
                 .Select((Func<Link, decimal?>)(value =>
@@ -859,6 +971,7 @@ public sealed class InjectedRuntimeMaterializationTests
                     Id = 1,
                     Left = left,
                     Right = right,
+                    Comment = "original",
                     Ratio = 6m,
                     NormalizedRatio = 6m,
                     ProjectedLeftValue = 120m
@@ -869,6 +982,7 @@ public sealed class InjectedRuntimeMaterializationTests
                         Id = 2,
                         Left = left,
                         Right = right,
+                        Comment = "original",
                         Ratio = 6m,
                         NormalizedRatio = 6m,
                         ProjectedLeftValue = 120m
@@ -906,7 +1020,7 @@ public sealed class InjectedRuntimeMaterializationTests
             {
                 ValidateScopes = true,
                 ValidateOnBuild = true
-            }), connection, 1, model, mappings, evaluationCounter, projectedLeft, items, ratio);
+            }), connection, 1, model, mappings, evaluationCounter, projectedLeft, items, links, ratio);
         }
 
         public LinkContext CreateContext() => new(
@@ -963,6 +1077,13 @@ public sealed class InjectedRuntimeMaterializationTests
         public int RepairCallbacks { get; set; }
         public List<decimal?> RatioAssignments { get; } = [];
 
+        public void ResetMaterialization()
+        {
+            RatioEvaluations = 0;
+            NormalizedEvaluations = 0;
+            ResetPhysicalWrites();
+        }
+
         public void ResetPhysicalWrites()
         {
             RatioWrites = 0;
@@ -979,6 +1100,7 @@ public sealed class InjectedRuntimeMaterializationTests
         public Item Left { get; set; } = null!;
         public long RightId { get; set; }
         public Item Right { get; set; } = null!;
+        public string Comment { get; set; } = "";
         private decimal? _ratio;
         private decimal? _normalizedRatio;
         private decimal _projectedLeftValue;

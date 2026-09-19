@@ -125,11 +125,12 @@ services.AddScoped<LinkService>();
 ```
 
 Register `AddRaffinertConsistency<TDbContext>` exactly once per `IServiceCollection`. Resolve or inject the
-scoped runtime before application code mutates mapped tracked entities. Clean entities tracked before the
-runtime is first resolved are supported and admitted as baseline state; first runtime binding fails clearly
-if mapped tracked state is already dirty, because current values cannot safely be mistaken for the durable
-baseline. Dirty entities unrelated to the configured consistency mappings and dependency graph do not block
-binding.
+scoped runtime before application code mutates consistency-relevant tracked state. Clean entities tracked
+before the runtime is first resolved are supported and admitted as baseline state. First runtime binding
+rejects pending EF member changes only when the changed member is used by a configured consistency key,
+dependency, invariant, relation, or projected selector; mapped additions and removals remain conservative.
+Ordinary mapped properties unused by the consistency model, and dirty entities outside its mappings and
+dependency graph, do not block binding.
 
 An application service only needs its `DbContext` and the scoped `ConsistencyRuntime`:
 
@@ -167,9 +168,11 @@ still require the authoritative `ConsistencyScope` or
 `DiscoverConsumers` proof described below.
 
 Pending plans are bound to both the current semantic runtime state and the tracked baseline/coverage state.
-If another query tracks mapped baseline objects after materialization, the adapter rolls back pending mirror
-writes as needed and prepares a fresh plan before persistence. Repeated materialization without intervening
-tracking continues to reuse the existing plan.
+Clean tracking admission and relationship-fixup stabilization complete before the first pending plan is
+created. Once that baseline is stable, `Materialize` followed by ordinary `SaveChanges` reuses the plan when
+no further semantic mutation or mapped tracking occurs. If another query tracks mapped baseline objects after
+materialization, the adapter rolls back pending mirror writes as needed and prepares a fresh plan before
+persistence.
 
 The EF Core adapter can reject configured invariant violations before SQL and persist sink-only mirrors
 of affected derived values:

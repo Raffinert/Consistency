@@ -20,12 +20,13 @@ already tracked when the runtime is resolved, and entities tracked later by quer
 runtime baseline automatically. The runtime injected into an application service is the same instance
 used by the save interceptor.
 
-Resolve or inject that runtime before application code mutates mapped tracked entities. First binding may
-admit already-tracked entities only while their mapped state is clean. If mapped scalar, navigation,
-collection, added, or removed state is already dirty, binding throws instead of treating current CLR state
-as a durable baseline. Querying clean entities through the context before resolving the runtime remains
-supported. Pending changes on unrelated entities outside the configured mappings and dependency graph do
-not block first binding.
+Resolve or inject that runtime before application code mutates consistency-relevant tracked state. First
+binding rejects pending scalar, navigation, or collection changes only when the changed member is used by a
+configured consistency key, dependency, invariant, relation, or projected selector. Mapped additions and
+removals remain conservative because lifecycle changes cannot be admitted as a baseline. Querying clean
+entities through the context before resolving the runtime remains supported. Ordinary mapped properties
+unused by the consistency model, and pending changes on entities outside its mappings and dependency graph,
+do not block first binding.
 
 The application-facing service remains ordinary EF code:
 
@@ -67,10 +68,11 @@ a fresh plan. Baseline admission and query-fixup stabilization do not advance th
 repair/policy work.
 
 Pending plans are valid only for the semantic runtime state and tracked baseline/coverage state against
-which they were prepared. Tracking another mapped baseline object invalidates an older pending plan. The
-adapter restores any physical mirror writes owned by that plan, stabilizes the newly tracked baseline, and
-prepares a fresh plan before SQL. With no intervening mapped tracking, repeated materialization and save
-reuse the existing plan.
+which they were prepared. Clean tracking admission and relationship-fixup stabilization complete before the
+first pending plan is created. Once that baseline is stable, `Materialize` followed by ordinary `SaveChanges`
+reuses the plan when no further semantic mutation or mapped tracking occurs. Tracking another mapped baseline
+object invalidates an older pending plan; the adapter restores its physical mirror writes, stabilizes the new
+baseline, and prepares a fresh plan before SQL.
 
 ## Stable-key workflow
 

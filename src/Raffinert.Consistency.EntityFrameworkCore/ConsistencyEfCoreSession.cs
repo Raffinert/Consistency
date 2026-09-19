@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using System.Reflection;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
@@ -374,20 +375,27 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     private static bool HasRelevantChanges(
         ConsistencyRuntime runtime,
-        IReadOnlyList<RuntimeMutation> mutations) => mutations.Any(mutation => mutation switch
+        IReadOnlyList<RuntimeMutation> mutations) =>
+        mutations.Any(mutation => IsFirstBindingRelevant(runtime, mutation));
+
+    private static bool IsFirstBindingRelevant(
+        ConsistencyRuntime runtime,
+        RuntimeMutation mutation) => mutation switch
         {
-            PropertyChange change => change.Set is not null ||
-                runtime.GetTrackedMemberUsage(null, change.Member) !=
-                ConsistencyRuntime.ModelMemberUsageKind.None,
-            CollectionChange change => change.Set is not null ||
-                runtime.GetTrackedMemberUsage(null, change.Member) !=
-                ConsistencyRuntime.ModelMemberUsageKind.None,
+            PropertyChange change => IsRelevantMemberChange(runtime, change.Set, change.Member),
+            CollectionChange change => IsRelevantMemberChange(runtime, change.Set, change.Member),
             ObjectAdded => true,
             ObjectRemoved => true,
             CoverageAdmission => true,
             _ => throw new InvalidOperationException(
                 $"Unsupported EF first-binding mutation type '{mutation.GetType().Name}'.")
-        });
+        };
+
+    private static bool IsRelevantMemberChange(
+        ConsistencyRuntime runtime,
+        IObjectSetDefinition? set,
+        MemberInfo member) =>
+        runtime.GetTrackedMemberUsage(set, member) != ConsistencyRuntime.ModelMemberUsageKind.None;
 
     private void StabilizeUntouchedTrackedBaselines(EfTouchedSources touchedSources)
     {
