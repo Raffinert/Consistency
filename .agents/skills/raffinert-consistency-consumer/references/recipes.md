@@ -16,7 +16,8 @@ services.AddScoped<LinkService>();
 
 Register the Raffinert EF integration once per service collection. Resolve the scoped runtime before
 mutating mapped tracked entities. It may bind after a clean query, but binding is intentionally rejected if
-mapped tracked state is already dirty.
+mapped tracked state is already dirty. Unrelated dirty EF entities outside the consistency graph do not
+block binding.
 
 Keep the service constructor limited to the context and scoped runtime:
 
@@ -42,7 +43,9 @@ Use `Materialize(entity)` only when a mirror is needed before saving. If the ser
 mutation, call ordinary `SaveChanges`/`SaveChangesAsync`. The integration admits mapped tracked entities,
 reuses an unchanged pending plan, rebuilds after intervening changes, and commits runtime state only after
 SQL succeeds. Pending navigation/projection changes are visible to plan evaluation without rebasing the
-committed runtime baseline; failed SQL leaves that baseline unchanged and retry builds a fresh plan.
+committed runtime baseline; failed SQL leaves that baseline unchanged and retry builds a fresh plan. If a
+later query tracks another mapped baseline object, the integration invalidates the pending plan, restores
+its owned mirror writes, and prepares again against the final tracked baseline.
 
 ---
 

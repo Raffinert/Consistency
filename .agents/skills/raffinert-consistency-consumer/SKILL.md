@@ -396,7 +396,8 @@ services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 Register `AddRaffinertConsistency<TDbContext>` exactly once per `IServiceCollection`. Resolve or inject the
 scoped runtime before application code mutates mapped tracked entities. Clean tracked entities may be
 admitted during first binding; dirty mapped scalar, navigation, collection, added, or removed state must be
-rejected rather than admitted as baseline state.
+rejected rather than admitted as baseline state. Dirty EF state unrelated to the consistency mappings and
+dependency graph does not block binding.
 
 The application service should inject only its `DbContext` and `ConsistencyRuntime`. The EF integration
 uses the same scoped runtime for baseline admission, explicit materialization, and SaveChanges commit.
@@ -487,7 +488,9 @@ must read a materialized property immediately. It prepares and stores a pending 
 runtime state. `SaveChanges` reuses that plan when semantic EF inputs are unchanged, rebuilds it after an
 intervening semantic change, and commits/dispatches only after SQL succeeds. Pending relationship changes
 must not rebase committed navigation or projection indexes before SQL; failure leaves the durable baseline
-unchanged and retry prepares a fresh plan.
+unchanged and retry prepares a fresh plan. Pending plans are also bound to tracked baseline/coverage state:
+new mapped tracking invalidates an older plan, restores its owned mirror writes, and forces preparation
+against the final baseline before persistence.
 
 For ordinary stable-key EF workflows:
 

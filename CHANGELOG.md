@@ -25,6 +25,9 @@ patch versions remain backward-compatible bug fixes where practical.
 - Hardened injected EF runtime baseline semantics so pending navigation/projection changes remain
   uncommitted until SQL succeeds, dirty first binding is rejected, failed saves retry from a fresh plan,
   and duplicate EF integration registrations are rejected per service collection.
+- Bound pending EF plans to tracked baseline/coverage state so later mapped tracking or discovery restores
+  stale pending mirrors and rebuilds before persistence, while unrelated dirty EF entities no longer block
+  first runtime binding.
 - Added v2 chaining for two local inputs, mixed projected/local inputs, and two projected inputs so the
   removed aliases do not reduce declaration capability.
 - Preserved incremental aggregate plans, logical freshness and invalidation behavior, repair dispatch,

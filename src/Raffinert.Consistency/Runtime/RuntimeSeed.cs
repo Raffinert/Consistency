@@ -31,8 +31,21 @@ public sealed partial class ConsistencyRuntime
             throw new ArgumentException("The object set belongs to another compiled model.", nameof(set));
         if (!state.Contains(instance))
             return;
-        _navigation.RefreshRoot(set, instance);
-        _projections.RefreshRoot(set, instance);
+        var navigation = _navigation.CaptureTouchedState([(set, instance)], []);
+        var projections = _projections.CaptureRootState(set, instance);
+        try
+        {
+            _navigation.RefreshRoot(set, instance);
+            _projections.RefreshRoot(set, instance);
+            _projections.ValidateAll();
+            _baselineRevision++;
+        }
+        catch
+        {
+            _projections.RestoreState(projections);
+            _navigation.RestoreTouchedState(navigation);
+            throw;
+        }
     }
 
     internal void AdmitBaseline(IObjectSetDefinition set, object instance)
@@ -44,9 +57,20 @@ public sealed partial class ConsistencyRuntime
         if (state.Contains(instance))
             return;
 
-        var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
-        CommitAdd(new ObjectAdded(set, instance), deltas);
-        _dependencyGraph.RebaseCoverageAdmissions(deltas);
+        var mutation = new ObjectAdded(set, instance);
+        var rollback = CaptureRollbackJournal([mutation], [], new ResolvedChangeImpact(), []);
+        try
+        {
+            var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
+            CommitAdd(mutation, deltas);
+            _dependencyGraph.RebaseCoverageAdmissions(deltas);
+            _baselineRevision++;
+        }
+        catch
+        {
+            RestoreRollbackJournal(rollback);
+            throw;
+        }
     }
 
     internal void ValidateBaseline()

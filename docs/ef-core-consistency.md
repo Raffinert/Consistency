@@ -24,7 +24,8 @@ Resolve or inject that runtime before application code mutates mapped tracked en
 admit already-tracked entities only while their mapped state is clean. If mapped scalar, navigation,
 collection, added, or removed state is already dirty, binding throws instead of treating current CLR state
 as a durable baseline. Querying clean entities through the context before resolving the runtime remains
-supported.
+supported. Pending changes on unrelated entities outside the configured mappings and dependency graph do
+not block first binding.
 
 The application-facing service remains ordinary EF code:
 
@@ -64,6 +65,12 @@ even though the pending plan evaluates current tracked relationships and may wri
 A failed SQL save leaves those committed indexes unchanged and discards the pending plan; a retry prepares
 a fresh plan. Baseline admission and query-fixup stabilization do not advance the runtime version or dispatch
 repair/policy work.
+
+Pending plans are valid only for the semantic runtime state and tracked baseline/coverage state against
+which they were prepared. Tracking another mapped baseline object invalidates an older pending plan. The
+adapter restores any physical mirror writes owned by that plan, stabilizes the newly tracked baseline, and
+prepares a fresh plan before SQL. With no intervening mapped tracking, repeated materialization and save
+reuse the existing plan.
 
 ## Stable-key workflow
 

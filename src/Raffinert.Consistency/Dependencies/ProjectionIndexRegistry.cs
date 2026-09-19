@@ -66,6 +66,11 @@ internal sealed class ProjectionIndexRegistry
         }
     }
 
+    public object CaptureRootState(IObjectSetDefinition set, object source) => _entries
+        .Where(entry => ReferenceEquals(entry.DownstreamSet, set))
+        .Select(entry => new EntryPatchState(entry, entry.CaptureSources([source])))
+        .ToArray();
+
     public IReadOnlyCollection<object> Resolve(
         ProjectedUpstreamDerivedInput input,
         IEnumerable<object> upstreamSources)

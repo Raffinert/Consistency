@@ -185,6 +185,7 @@ For injected EF applications, additionally verify:
 [ ] Mapped entities tracked before and after runtime resolution are baseline-admitted automatically.
 [ ] Runtime first binding happens before mapped tracked state is mutated.
 [ ] Clean late binding is supported and dirty late binding is rejected explicitly.
+[ ] Dirty unrelated entities outside the consistency graph do not block first binding.
 [ ] Application code does not call runtime.Add/runtime.Apply for ordinary EF mutations.
 ```
 
@@ -323,7 +324,10 @@ Verify:
 ```text
 [ ] Materialize(entity) does not advance runtime state or dispatch callbacks.
 [ ] Materialize(entity) leaves committed navigation/projection indexes at the durable baseline before SQL.
+[ ] Pending plans are invalidated when later mapped tracking changes baseline/coverage state.
+[ ] Stale pending mirror writes are restored before a replacement plan is prepared.
 [ ] SaveChanges reuses the pending plan when semantic tracked inputs are unchanged.
+[ ] Repeated Materialize calls without intervening tracking reuse the same pending plan.
 [ ] An intervening semantic change discards and rebuilds the pending plan.
 [ ] Library-owned mirror writes are excluded from semantic mutation fingerprinting.
 [ ] Failed SQL does not commit, rebase indexes, or dispatch the pending plan and a retry rebuilds safely.

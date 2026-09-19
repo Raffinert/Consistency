@@ -83,6 +83,58 @@ public sealed class RuntimeSeedTests
         Assert.Single(runtime.Related(relation, source));
     }
 
+    [Fact]
+    public void Baseline_revision_changes_without_advancing_domain_version()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<Source>().Key(source => source.Id);
+        var runtime = model.Build().CreateRuntime();
+        var source = new Source();
+
+        Assert.Equal(0, runtime.BaselineRevision);
+        Assert.Equal(0, runtime.Version);
+
+        runtime.AdmitBaseline(sources.Definition, source);
+
+        Assert.Equal(1, runtime.BaselineRevision);
+        Assert.Equal(0, runtime.Version);
+        runtime.AdmitBaseline(sources.Definition, source);
+        Assert.Equal(1, runtime.BaselineRevision);
+
+        runtime.RefreshBaseline(sources.Definition, source);
+
+        Assert.Equal(2, runtime.BaselineRevision);
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public void Failed_baseline_refresh_restores_indexes_and_does_not_publish_revision()
+    {
+        var model = new ConsistencyModelBuilder();
+        var items = model.Objects<ProjectedItem>().Key(item => item.Id);
+        var sources = model.Objects<ProjectedSource>().Key(source => source.Id);
+        var value = model.Derived(items).Select(item => item.Value);
+        model.Derived(sources).From(source => source.Item, value).Select((_, current) => current);
+        var runtime = model.Build().CreateRuntime();
+        var original = new ProjectedItem { Value = 1 };
+        var replacement = new ProjectedItem { Value = 2 };
+        var source = new ProjectedSource { Item = original };
+        var member = typeof(ProjectedSource).GetProperty(nameof(ProjectedSource.Item))!;
+        runtime.AdmitBaseline(items.Definition, original);
+        runtime.AdmitBaseline(sources.Definition, source);
+        runtime.ValidateBaseline();
+        var revision = runtime.BaselineRevision;
+
+        source.Item = replacement;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            runtime.RefreshBaseline(sources.Definition, source));
+        Assert.Equal(revision, runtime.BaselineRevision);
+        Assert.Contains(source, runtime.GetProjectedDownstreams(member, original));
+        Assert.DoesNotContain(source, runtime.GetProjectedDownstreams(member, replacement));
+        Assert.Equal(0, runtime.Version);
+    }
+
     private sealed class Source
     {
         public Guid Id { get; set; } = Guid.NewGuid();
@@ -93,5 +145,17 @@ public sealed class RuntimeSeedTests
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Code { get; set; } = "";
+    }
+
+    private sealed class ProjectedSource
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public ProjectedItem Item { get; set; } = null!;
+    }
+
+    private sealed class ProjectedItem
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public int Value { get; set; }
     }
 }

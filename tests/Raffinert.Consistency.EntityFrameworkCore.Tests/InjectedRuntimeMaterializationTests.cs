@@ -366,7 +366,7 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
-    public async Task Repeated_materialize_reuses_the_pending_plan_without_recomputing()
+    public async Task Repeated_materialize_without_tracking_keeps_baseline_revision_and_reuses_plan()
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var scope = fixture.Provider.CreateAsyncScope();
@@ -378,14 +378,161 @@ public sealed class InjectedRuntimeMaterializationTests
 
         link.Left.Value = 55m;
         runtime.Materialize(link);
+        var revision = runtime.BaselineRevision;
+        var version = runtime.Version;
         runtime.Materialize(link);
         runtime.Materialize(link);
+
+        Assert.Equal(revision, runtime.BaselineRevision);
+        Assert.Equal(version, runtime.Version);
         await context.SaveChangesAsync();
 
         Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
         Assert.Equal(1, fixture.EvaluationCounter.NormalizedEvaluations);
         Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
         Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+        Assert.True(runtime.Version > version);
+    }
+
+    [Fact]
+    public async Task Tracking_mapped_consumer_after_materialize_invalidates_pending_plan()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeSecondLink: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var first = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == fixture.LinkId);
+        first.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
+        first.Left.Value = 55m;
+        runtime.Materialize(first);
+        var pendingRevision = runtime.BaselineRevision;
+        var version = runtime.Version;
+
+        var second = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == 2);
+        second.Counter = fixture.EvaluationCounter;
+
+        Assert.True(runtime.BaselineRevision > pendingRevision);
+        Assert.Equal(version, runtime.Version);
+        await context.SaveChangesAsync();
+
+        Assert.Equal(3, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(3, fixture.EvaluationCounter.NormalizedEvaluations);
+        Assert.Equal(version + 1, runtime.Version);
+        await using var verification = fixture.CreateContext();
+        var persisted = await verification.Links.AsNoTracking().OrderBy(value => value.Id).ToArrayAsync();
+        Assert.All(persisted, value =>
+        {
+            Assert.Equal(5.5m, value.Ratio);
+            Assert.Equal(5.5m, value.NormalizedRatio);
+        });
+    }
+
+    [Fact]
+    public async Task Stale_pending_materialization_is_rolled_back_before_revision_rebuild()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeSecondLink: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var first = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == fixture.LinkId);
+        first.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
+        first.Left.Value = 55m;
+
+        runtime.Materialize(first);
+        _ = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == 2);
+        await context.SaveChangesAsync();
+
+        Assert.Equal(5.5m, first.Ratio);
+        Assert.Equal([5.5m, 6m, 5.5m], fixture.EvaluationCounter.RatioAssignments.Take(3));
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
+    }
+
+    [Fact]
+    public async Task External_discovery_tracking_rebuilds_plan_against_final_baseline_revision()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            includeRepairPolicy: true, includeSecondLink: true, useConsumerDiscovery: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var first = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == fixture.LinkId);
+        first.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
+        first.Left.Value = 110m;
+        var revision = runtime.BaselineRevision;
+        var version = runtime.Version;
+
+        runtime.Materialize(first);
+
+        Assert.True(runtime.BaselineRevision > revision);
+        Assert.Equal(version, runtime.Version);
+        Assert.Equal(4, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(4, fixture.EvaluationCounter.NormalizedEvaluations);
+        await context.SaveChangesAsync();
+
+        Assert.Equal(version + 1, runtime.Version);
+        Assert.Equal(2, fixture.EvaluationCounter.RepairCallbacks);
+        await using var verification = fixture.CreateContext();
+        var persisted = await verification.Links.AsNoTracking().OrderBy(value => value.Id).ToArrayAsync();
+        Assert.All(persisted, value =>
+        {
+            Assert.Equal(11m, value.Ratio);
+            Assert.Equal(11m, value.NormalizedRatio);
+        });
+    }
+
+    [Fact]
+    public async Task External_discovery_during_async_save_rebuilds_against_final_baseline_revision()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            includeRepairPolicy: true, includeSecondLink: true, useConsumerDiscovery: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var first = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .SingleAsync(value => value.Id == fixture.LinkId);
+        first.Left.Value = 110m;
+        var revision = runtime.BaselineRevision;
+        var version = runtime.Version;
+
+        await context.SaveChangesAsync();
+
+        Assert.True(runtime.BaselineRevision > revision);
+        Assert.Equal(version + 1, runtime.Version);
+        Assert.Equal(4, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(4, fixture.EvaluationCounter.NormalizedEvaluations);
+        Assert.Equal(2, fixture.EvaluationCounter.RepairCallbacks);
+        await using var verification = fixture.CreateContext();
+        var persisted = await verification.Links.AsNoTracking().OrderBy(value => value.Id).ToArrayAsync();
+        Assert.All(persisted, value => Assert.Equal(11m, value.Ratio));
+    }
+
+    [Fact]
+    public async Task Dirty_unmapped_entity_does_not_block_first_runtime_binding()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var note = await context.Notes.SingleAsync();
+        note.Text = "changed";
+
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+
+        Assert.True(runtime.IsRegistered(fixture.Items.Definition, link.Left));
+        link.Left.Value = 55m;
+        runtime.Materialize(link);
+        await context.SaveChangesAsync();
+        await using var verification = fixture.CreateContext();
+        Assert.Equal("changed", (await verification.Notes.AsNoTracking().SingleAsync()).Text);
+        Assert.Equal(5.5m, (await verification.Links.AsNoTracking().SingleAsync()).Ratio);
     }
 
     [Fact]
@@ -650,7 +797,9 @@ public sealed class InjectedRuntimeMaterializationTests
             bool includeProjection = false,
             bool includeRepairPolicy = false,
             bool enforceRatioInvariant = false,
-            bool completeScope = true)
+            bool completeScope = true,
+            bool includeSecondLink = false,
+            bool useConsumerDiscovery = false)
         {
             var modelBuilder = new ConsistencyModelBuilder();
             var evaluationCounter = new EvaluationCounter();
@@ -705,7 +854,7 @@ public sealed class InjectedRuntimeMaterializationTests
                 var left = new Item { Id = 1, Value = 60m };
                 var right = new Item { Id = 2, Value = 10m };
                 var replacement = new Item { Id = 3, Value = 50m };
-                seed.AddRange(left, right, replacement, new Link
+                seed.AddRange(left, right, replacement, new Note { Id = 1, Text = "original" }, new Link
                 {
                     Id = 1,
                     Left = left,
@@ -714,16 +863,42 @@ public sealed class InjectedRuntimeMaterializationTests
                     NormalizedRatio = 6m,
                     ProjectedLeftValue = 120m
                 });
+                if (includeSecondLink)
+                    seed.Add(new Link
+                    {
+                        Id = 2,
+                        Left = left,
+                        Right = right,
+                        Ratio = 6m,
+                        NormalizedRatio = 6m,
+                        ProjectedLeftValue = 120m
+                    });
                 await seed.SaveChangesAsync();
             }
 
             var services = new ServiceCollection();
             services.AddDbContext<LinkContext>(options => options.UseSqlite(connection));
+            if (useConsumerDiscovery)
+                mappings
+                    .DiscoverConsumers(links, value => value.Left, (db, targets) =>
+                    {
+                        var ids = targets.Select(value => value.Id).ToArray();
+                        return db.Set<Link>().Where(value => ids.Contains(value.LeftId))
+                            .Include(value => value.Left).Include(value => value.Right);
+                    })
+                    .DiscoverConsumers(links, value => value.Right, (db, targets) =>
+                    {
+                        var ids = targets.Select(value => value.Id).ToArray();
+                        return db.Set<Link>().Where(value => ids.Contains(value.RightId))
+                            .Include(value => value.Left).Include(value => value.Right);
+                    });
             services.AddRaffinertConsistency<LinkContext>(model, mappings,
                 new ConsistencySaveOptions
                 {
                     Scope = completeScope
-                        ? new ConsistencyScope().Complete(items).Complete(links)
+                        ? useConsumerDiscovery
+                            ? new ConsistencyScope().Complete(items)
+                            : new ConsistencyScope().Complete(items).Complete(links)
                         : new ConsistencyScope().Complete(items)
                 });
             services.AddScoped<LinkService>();
@@ -748,10 +923,12 @@ public sealed class InjectedRuntimeMaterializationTests
     {
         public DbSet<Item> Items => Set<Item>();
         public DbSet<Link> Links => Set<Link>();
+        public DbSet<Note> Notes => Set<Note>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Item>();
+            modelBuilder.Entity<Note>();
             modelBuilder.Entity<Link>(entity =>
             {
                 entity.HasOne(value => value.Left).WithMany(value => value.LeftLinks).HasForeignKey(value => value.LeftId);
@@ -784,12 +961,14 @@ public sealed class InjectedRuntimeMaterializationTests
         public int NormalizedRatioWrites { get; set; }
         public int ProjectedLeftWrites { get; set; }
         public int RepairCallbacks { get; set; }
+        public List<decimal?> RatioAssignments { get; } = [];
 
         public void ResetPhysicalWrites()
         {
             RatioWrites = 0;
             NormalizedRatioWrites = 0;
             ProjectedLeftWrites = 0;
+            RatioAssignments.Clear();
         }
     }
 
@@ -810,7 +989,10 @@ public sealed class InjectedRuntimeMaterializationTests
             set
             {
                 if (Counter is not null)
+                {
                     Counter.RatioWrites++;
+                    Counter.RatioAssignments.Add(value);
+                }
                 _ratio = value;
             }
         }
@@ -852,6 +1034,12 @@ public sealed class InjectedRuntimeMaterializationTests
     {
         public long Id { get; set; }
         public int Kind { get; set; }
+    }
+
+    private sealed class Note
+    {
+        public long Id { get; set; }
+        public string Text { get; set; } = "";
     }
 
     private static decimal? CountNormalized(EvaluationCounter counter, decimal? value)

@@ -127,6 +127,7 @@ public sealed partial class ConsistencyRuntime
     private readonly IReadOnlyDictionary<IInvariantDefinition, int> _invariantIds;
     private readonly RuntimeDiagnosticOptions _diagnosticOptions;
     private long _version;
+    private long _baselineRevision;
     private long _reindexedRoots;
     private long _affectedSources;
     private long _relationPairsAdded;
@@ -136,6 +137,8 @@ public sealed partial class ConsistencyRuntime
 
     /// <summary>The monotonically increasing version of runtime-owned relation state.</summary>
     public long Version => _version;
+
+    internal long BaselineRevision => _baselineRevision;
 
     internal IReadOnlyDictionary<IRelationDefinition, RelationImpact> LastRelationImpacts { get; private set; } =
         new Dictionary<IRelationDefinition, RelationImpact>();

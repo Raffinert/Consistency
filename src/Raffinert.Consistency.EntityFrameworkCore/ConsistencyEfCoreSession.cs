@@ -14,6 +14,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     private readonly List<OwnedMaterializationWrite> _ownedWrites = [];
     private ConsistencyRuntime? _runtime;
     private PendingConsistencySave? _pending;
+    private bool _baselineMayNeedStabilization;
 
     public ConsistencyEfCoreSession(
         TDbContext context,
@@ -43,7 +44,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
         var current = ConsistencyCoordinator.CaptureCurrentUnitOfWork(
             _context, _mappings, IncludeSemanticProperty);
-        if (current.HasChanges)
+        if (HasRelevantChanges(runtime, current.Mutations))
             throw new InvalidOperationException(
                 "The consistency runtime must be resolved before mutating tracked entities; " +
                 "first runtime binding cannot admit dirty EF state as a baseline.");
@@ -52,8 +53,10 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         runtime.AttachMaterializationIntegration(this);
         foreach (var entry in _context.ChangeTracker.Entries())
             AdmitBaseline(entry);
+        _baselineMayNeedStabilization = true;
         StabilizeUntouchedTrackedBaselines(EfTouchedSources.Create([]));
         runtime.ValidateBaseline();
+        _baselineMayNeedStabilization = false;
         return runtime;
     }
 
@@ -148,43 +151,49 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     private PendingConsistencySave PrepareForSaveCore()
     {
         var runtime = Runtime;
-        StabilizeCurrentTrackedBaselines();
+        PrepareBaselineForPlanning(runtime);
         if (_pending is not null)
         {
             var fingerprint = ConsistencyCoordinator.CaptureFingerprint(
                 _context, runtime, _mappings, _options, IncludeSemanticProperty);
-            if (_pending.Fingerprint.Equals(fingerprint))
+            if (!_baselineMayNeedStabilization &&
+                _pending.BaselineRevision == runtime.BaselineRevision &&
+                _pending.Fingerprint.Equals(fingerprint))
             {
                 ApplyAllPendingMaterializations();
                 return _pending;
             }
             DiscardPending();
+            StabilizeCurrentTrackedBaselines();
         }
 
-        _pending = ConsistencyCoordinator.Prepare(
-            _context, runtime, _mappings, _options, IncludeSemanticProperty);
+        _pending = PrepareStable(runtime, () => ConsistencyCoordinator.Prepare(
+            _context, runtime, _mappings, _options, IncludeSemanticProperty));
         return _pending;
     }
 
     private async Task<PendingConsistencySave> PrepareForSaveCoreAsync(CancellationToken cancellationToken)
     {
         var runtime = Runtime;
-        StabilizeCurrentTrackedBaselines();
+        PrepareBaselineForPlanning(runtime);
         if (_pending is not null)
         {
             var fingerprint = await ConsistencyCoordinator.CaptureFingerprintAsync(
                 _context, runtime, _mappings, _options, cancellationToken, IncludeSemanticProperty)
                 .ConfigureAwait(false);
-            if (_pending.Fingerprint.Equals(fingerprint))
+            if (!_baselineMayNeedStabilization &&
+                _pending.BaselineRevision == runtime.BaselineRevision &&
+                _pending.Fingerprint.Equals(fingerprint))
             {
                 ApplyAllPendingMaterializations();
                 return _pending;
             }
             DiscardPending();
+            StabilizeCurrentTrackedBaselines();
         }
 
-        _pending = await ConsistencyCoordinator.PrepareAsync(
-            _context, runtime, _mappings, _options, cancellationToken, IncludeSemanticProperty)
+        _pending = await PrepareStableAsync(runtime, () => ConsistencyCoordinator.PrepareAsync(
+            _context, runtime, _mappings, _options, cancellationToken, IncludeSemanticProperty))
             .ConfigureAwait(false);
         return _pending;
     }
@@ -193,22 +202,25 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         Func<MaterializationDescriptor, object, bool> selector)
     {
         var runtime = Runtime;
-        StabilizeCurrentTrackedBaselines();
+        PrepareBaselineForPlanning(runtime);
         if (_pending is not null)
         {
             var fingerprint = ConsistencyCoordinator.CaptureFingerprint(
                 _context, runtime, _mappings, _options, IncludeSemanticProperty);
-            if (_pending.Fingerprint.Equals(fingerprint))
+            if (!_baselineMayNeedStabilization &&
+                _pending.BaselineRevision == runtime.BaselineRevision &&
+                _pending.Fingerprint.Equals(fingerprint))
             {
                 ApplySelectedMaterializations(_pending, selector);
                 return _pending;
             }
             DiscardPending();
+            StabilizeCurrentTrackedBaselines();
         }
 
-        _pending = ConsistencyCoordinator.Prepare(
+        _pending = PrepareStable(runtime, () => ConsistencyCoordinator.Prepare(
             _context, runtime, _mappings, _options, IncludeSemanticProperty,
-            forceMaterialization: true, materializationSelector: selector);
+            forceMaterialization: true, materializationSelector: selector));
         RecordOwnedWrites(_pending.Plan, selector);
         return _pending;
     }
@@ -254,6 +266,13 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         var member = property.PropertyInfo;
         if (member is null)
             return true;
+        if (_runtime is not null)
+        {
+            var mapping = _mappings.UnitOfWorkMappings.Resolve(entry);
+            if (_runtime.GetTrackedMemberUsage(mapping?.SetDefinition, member) ==
+                ConsistencyRuntime.ModelMemberUsageKind.None)
+                return false;
+        }
         var owned = _ownedWrites.LastOrDefault(write =>
             ReferenceEquals(write.Source, entry.Entity) && write.Member == member);
         return owned is null || !owned.Descriptor.ValuesEqual(
@@ -273,7 +292,13 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     private void Tracked(object? sender, EntityTrackedEventArgs eventArgs)
     {
-        if (eventArgs.Entry.State == EntityState.Added || _runtime is null)
+        if (_runtime is null)
+            return;
+        var mapping = _mappings.UnitOfWorkMappings.Resolve(eventArgs.Entry);
+        if (mapping is null)
+            return;
+        _baselineMayNeedStabilization = true;
+        if (eventArgs.Entry.State == EntityState.Added)
             return;
         AdmitBaseline(eventArgs.Entry);
     }
@@ -289,14 +314,80 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     private void StabilizeCurrentTrackedBaselines()
     {
-        if (_runtime is null)
+        if (_runtime is null || !_baselineMayNeedStabilization)
             return;
         _context.ChangeTracker.DetectChanges();
         var current = ConsistencyCoordinator.CaptureCurrentUnitOfWork(
             _context, _mappings, IncludeSemanticProperty);
         StabilizeUntouchedTrackedBaselines(EfTouchedSources.Create(current.Mutations));
         _runtime.ValidateBaseline();
+        _baselineMayNeedStabilization = false;
     }
+
+    private void PrepareBaselineForPlanning(ConsistencyRuntime runtime)
+    {
+        if (_pending is not null && (_baselineMayNeedStabilization ||
+                _pending.BaselineRevision != runtime.BaselineRevision))
+            DiscardPending();
+        StabilizeCurrentTrackedBaselines();
+        if (_pending is not null && _pending.BaselineRevision != runtime.BaselineRevision)
+            DiscardPending();
+    }
+
+    private PendingConsistencySave PrepareStable(
+        ConsistencyRuntime runtime,
+        Func<PendingConsistencySave> prepare)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var revision = runtime.BaselineRevision;
+            var candidate = prepare();
+            if (!_baselineMayNeedStabilization && revision == runtime.BaselineRevision &&
+                candidate.BaselineRevision == runtime.BaselineRevision)
+                return candidate;
+            candidate.MaterializationRollback?.Restore();
+            _ownedWrites.Clear();
+            StabilizeCurrentTrackedBaselines();
+        }
+        throw new InvalidOperationException(
+            "The consistency runtime baseline changed repeatedly while preparing the EF save plan.");
+    }
+
+    private async Task<PendingConsistencySave> PrepareStableAsync(
+        ConsistencyRuntime runtime,
+        Func<Task<PendingConsistencySave>> prepare)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var revision = runtime.BaselineRevision;
+            var candidate = await prepare().ConfigureAwait(false);
+            if (!_baselineMayNeedStabilization && revision == runtime.BaselineRevision &&
+                candidate.BaselineRevision == runtime.BaselineRevision)
+                return candidate;
+            candidate.MaterializationRollback?.Restore();
+            _ownedWrites.Clear();
+            StabilizeCurrentTrackedBaselines();
+        }
+        throw new InvalidOperationException(
+            "The consistency runtime baseline changed repeatedly while preparing the EF save plan.");
+    }
+
+    private static bool HasRelevantChanges(
+        ConsistencyRuntime runtime,
+        IReadOnlyList<RuntimeMutation> mutations) => mutations.Any(mutation => mutation switch
+        {
+            PropertyChange change => change.Set is not null ||
+                runtime.GetTrackedMemberUsage(null, change.Member) !=
+                ConsistencyRuntime.ModelMemberUsageKind.None,
+            CollectionChange change => change.Set is not null ||
+                runtime.GetTrackedMemberUsage(null, change.Member) !=
+                ConsistencyRuntime.ModelMemberUsageKind.None,
+            ObjectAdded => true,
+            ObjectRemoved => true,
+            CoverageAdmission => true,
+            _ => throw new InvalidOperationException(
+                $"Unsupported EF first-binding mutation type '{mutation.GetType().Name}'.")
+        });
 
     private void StabilizeUntouchedTrackedBaselines(EfTouchedSources touchedSources)
     {

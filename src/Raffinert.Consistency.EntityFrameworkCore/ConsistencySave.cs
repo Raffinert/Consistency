@@ -178,7 +178,8 @@ internal sealed record PendingConsistencySave(
     ConsistencyUnitOfWork Unit,
     PreparedImpactPlan? Plan,
     MaterializationRollback? MaterializationRollback,
-    EfMutationFingerprint Fingerprint);
+    EfMutationFingerprint Fingerprint,
+    long BaselineRevision);
 
 internal static class ConsistencyCoordinator
 {
@@ -211,7 +212,8 @@ internal static class ConsistencyCoordinator
             context, runtime, unit, policy, out var materializationRollback,
             forceMaterialization, materializationSelector);
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations));
+            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            runtime.BaselineRevision);
     }
 
     public static async Task<PendingConsistencySave> PrepareAsync(
@@ -241,7 +243,8 @@ internal static class ConsistencyCoordinator
             context, runtime, unit, policy, out var materializationRollback,
             forceMaterialization, materializationSelector);
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations));
+            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            runtime.BaselineRevision);
     }
 
     public static EfMutationFingerprint CaptureFingerprint(
