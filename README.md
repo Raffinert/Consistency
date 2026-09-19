@@ -124,6 +124,12 @@ services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 services.AddScoped<LinkService>();
 ```
 
+Register `AddRaffinertConsistency<TDbContext>` exactly once per `IServiceCollection`. Resolve or inject the
+scoped runtime before application code mutates mapped tracked entities. Clean entities tracked before the
+runtime is first resolved are supported and admitted as baseline state; first runtime binding fails clearly
+if mapped tracked state is already dirty, because current values cannot safely be mistaken for the durable
+baseline.
+
 An application service only needs its `DbContext` and the scoped `ConsistencyRuntime`:
 
 ```csharp
@@ -154,7 +160,9 @@ Only saving?                                         db.SaveChanges / SaveChange
 `Materialize(entity)` prepares the pending consistency plan and updates only configured mirrors on that
 entity. Runtime state is installed and policy callbacks dispatch only after a successful SQL save. If
 the service changes a semantic input again before saving, the adapter discards the stale pending plan and
-rebuilds it. Cross-object graphs still require the authoritative `ConsistencyScope` or
+rebuilds it. Until SQL succeeds, committed navigation and projection indexes continue to represent the
+durable baseline; a failed save leaves them unchanged and a retry builds a fresh plan. Cross-object graphs
+still require the authoritative `ConsistencyScope` or
 `DiscoverConsumers` proof described below.
 
 The EF Core adapter can reject configured invariant violations before SQL and persist sink-only mirrors

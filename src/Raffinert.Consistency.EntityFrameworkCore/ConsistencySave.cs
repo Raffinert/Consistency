@@ -266,6 +266,17 @@ internal static class ConsistencyCoordinator
         return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
     }
 
+    internal static ConsistencyUnitOfWork CaptureCurrentUnitOfWork(
+        DbContext context,
+        ConsistencyEfCoreMappings mappings,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(mappings);
+        context.ChangeTracker.DetectChanges();
+        return CaptureUnitOfWork(context, mappings, includeProperty);
+    }
+
     public static async Task<EfMutationFingerprint> CaptureFingerprintAsync(
         DbContext context,
         ConsistencyRuntime runtime,

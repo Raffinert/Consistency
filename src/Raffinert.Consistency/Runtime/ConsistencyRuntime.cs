@@ -343,6 +343,9 @@ public sealed partial class ConsistencyRuntime
     internal IReadOnlyCollection<object> GetNavigationOwners(MemberInfo member, object target) =>
         _navigation.GetOwners(member, target);
 
+    internal IReadOnlyCollection<object> GetProjectedDownstreams(MemberInfo selectorMember, object target) =>
+        _projections.GetDownstreams(selectorMember, target);
+
     public DerivedValueState GetState<TSource, TValue>(Derived<TSource, TValue> derived, TSource source)
         where TSource : class
     {

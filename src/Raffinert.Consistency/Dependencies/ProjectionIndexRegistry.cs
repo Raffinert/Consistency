@@ -78,6 +78,15 @@ internal sealed class ProjectionIndexRegistry
         return result;
     }
 
+    internal IReadOnlyCollection<object> GetDownstreams(MemberInfo selectorMember, object target)
+    {
+        var result = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in _entries.Where(value => value.SelectorMember == selectorMember))
+            if (entry.TargetToDownstreams.TryGetValue(target, out var downstreams))
+                result.UnionWith(downstreams);
+        return result;
+    }
+
     public void ValidateAll()
     {
         foreach (var entry in _entries)

@@ -14,10 +14,17 @@ services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 services.AddScoped<LinkService>();
 ```
 
+Only one `AddRaffinertConsistency<TDbContext>` registration is supported per `IServiceCollection`.
 This creates one scoped `ConsistencyRuntime` and EF session for each `AppDbContext`. Mapped entities
 already tracked when the runtime is resolved, and entities tracked later by queries, are admitted to the
 runtime baseline automatically. The runtime injected into an application service is the same instance
 used by the save interceptor.
+
+Resolve or inject that runtime before application code mutates mapped tracked entities. First binding may
+admit already-tracked entities only while their mapped state is clean. If mapped scalar, navigation,
+collection, added, or removed state is already dirty, binding throws instead of treating current CLR state
+as a durable baseline. Querying clean entities through the context before resolving the runtime remains
+supported.
 
 The application-facing service remains ordinary EF code:
 
@@ -51,6 +58,12 @@ requested object's physical mirrors. It does not commit runtime state or dispatc
 reuses an unchanged pending plan, rebuilds it if tracked semantic inputs changed, writes any remaining
 persisted mirrors, and installs the plan only after SQL succeeds. Library-owned mirror writes are excluded
 from the semantic mutation evidence used for that reuse decision.
+
+Before SQL succeeds, committed runtime navigation and projection indexes remain at the durable baseline,
+even though the pending plan evaluates current tracked relationships and may write requested mirrors.
+A failed SQL save leaves those committed indexes unchanged and discards the pending plan; a retry prepares
+a fresh plan. Baseline admission and query-fixup stabilization do not advance the runtime version or dispatch
+repair/policy work.
 
 ## Stable-key workflow
 

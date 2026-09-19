@@ -17,6 +17,11 @@ public static class ConsistencyEfCoreServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(compiledModel);
         ArgumentNullException.ThrowIfNull(mappings);
+        if (services.Any(descriptor =>
+                descriptor.ServiceType == typeof(ConsistencyEfCoreRegistrationMarker)))
+            throw new InvalidOperationException(
+                "Exactly one Raffinert EF Core integration registration is supported per IServiceCollection.");
+        services.AddSingleton<ConsistencyEfCoreRegistrationMarker>();
         services.AddSingleton(compiledModel);
         services.AddSingleton(mappings);
         services.AddSingleton(options ?? new ConsistencySaveOptions());
@@ -41,6 +46,8 @@ public static class ConsistencyEfCoreServiceCollectionExtensions
         return services;
     }
 }
+
+internal sealed class ConsistencyEfCoreRegistrationMarker;
 
 internal sealed class ConsistencyDbContextOptionsConfiguration<TDbContext>
     : IDbContextOptionsConfiguration<TDbContext>

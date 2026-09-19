@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -84,6 +85,217 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
+    public async Task Navigation_materialize_keeps_committed_navigation_index_on_old_target_until_save()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var originalLeft = link.Left;
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        var leftMember = typeof(Link).GetProperty(nameof(Link.Left))!;
+
+        runtime.Materialize(link);
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+        var version = runtime.Version;
+
+        runtime.Materialize(link);
+
+        Assert.Equal(5m, link.Ratio);
+        Assert.Equal(5m, link.NormalizedRatio);
+        Assert.Equal(version, runtime.Version);
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        Assert.DoesNotContain(link, runtime.GetNavigationOwners(leftMember, replacement));
+    }
+
+    [Fact]
+    public async Task Navigation_materialize_sql_failure_keeps_committed_navigation_index_on_old_target()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var originalLeft = link.Left;
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        var leftMember = typeof(Link).GetProperty(nameof(Link.Left))!;
+        var version = runtime.Version;
+
+        runtime.Materialize(link);
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+        runtime.Materialize(link);
+        link.FailureMarker = -1;
+
+        Assert.Equal(5m, link.Ratio);
+        Assert.Equal(version, runtime.Version);
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        Assert.DoesNotContain(link, runtime.GetNavigationOwners(leftMember, replacement));
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+
+        Assert.Equal(version, runtime.Version);
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        Assert.DoesNotContain(link, runtime.GetNavigationOwners(leftMember, replacement));
+
+        link.FailureMarker = 0;
+        runtime.Materialize(link);
+        await context.SaveChangesAsync();
+
+        Assert.True(runtime.Version > version);
+        Assert.DoesNotContain(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, replacement));
+    }
+
+    [Fact]
+    public async Task Navigation_materialize_success_commits_new_target_only_after_save()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var originalLeft = link.Left;
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        var leftMember = typeof(Link).GetProperty(nameof(Link.Left))!;
+
+        runtime.Materialize(link);
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+        var version = runtime.Version;
+        runtime.Materialize(link);
+
+        Assert.Equal(5m, link.Ratio);
+        Assert.Equal(version, runtime.Version);
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+
+        await context.SaveChangesAsync();
+
+        Assert.True(runtime.Version > version);
+        Assert.DoesNotContain(link, runtime.GetNavigationOwners(leftMember, originalLeft));
+        Assert.Contains(link, runtime.GetNavigationOwners(leftMember, replacement));
+    }
+
+    [Fact]
+    public async Task Projection_selector_materialize_keeps_committed_projection_index_on_old_target()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeProjection: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var originalLeft = link.Left;
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var version = runtime.Version;
+        var leftMember = typeof(Link).GetProperty(nameof(Link.Left))!;
+
+        runtime.Materialize(link);
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+        runtime.Materialize(link);
+
+        Assert.Equal(100m, link.ProjectedLeftValue);
+        Assert.Equal(version, runtime.Version);
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        Assert.DoesNotContain(link, runtime.GetProjectedDownstreams(leftMember, replacement));
+
+        await context.SaveChangesAsync();
+
+        Assert.DoesNotContain(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, replacement));
+    }
+
+    [Fact]
+    public async Task Projection_selector_sql_failure_keeps_committed_projection_index_until_retry()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeProjection: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var originalLeft = link.Left;
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var leftMember = typeof(Link).GetProperty(nameof(Link.Left))!;
+
+        runtime.Materialize(link);
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+        runtime.Materialize(link);
+        link.FailureMarker = -1;
+
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        Assert.DoesNotContain(link, runtime.GetProjectedDownstreams(leftMember, replacement));
+
+        link.FailureMarker = 0;
+        runtime.Materialize(link);
+        await context.SaveChangesAsync();
+
+        Assert.DoesNotContain(link, runtime.GetProjectedDownstreams(leftMember, originalLeft));
+        Assert.Contains(link, runtime.GetProjectedDownstreams(leftMember, replacement));
+    }
+
+    [Fact]
+    public async Task Dirty_scalar_before_first_runtime_resolution_is_rejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+
+        link.Left.Value = 55m;
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+        Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Dirty_navigation_before_first_runtime_resolution_is_rejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+        Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Dirty_collection_before_first_runtime_resolution_is_rejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var left = await context.Items.SingleAsync(value => value.Id == 1);
+        var right = await context.Items.SingleAsync(value => value.Id == 2);
+
+        left.LeftLinks.Add(new Link
+        {
+            Id = 2,
+            Left = left,
+            Right = right,
+            LeftId = left.Id,
+            RightId = right.Id
+        });
+        context.ChangeTracker.DetectChanges();
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>());
+        Assert.Contains("before mutating", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Intervening_change_rebuilds_the_pending_plan()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -115,6 +327,7 @@ public sealed class InjectedRuntimeMaterializationTests
         await using var fixture = await Fixture.CreateAsync();
         await using var scope = fixture.Provider.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
         var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
 
         link.Left.Value = 55m;
@@ -160,6 +373,8 @@ public sealed class InjectedRuntimeMaterializationTests
         var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
         var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
         var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
 
         link.Left.Value = 55m;
         runtime.Materialize(link);
@@ -168,6 +383,173 @@ public sealed class InjectedRuntimeMaterializationTests
         await context.SaveChangesAsync();
 
         Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+    }
+
+    [Fact]
+    public async Task Targeted_materialize_writes_only_selected_representation_before_save()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
+        link.Left.Value = 55m;
+        var version = runtime.Version;
+
+        var value = runtime.Materialize(fixture.Ratio, link);
+
+        Assert.Equal(5.5m, value);
+        Assert.Equal(5.5m, link.Ratio);
+        Assert.Equal(6m, link.NormalizedRatio);
+        Assert.Equal(version, runtime.Version);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(0, fixture.EvaluationCounter.NormalizedRatioWrites);
+
+        await context.SaveChangesAsync();
+
+        Assert.Equal(5.5m, link.NormalizedRatio);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioEvaluations);
+        Assert.Equal(1, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+    }
+
+    [Fact]
+    public async Task Baseline_admission_does_not_dispatch_repair_until_successful_domain_save()
+    {
+        await using var fixture = await Fixture.CreateAsync(includeRepairPolicy: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
+        Assert.Equal(0, runtime.Version);
+
+        link.Left.Value = 110m;
+        await context.SaveChangesAsync();
+
+        Assert.Equal(1, fixture.EvaluationCounter.RepairCallbacks);
+        Assert.True(runtime.Version > 0);
+    }
+
+    [Fact]
+    public async Task Enforced_invariant_still_blocks_injected_save_before_sql()
+    {
+        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+
+        link.Left.Value = -1m;
+
+        await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(() => context.SaveChangesAsync());
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Incomplete_scope_still_blocks_injected_save()
+    {
+        await using var fixture = await Fixture.CreateAsync(completeScope: false);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+
+        link.Left.Value = 55m;
+
+        await Assert.ThrowsAsync<IncompleteConsistencyScopeException>(() => context.SaveChangesAsync());
+        Assert.Equal(0, runtime.Version);
+    }
+
+    [Fact]
+    public async Task Generated_consistency_key_guard_still_applies_to_injected_save()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var left = await context.Items.SingleAsync(value => value.Id == 1);
+        var right = await context.Items.SingleAsync(value => value.Id == 2);
+
+        context.Links.Add(new Link
+        {
+            Left = left,
+            Right = right,
+            LeftId = left.Id,
+            RightId = right.Id
+        });
+
+        await Assert.ThrowsAsync<ConsistencyStoreGeneratedKeyRequiresManualWorkflowException>(
+            () => context.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Setter_failure_rolls_back_injected_materialization_without_runtime_commit()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Counter = fixture.EvaluationCounter;
+        fixture.EvaluationCounter.ResetPhysicalWrites();
+        link.ThrowOnNormalizedWrite = true;
+        link.Left.Value = 55m;
+
+        Assert.Throws<InvalidOperationException>(() => runtime.Materialize(link));
+
+        Assert.Equal(6m, link.Ratio);
+        Assert.Equal(6m, link.NormalizedRatio);
+        Assert.Equal(0, runtime.Version);
+        Assert.Equal(2, fixture.EvaluationCounter.RatioWrites);
+        Assert.Equal(1, fixture.EvaluationCounter.NormalizedRatioWrites);
+
+        link.ThrowOnNormalizedWrite = false;
+        runtime.Materialize(link);
+        await context.SaveChangesAsync();
+        Assert.Equal(5.5m, link.Ratio);
+        Assert.Equal(5.5m, link.NormalizedRatio);
+    }
+
+    [Fact]
+    public void Second_registration_for_same_context_is_rejected()
+    {
+        var modelBuilder = new ConsistencyModelBuilder();
+        var links = modelBuilder.Objects<Link>().Key(value => value.Id);
+        var model = modelBuilder.Build();
+        var mappings = new ConsistencyEfCoreMappings().Map(links);
+        var services = new ServiceCollection();
+
+        Assert.Same(services, services.AddRaffinertConsistency<LinkContext>(model, mappings));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            services.AddRaffinertConsistency<LinkContext>(model, mappings));
+
+        Assert.Contains("Exactly one Raffinert EF Core integration registration", error.Message);
+    }
+
+    [Fact]
+    public void Second_registration_for_different_context_is_rejected()
+    {
+        var firstBuilder = new ConsistencyModelBuilder();
+        var links = firstBuilder.Objects<Link>().Key(value => value.Id);
+        var secondBuilder = new ConsistencyModelBuilder();
+        var dualItems = secondBuilder.Objects<DualItem>().Key(value => value.Id);
+        var services = new ServiceCollection();
+        services.AddRaffinertConsistency<LinkContext>(
+            firstBuilder.Build(), new ConsistencyEfCoreMappings().Map(links));
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            services.AddRaffinertConsistency<DualContext>(
+                secondBuilder.Build(), new ConsistencyEfCoreMappings().Map(dualItems)));
+
+        Assert.Contains("Exactly one Raffinert EF Core integration registration", error.Message);
     }
 
     [Fact]
@@ -238,7 +620,10 @@ public sealed class InjectedRuntimeMaterializationTests
             long linkId,
             CompiledConsistencyModel model,
             ConsistencyEfCoreMappings mappings,
-            EvaluationCounter evaluationCounter)
+            EvaluationCounter evaluationCounter,
+            Derived<Link, decimal>? projectedLeft,
+            ObjectSet<Item> items,
+            Derived<Link, decimal?> ratio)
         {
             Provider = provider;
             Connection = connection;
@@ -246,6 +631,9 @@ public sealed class InjectedRuntimeMaterializationTests
             Model = model;
             Mappings = mappings;
             EvaluationCounter = evaluationCounter;
+            ProjectedLeft = projectedLeft;
+            Items = items;
+            Ratio = ratio;
         }
 
         public ServiceProvider Provider { get; }
@@ -254,8 +642,15 @@ public sealed class InjectedRuntimeMaterializationTests
         public CompiledConsistencyModel Model { get; }
         public ConsistencyEfCoreMappings Mappings { get; }
         public EvaluationCounter EvaluationCounter { get; }
+        public Derived<Link, decimal>? ProjectedLeft { get; }
+        public ObjectSet<Item> Items { get; }
+        public Derived<Link, decimal?> Ratio { get; }
 
-        public static async Task<Fixture> CreateAsync()
+        public static async Task<Fixture> CreateAsync(
+            bool includeProjection = false,
+            bool includeRepairPolicy = false,
+            bool enforceRatioInvariant = false,
+            bool completeScope = true)
         {
             var modelBuilder = new ConsistencyModelBuilder();
             var evaluationCounter = new EvaluationCounter();
@@ -273,13 +668,34 @@ public sealed class InjectedRuntimeMaterializationTests
                 .MaterializeTo(value => value.Ratio)
                 .Named("ratio");
             var normalizedRatio = modelBuilder.Derived(links).From(ratio)
-                .Select((_, value) => value == null
-                    ? (decimal?)null
-                    : value == 0m ? 0m : value >= 1m ? value : 1m / value)
+                .Select((_, value) => CountNormalized(evaluationCounter, value))
                 .MaterializeTo(value => value.NormalizedRatio)
-                .Named("normalized-ratio");
+                .Named("normalized-ratio")
+                .AllowIncompleteDependencies();
+            Invariant<Link>? ratioInvariant = null;
+            if (includeRepairPolicy || enforceRatioInvariant)
+            {
+                ratioInvariant = modelBuilder.Invariant(links).From(ratio)
+                    .Must((_, value) => value == null || value >= 0m)
+                    .ScheduleRepairWith(_ => evaluationCounter.RepairCallbacks++)
+                    .Named("ratio-valid");
+            }
+            Derived<Link, decimal>? projectedLeft = null;
+            if (includeProjection)
+            {
+                var doubledItemValue = modelBuilder.Derived(items)
+                    .Select(value => value.Value * 2m)
+                    .Named("doubled-item-value");
+                projectedLeft = modelBuilder.Derived(links)
+                    .From(value => value.Left, doubledItemValue)
+                    .Select((_, value) => value)
+                    .MaterializeTo(value => value.ProjectedLeftValue)
+                    .Named("projected-left");
+            }
             var model = modelBuilder.Build();
             var mappings = new ConsistencyEfCoreMappings().Map(items).Map(links);
+            if (enforceRatioInvariant)
+                mappings.Enforce(ratioInvariant!);
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
             await using (var seed = new LinkContext(
@@ -288,13 +704,15 @@ public sealed class InjectedRuntimeMaterializationTests
                 await seed.Database.EnsureCreatedAsync();
                 var left = new Item { Id = 1, Value = 60m };
                 var right = new Item { Id = 2, Value = 10m };
-                seed.AddRange(left, right, new Link
+                var replacement = new Item { Id = 3, Value = 50m };
+                seed.AddRange(left, right, replacement, new Link
                 {
                     Id = 1,
                     Left = left,
                     Right = right,
                     Ratio = 6m,
-                    NormalizedRatio = 6m
+                    NormalizedRatio = 6m,
+                    ProjectedLeftValue = 120m
                 });
                 await seed.SaveChangesAsync();
             }
@@ -304,14 +722,16 @@ public sealed class InjectedRuntimeMaterializationTests
             services.AddRaffinertConsistency<LinkContext>(model, mappings,
                 new ConsistencySaveOptions
                 {
-                    Scope = new ConsistencyScope().Complete(items).Complete(links)
+                    Scope = completeScope
+                        ? new ConsistencyScope().Complete(items).Complete(links)
+                        : new ConsistencyScope().Complete(items)
                 });
             services.AddScoped<LinkService>();
             return new Fixture(services.BuildServiceProvider(new ServiceProviderOptions
             {
                 ValidateScopes = true,
                 ValidateOnBuild = true
-            }), connection, 1, model, mappings, evaluationCounter);
+            }), connection, 1, model, mappings, evaluationCounter, projectedLeft, items, ratio);
         }
 
         public LinkContext CreateContext() => new(
@@ -334,10 +754,12 @@ public sealed class InjectedRuntimeMaterializationTests
             modelBuilder.Entity<Item>();
             modelBuilder.Entity<Link>(entity =>
             {
-                entity.HasOne(value => value.Left).WithMany().HasForeignKey(value => value.LeftId);
+                entity.HasOne(value => value.Left).WithMany(value => value.LeftLinks).HasForeignKey(value => value.LeftId);
                 entity.HasOne(value => value.Right).WithMany().HasForeignKey(value => value.RightId);
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_Link_Ratio_NonNegative", "Ratio >= 0 OR Ratio IS NULL"));
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Link_FailureMarker_NonNegative", "FailureMarker >= 0"));
             });
         }
     }
@@ -351,11 +773,24 @@ public sealed class InjectedRuntimeMaterializationTests
     {
         public long Id { get; set; }
         public decimal Value { get; set; }
+        public ICollection<Link> LeftLinks { get; } = [];
     }
 
     public sealed class EvaluationCounter
     {
         public int RatioEvaluations { get; set; }
+        public int NormalizedEvaluations { get; set; }
+        public int RatioWrites { get; set; }
+        public int NormalizedRatioWrites { get; set; }
+        public int ProjectedLeftWrites { get; set; }
+        public int RepairCallbacks { get; set; }
+
+        public void ResetPhysicalWrites()
+        {
+            RatioWrites = 0;
+            NormalizedRatioWrites = 0;
+            ProjectedLeftWrites = 0;
+        }
     }
 
     private sealed class Link
@@ -365,13 +800,65 @@ public sealed class InjectedRuntimeMaterializationTests
         public Item Left { get; set; } = null!;
         public long RightId { get; set; }
         public Item Right { get; set; } = null!;
-        public decimal? Ratio { get; set; }
-        public decimal? NormalizedRatio { get; set; }
+        private decimal? _ratio;
+        private decimal? _normalizedRatio;
+        private decimal _projectedLeftValue;
+
+        public decimal? Ratio
+        {
+            get => _ratio;
+            set
+            {
+                if (Counter is not null)
+                    Counter.RatioWrites++;
+                _ratio = value;
+            }
+        }
+
+        public decimal? NormalizedRatio
+        {
+            get => _normalizedRatio;
+            set
+            {
+                if (Counter is not null)
+                    Counter.NormalizedRatioWrites++;
+                if (ThrowOnNormalizedWrite)
+                    throw new InvalidOperationException("Injected normalized-ratio setter failure.");
+                _normalizedRatio = value;
+            }
+        }
+
+        public decimal ProjectedLeftValue
+        {
+            get => _projectedLeftValue;
+            set
+            {
+                if (Counter is not null)
+                    Counter.ProjectedLeftWrites++;
+                _projectedLeftValue = value;
+            }
+        }
+
+        public int FailureMarker { get; set; }
+
+        [NotMapped]
+        public EvaluationCounter? Counter { get; set; }
+
+        [NotMapped]
+        public bool ThrowOnNormalizedWrite { get; set; }
     }
 
     private sealed class DualItem
     {
         public long Id { get; set; }
         public int Kind { get; set; }
+    }
+
+    private static decimal? CountNormalized(EvaluationCounter counter, decimal? value)
+    {
+        counter.NormalizedEvaluations++;
+        return value == null
+            ? null
+            : value == 0m ? 0m : value >= 1m ? value : 1m / value;
     }
 }

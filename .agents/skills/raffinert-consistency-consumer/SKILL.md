@@ -393,6 +393,11 @@ services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionSt
 services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 ```
 
+Register `AddRaffinertConsistency<TDbContext>` exactly once per `IServiceCollection`. Resolve or inject the
+scoped runtime before application code mutates mapped tracked entities. Clean tracked entities may be
+admitted during first binding; dirty mapped scalar, navigation, collection, added, or removed state must be
+rejected rather than admitted as baseline state.
+
 The application service should inject only its `DbContext` and `ConsistencyRuntime`. The EF integration
 uses the same scoped runtime for baseline admission, explicit materialization, and SaveChanges commit.
 Mapped tracked entities are admitted automatically; application code must not call `runtime.Add(...)` or
@@ -480,7 +485,9 @@ Only saving?                                         db.SaveChanges / SaveChange
 `runtime.Materialize(entity)` is the only explicit pre-save Raffinert call needed when the application
 must read a materialized property immediately. It prepares and stores a pending plan without committing
 runtime state. `SaveChanges` reuses that plan when semantic EF inputs are unchanged, rebuilds it after an
-intervening semantic change, and commits/dispatches only after SQL succeeds.
+intervening semantic change, and commits/dispatches only after SQL succeeds. Pending relationship changes
+must not rebase committed navigation or projection indexes before SQL; failure leaves the durable baseline
+unchanged and retry prepares a fresh plan.
 
 For ordinary stable-key EF workflows:
 

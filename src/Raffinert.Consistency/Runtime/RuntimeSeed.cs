@@ -47,6 +47,10 @@ public sealed partial class ConsistencyRuntime
         var deltas = new Dictionary<IRelationDefinition, RelationDelta>();
         CommitAdd(new ObjectAdded(set, instance), deltas);
         _dependencyGraph.RebaseCoverageAdmissions(deltas);
+    }
+
+    internal void ValidateBaseline()
+    {
         _projections.ValidateAll();
     }
 

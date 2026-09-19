@@ -177,11 +177,14 @@ For injected EF applications, additionally verify:
 
 ```text
 [ ] AddRaffinertConsistency<TDbContext>(...) is registered once with the compiled model and mappings.
+[ ] No second Raffinert EF registration exists in the same IServiceCollection.
 [ ] The application service injects only DbContext + ConsistencyRuntime.
 [ ] Runtime and DbContext resolution works in either order without a circular dependency.
 [ ] The service runtime and EF session/interceptor runtime are reference-equal within a scope.
 [ ] A new scope receives a new runtime and DbContext.
 [ ] Mapped entities tracked before and after runtime resolution are baseline-admitted automatically.
+[ ] Runtime first binding happens before mapped tracked state is mutated.
+[ ] Clean late binding is supported and dirty late binding is rejected explicitly.
 [ ] Application code does not call runtime.Add/runtime.Apply for ordinary EF mutations.
 ```
 
@@ -319,10 +322,11 @@ Verify:
 
 ```text
 [ ] Materialize(entity) does not advance runtime state or dispatch callbacks.
+[ ] Materialize(entity) leaves committed navigation/projection indexes at the durable baseline before SQL.
 [ ] SaveChanges reuses the pending plan when semantic tracked inputs are unchanged.
 [ ] An intervening semantic change discards and rebuilds the pending plan.
 [ ] Library-owned mirror writes are excluded from semantic mutation fingerprinting.
-[ ] Failed SQL does not commit or dispatch the pending plan and a retry rebuilds safely.
+[ ] Failed SQL does not commit, rebase indexes, or dispatch the pending plan and a retry rebuilds safely.
 ```
 
 Ordinary flow:

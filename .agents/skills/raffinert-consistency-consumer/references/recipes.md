@@ -14,6 +14,10 @@ services.AddRaffinertConsistency<AppDbContext>(compiledModel, mappings);
 services.AddScoped<LinkService>();
 ```
 
+Register the Raffinert EF integration once per service collection. Resolve the scoped runtime before
+mutating mapped tracked entities. It may bind after a clean query, but binding is intentionally rejected if
+mapped tracked state is already dirty.
+
 Keep the service constructor limited to the context and scoped runtime:
 
 ```csharp
@@ -37,7 +41,8 @@ public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
 Use `Materialize(entity)` only when a mirror is needed before saving. If the service only persists the
 mutation, call ordinary `SaveChanges`/`SaveChangesAsync`. The integration admits mapped tracked entities,
 reuses an unchanged pending plan, rebuilds after intervening changes, and commits runtime state only after
-SQL succeeds.
+SQL succeeds. Pending navigation/projection changes are visible to plan evaluation without rebasing the
+committed runtime baseline; failed SQL leaves that baseline unchanged and retry builds a fresh plan.
 
 ---
 

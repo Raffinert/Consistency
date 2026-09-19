@@ -38,11 +38,22 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         ArgumentNullException.ThrowIfNull(runtime);
         if (_runtime is not null && !ReferenceEquals(_runtime, runtime))
             throw new InvalidOperationException("This EF session is already bound to another consistency runtime.");
+        if (_runtime is not null)
+            return _runtime;
+
+        var current = ConsistencyCoordinator.CaptureCurrentUnitOfWork(
+            _context, _mappings, IncludeSemanticProperty);
+        if (current.HasChanges)
+            throw new InvalidOperationException(
+                "The consistency runtime must be resolved before mutating tracked entities; " +
+                "first runtime binding cannot admit dirty EF state as a baseline.");
+
         _runtime = runtime;
         runtime.AttachMaterializationIntegration(this);
         foreach (var entry in _context.ChangeTracker.Entries())
             AdmitBaseline(entry);
-        RefreshTrackedBaselines();
+        StabilizeUntouchedTrackedBaselines(EfTouchedSources.Create([]));
+        runtime.ValidateBaseline();
         return runtime;
     }
 
@@ -137,6 +148,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     private PendingConsistencySave PrepareForSaveCore()
     {
         var runtime = Runtime;
+        StabilizeCurrentTrackedBaselines();
         if (_pending is not null)
         {
             var fingerprint = ConsistencyCoordinator.CaptureFingerprint(
@@ -157,6 +169,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     private async Task<PendingConsistencySave> PrepareForSaveCoreAsync(CancellationToken cancellationToken)
     {
         var runtime = Runtime;
+        StabilizeCurrentTrackedBaselines();
         if (_pending is not null)
         {
             var fingerprint = await ConsistencyCoordinator.CaptureFingerprintAsync(
@@ -180,6 +193,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         Func<MaterializationDescriptor, object, bool> selector)
     {
         var runtime = Runtime;
+        StabilizeCurrentTrackedBaselines();
         if (_pending is not null)
         {
             var fingerprint = ConsistencyCoordinator.CaptureFingerprint(
@@ -250,8 +264,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     {
         if (!ReferenceEquals(Runtime, runtime))
             throw new InvalidOperationException("The runtime is not bound to this EF Core session.");
-        _context.ChangeTracker.DetectChanges();
-        RefreshTrackedBaselines();
+        StabilizeCurrentTrackedBaselines();
         var entry = _context.ChangeTracker.Entries().SingleOrDefault(value =>
             ReferenceEquals(value.Entity, source));
         return entry is not null && entry.State != EntityState.Detached &&
@@ -274,17 +287,30 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
             _runtime!.AdmitBaseline(mapping.SetDefinition, entry.Entity);
     }
 
-    private void RefreshTrackedBaselines()
+    private void StabilizeCurrentTrackedBaselines()
+    {
+        if (_runtime is null)
+            return;
+        _context.ChangeTracker.DetectChanges();
+        var current = ConsistencyCoordinator.CaptureCurrentUnitOfWork(
+            _context, _mappings, IncludeSemanticProperty);
+        StabilizeUntouchedTrackedBaselines(EfTouchedSources.Create(current.Mutations));
+        _runtime.ValidateBaseline();
+    }
+
+    private void StabilizeUntouchedTrackedBaselines(EfTouchedSources touchedSources)
     {
         if (_runtime is null)
             return;
         foreach (var entry in _context.ChangeTracker.Entries())
         {
-            if (entry.State == EntityState.Added)
+            if (entry.State is EntityState.Added or EntityState.Deleted)
                 continue;
             var mapping = _mappings.UnitOfWorkMappings.Resolve(entry);
-            if (mapping is not null)
-                _runtime.RefreshBaseline(mapping.SetDefinition, entry.Entity);
+            if (mapping is null || touchedSources.Contains(entry.Entity) ||
+                !_runtime.IsRegistered(mapping.SetDefinition, entry.Entity))
+                continue;
+            _runtime.RefreshBaseline(mapping.SetDefinition, entry.Entity);
         }
     }
 
