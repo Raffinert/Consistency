@@ -152,7 +152,7 @@ public sealed class PlannedInvariantEvaluationTests
         var items = model.Objects<Item>().Key(x => x.Id);
         var value = model.Derived(items).Select(x => x.Value);
         var invariant = model.Invariant(items).From(value).Must((_, current) => current >= 0)
-            .ScheduleRepairWith(repairs.Add);
+            .RepairWhenViolated();
         var item = new Item { Id = 1, Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(items, [item]));
         Assert.True(runtime.Evaluate(invariant, item));

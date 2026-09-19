@@ -79,6 +79,25 @@ internal sealed class DerivedItemDetails
     public decimal Quantity { get; set; }
 }
 
+internal sealed class ProjectedDemand
+{
+    public Guid Id { get; init; }
+    public string Code { get; set; } = "";
+}
+
+internal sealed class ProjectedSupply
+{
+    public Guid Id { get; init; }
+    public string Code { get; set; } = "";
+}
+
+internal sealed class ProjectedAllocation
+{
+    public Guid Id { get; init; }
+    public ProjectedDemand Demand { get; set; } = null!;
+    public ProjectedSupply Supply { get; set; } = null!;
+}
+
 internal sealed class ReceiptPolicy
 {
     public decimal Maximum { get; set; }

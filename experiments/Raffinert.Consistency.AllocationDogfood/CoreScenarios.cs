@@ -17,8 +17,8 @@ internal static class CoreScenarios
             .Single(value => value.DefinitionKey == "candidate-supplies");
         ScenarioAssert.Equal(RelationAccessPlanKind.HashJoin, diagnostic.AccessPlan,
             "Candidate lookup should use an analyzed hash join.");
-        ScenarioAssert.Equal(RelationPropagationPlanKind.None, diagnostic.PropagationPlan,
-            "A direct-query-only candidate relation should not retain propagation state.");
+        ScenarioAssert.Equal(RelationPropagationPlanKind.ExactMaterialized, diagnostic.PropagationPlan,
+            "Projected membership must reuse exact candidate-relation propagation state.");
     }
 
     public static void CandidateSupply_IsRemoved_WhenResourceStopsMatching()
@@ -35,12 +35,12 @@ internal static class CoreScenarios
             fixture.Model.CandidateSupplies, fixture.Demand1).Contains(fixture.Supply1),
             "A resource change must remove the old candidate pair.");
         ScenarioAssert.True(application.Result.RelationImpacts
-            .Single(value => value.DefinitionKey == "compatible-allocated-supplies")
+            .Single(value => value.DefinitionKey == "candidate-supplies")
             .RemovedPairs.Count == 1,
             "Detailed impact must expose the removed compatibility pair.");
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.HasCompatibleSupply, fixture.Allocation1!),
-            "The existing allocation must become compatibility-invalid.");
+            "Repair-enabled compatibility must be evaluated after the relation change.");
     }
 
     public static void CandidateRelations_TrackBothSidesAndIgnoreUnrelatedChanges()
@@ -216,14 +216,14 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.Capacity, 10m, 15m)), RuntimeImpactDetailLevel.Causal);
 
-        ScenarioAssert.Equal(DerivedValueState.Dirty,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.RemainingCapacity, fixture.Supply1),
-            "A capacity increase is safely dirty.");
-        ScenarioAssert.Equal(InvariantEvaluationState.Invalid,
+            "Repair-enabled evaluation refreshes the safely dirty value.");
+        ScenarioAssert.Equal(InvariantEvaluationState.Valid,
             fixture.Runtime.GetState(fixture.Model.CapacityInvariant, fixture.Supply1),
-            "ScheduleRepair currently escalates an inherited dirty impact to invalid.");
-        ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
-            "The scheduler currently emits conservative work even for a safe increase.");
+            "A safe increase must remain valid after repair-policy evaluation.");
+        ScenarioAssert.Equal(0, application.Result.RepairRequests.Count,
+            "A safe increase must not emit repair work.");
         ScenarioAssert.True(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
             "The increased capacity must remain valid.");
     }
@@ -238,12 +238,12 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.Capacity, 10m, 6m)), RuntimeImpactDetailLevel.Causal);
 
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.RemainingCapacity, fixture.Supply1),
-            "A capacity decrease must invalidate remaining capacity.");
-        ScenarioAssert.Equal(InvariantEvaluationState.Invalid,
+            "Repair evaluation must recompute remaining capacity.");
+        ScenarioAssert.Equal(InvariantEvaluationState.Violated,
             fixture.Runtime.GetState(fixture.Model.CapacityInvariant, fixture.Supply1),
-            "The capacity invariant must be invalidated.");
+            "The capacity invariant must record the evaluated violation.");
         ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
             "The unsafe transition must produce one repair requirement.");
         ScenarioAssert.False(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
@@ -277,16 +277,16 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Fulfillments, fixture.Fulfillment1,
                 value => value.Quantity, 3m, 7m)));
 
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.FulfilledQuantity, fixture.Supply1),
-            "An item change is conservatively invalid.");
+            "Repair evaluation must refresh an invalidated aggregate.");
         ScenarioAssert.False(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
             "Twelve units consumed must violate capacity ten.");
         ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
             "The invalidation must schedule capacity repair.");
     }
 
-    public static void FulfillmentDecrease_ReleasesCapacity_ButUsesConservativeInvalidImpact()
+    public static void FulfillmentDecrease_ReleasesCapacity_WithDirectionalDirtyImpact()
     {
         var fixture = CoreFixture.Create(capacity: 15m, fulfillmentQuantity: 7m);
         fixture.Prime();
@@ -295,11 +295,11 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Fulfillments, fixture.Fulfillment1,
                 value => value.Quantity, 7m, 3m)));
 
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.FulfilledQuantity, fixture.Supply1),
-            "The public relation-item policy cannot distinguish increase from decrease.");
-        ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
-            "Conservative invalidation currently emits avoidable repair work.");
+            "A directional decrease is dirty and becomes fresh during repair evaluation.");
+        ScenarioAssert.Equal(0, application.Result.RepairRequests.Count,
+            "A capacity-releasing decrease must not emit repair work.");
         ScenarioAssert.True(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
             "A fulfillment decrease releases capacity and remains valid after evaluation.");
     }
@@ -312,14 +312,14 @@ internal static class CoreScenarios
         fixture.Runtime.Apply(Change.Property(fixture.Model.Allocations, fixture.Allocation1,
             value => value.Quantity, 5m, 8m));
 
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.AllocatedQuantity, fixture.Supply1),
-            "An allocation increase must invalidate the aggregate.");
+            "Repair evaluation must refresh an invalidated allocation aggregate.");
         ScenarioAssert.False(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
             "Eleven units consumed must violate capacity ten.");
     }
 
-    public static void AllocationDecrease_ReleasesCapacity_ButUsesConservativeInvalidImpact()
+    public static void AllocationDecrease_ReleasesCapacity_WithDirectionalDirtyImpact()
     {
         var fixture = CoreFixture.Create();
         fixture.Prime();
@@ -328,11 +328,11 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Allocations, fixture.Allocation1,
                 value => value.Quantity, 5m, 2m)));
 
-        ScenarioAssert.Equal(DerivedValueState.Invalid,
+        ScenarioAssert.Equal(DerivedValueState.Fresh,
             fixture.Runtime.GetState(fixture.Model.AllocatedQuantity, fixture.Supply1),
-            "The public relation-item policy cannot distinguish increase from decrease.");
-        ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
-            "Conservative invalidation currently emits avoidable repair work.");
+            "A directional decrease is dirty and becomes fresh during repair evaluation.");
+        ScenarioAssert.Equal(0, application.Result.RepairRequests.Count,
+            "A capacity-releasing decrease must not emit repair work.");
         ScenarioAssert.True(fixture.Runtime.Evaluate(fixture.Model.CapacityInvariant, fixture.Supply1),
             "An allocation decrease releases capacity and remains valid after evaluation.");
     }
@@ -346,15 +346,15 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.ResourceCode, "A", "B")), RuntimeImpactDetailLevel.Causal);
 
-        ScenarioAssert.Equal(InvariantEvaluationState.Invalid,
+        ScenarioAssert.Equal(InvariantEvaluationState.Violated,
             fixture.Runtime.GetState(fixture.Model.CompatibilityInvariant, fixture.Allocation1!),
-            "Removing compatible membership must invalidate the existing allocation.");
+            "Removing selected candidate membership must prove the violation.");
         var request = application.Result.RepairRequests.Single();
         ScenarioAssert.Same(fixture.Allocation1!, request.Source,
             "The repair payload must identify the affected allocation.");
         var trace = RuntimeImpactTraceRenderer.Render(application.Result);
-        ScenarioAssert.True(trace.Contains("compatible-allocated-supplies", StringComparison.Ordinal),
-            "Causal diagnostics must expose compatibility membership removal.");
+        ScenarioAssert.True(trace.Contains("candidate-supplies", StringComparison.Ordinal),
+            "Causal diagnostics must expose selected candidate-membership removal.");
     }
 
     public static void DemandDateChange_InvalidatesExistingAllocation()
@@ -366,9 +366,9 @@ internal static class CoreScenarios
             Change.Property(fixture.Model.Demands, fixture.Demand1,
                 value => value.Date, fixture.Day, fixture.Day.AddDays(1))));
 
-        ScenarioAssert.Equal(InvariantEvaluationState.Invalid,
+        ScenarioAssert.Equal(InvariantEvaluationState.Violated,
             fixture.Runtime.GetState(fixture.Model.CompatibilityInvariant, fixture.Allocation1!),
-            "A nested demand-date dependency must invalidate compatibility.");
+            "A nested demand-date dependency must prove incompatibility.");
         ScenarioAssert.Equal(1, application.Result.RepairRequests.Count,
             "The nested change must produce repair work through graph dependencies.");
     }
@@ -381,9 +381,8 @@ internal static class CoreScenarios
         var application = fixture.Runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.ResourceCode, "A", "B")));
-        application.Dispatch.Invoke();
-
-        var result = new ReallocateDemand(fixture.Model).Process(fixture.Runtime);
+        var result = new ReallocateDemand(fixture.Model).Process(
+            fixture.Runtime, application.Result.RepairRequests);
 
         ScenarioAssert.Equal(1, result.Reallocated.Count,
             "One invalid allocation must be reallocated.");
@@ -403,9 +402,8 @@ internal static class CoreScenarios
         var application = fixture.Runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.Capacity, 10m, 3m)));
-        application.Dispatch.Invoke();
-
-        var result = new ReallocateDemand(fixture.Model).Process(fixture.Runtime);
+        var result = new ReallocateDemand(fixture.Model).Process(
+            fixture.Runtime, application.Result.RepairRequests);
 
         ScenarioAssert.Equal(1, result.Reallocated.Count, "The allocation must move once.");
         ScenarioAssert.Equal(0, result.Unresolved.Count, "S2 has sufficient replacement capacity.");
@@ -429,9 +427,8 @@ internal static class CoreScenarios
         var application = fixture.Runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(fixture.Model.Supplies, fixture.Supply1,
                 value => value.Capacity, 10m, 3m)));
-        application.Dispatch.Invoke();
-
-        var result = new ReallocateDemand(fixture.Model).Process(fixture.Runtime);
+        var result = new ReallocateDemand(fixture.Model).Process(
+            fixture.Runtime, application.Result.RepairRequests);
 
         ScenarioAssert.Equal(0, result.Reallocated.Count, "No replacement has enough capacity.");
         ScenarioAssert.Equal(1, result.Unresolved.Count,
@@ -642,6 +639,5 @@ internal sealed class CoreFixture
         }
         foreach (var allocation in Allocations)
             _ = Runtime.Evaluate(Model.CompatibilityInvariant, allocation);
-        Model.Repairs.Clear();
     }
 }

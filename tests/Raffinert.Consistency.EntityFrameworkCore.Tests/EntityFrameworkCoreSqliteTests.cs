@@ -231,7 +231,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<GeneratedEntity>().Named("generated").Key(entity => entity.Id);
         var code = model.Derived(objects).Select(entity => entity.Code).Named("code");
         model.Invariant(objects).From(code).Must((_, value) => value == "valid")
-            .ScheduleRepairWith(_ => { }).Named("repair");
+            .RepairWhenViolated().Named("repair");
         var compiled = model.Build();
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         var first = new GeneratedEntity { Code = "valid" };
@@ -497,7 +497,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Select(value => value.Code).Named("code");
         model.Invariant(objects).From(code).Must((_, value) => value == "before")
-            .ScheduleRepairWith(_ => { }).Named("repair");
+            .RepairWhenViolated().Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
@@ -580,19 +580,12 @@ public sealed class EntityFrameworkCoreSqliteTests
         var entity = new UniqueEntity { Id = Guid.NewGuid(), Code = "before" };
         context.Add(entity);
         context.SaveChanges();
-        var failDispatch = true;
-        var dispatchCount = 0;
         var model = new ConsistencyModelBuilder();
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Select(value => value.Code).Named("code");
         model.Invariant(objects).From(code)
             .Must((_, value) => value == "before")
-            .ScheduleRepairWith(_ =>
-            {
-                dispatchCount++;
-                if (failDispatch)
-                    throw new DeliberateRuntimeFailure();
-            }).Named("repair");
+            .RepairWhenViolated().Named("repair");
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
@@ -613,20 +606,15 @@ public sealed class EntityFrameworkCoreSqliteTests
         }
         unit.Commit(runtime);
 
-        Assert.Throws<DeliberateRuntimeFailure>(() => unit.Dispatch(runtime));
+        unit.Dispatch(runtime);
         Assert.Equal(1, runtime.Version);
-        Assert.Equal(1, dispatchCount);
         using (var verification = database.CreateContext())
         {
             Assert.Equal("after", verification.Set<UniqueEntity>().Single().Code);
             Assert.Equal($"repair:{entity.Id:D}", verification.Outbox.Single().Payload);
         }
 
-        failDispatch = false;
-        unit.Dispatch(runtime);
-
         Assert.Equal(1, runtime.Version);
-        Assert.Equal(2, dispatchCount);
         Assert.Single(context.Outbox);
     }
 
@@ -647,7 +635,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var objects = model.Objects<UniqueEntity>().Named("entities").Key(value => value.Id);
         var code = model.Derived(objects).Select(value => value.Code).Named("code");
         model.Invariant(objects).From(code).Must((_, value) => value == "before")
-            .ScheduleRepairWith(_ => { });
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var mappings = new ConsistencyUnitOfWorkMappings().Map(objects);
         entity.Code = "after";
@@ -747,7 +735,7 @@ public sealed class EntityFrameworkCoreSqliteTests
         var code = model.Derived(objects).Select(x => x.Code).Named("stable-code");
         var repairs = 0;
         var invariant = model.Invariant(objects).From(code).Must((_, value) => value != "invalid")
-            .Named("stable-code-invariant").ScheduleRepairWith(_ => repairs++);
+            .Named("stable-code-invariant").RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         Assert.True(runtime.Evaluate(invariant, entity));
         entity.Code = "invalid";
@@ -1246,13 +1234,13 @@ public sealed class EntityFrameworkCoreSqliteTests
         var repairs = new List<MirrorEntity>();
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Select(x => x.Input);
-        model.Invariant(objects).From(value).Must((_, current) => current <= 2).ScheduleRepairWith(repairs.Add);
+        model.Invariant(objects).From(value).Must((_, current) => current <= 2).RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         entity.Input = 3;
 
         context.SaveChangesConsistently(runtime, new ConsistencyEfCoreMappings().Map(objects));
 
-        Assert.Equal([entity], repairs);
+        Assert.Empty(repairs);
         Assert.Equal(3, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);
         Assert.Equal(1, runtime.Version);
     }
@@ -1279,7 +1267,7 @@ public sealed class EntityFrameworkCoreSqliteTests
     }
 
     [Fact]
-    public void Interceptor_dispatch_failure_occurs_after_database_and_runtime_commit()
+    public void Interceptor_commits_structured_repair_policy_without_callback_dispatch()
     {
         using var database = new SqliteFixture();
         var entity = new MirrorEntity { Id = Guid.NewGuid(), Input = 1 };
@@ -1287,14 +1275,14 @@ public sealed class EntityFrameworkCoreSqliteTests
         var model = new ConsistencyModelBuilder(); var objects = model.Objects<MirrorEntity>().Key(x => x.Id);
         var value = model.Derived(objects).Select(x => x.Input);
         model.Invariant(objects).From(value).Must((_, current) => current <= 1)
-            .ScheduleRepairWith(_ => throw new DispatchFailure());
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(objects, [entity]));
         var interceptor = new ConsistencySaveChangesInterceptor(runtime,
             new ConsistencyEfCoreMappings().Map(objects), new());
         using var context = database.CreateContext(interceptor);
         context.Attach(entity); entity.Input = 2;
 
-        Assert.Throws<DispatchFailure>(() => context.SaveChanges());
+        context.SaveChanges();
 
         Assert.Equal(1, runtime.Version);
         Assert.Equal(2, database.CreateContext().Set<MirrorEntity>().AsNoTracking().Single().Input);

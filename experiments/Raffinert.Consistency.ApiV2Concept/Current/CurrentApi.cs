@@ -60,7 +60,7 @@ internal static class CurrentApi
             .Using(allocationValidity)
             .Must((_, valid) => valid)
             .Named("allocation-validity-invariant")
-            .ScheduleRepairWith(allocation => repairs.Add(allocation.Id));
+            .RepairWhenViolated();
 
         return new ScenarioModel(
             "Current",

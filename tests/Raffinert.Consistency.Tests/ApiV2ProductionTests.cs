@@ -36,8 +36,8 @@ public sealed class ApiV2ProductionTests
         var application = fixture.Runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(fixture.InvoiceLines, fixture.Invoice, x => x.Price, 60m, 55m)));
 
-        Assert.Equal(DerivedValueState.Invalid, fixture.Runtime.GetState(fixture.PriceRate, fixture.Link));
-        Assert.Equal(DerivedValueState.Invalid, fixture.Runtime.GetState(fixture.UnitRate, fixture.Link));
+        Assert.Equal(DerivedValueState.Fresh, fixture.Runtime.GetState(fixture.PriceRate, fixture.Link));
+        Assert.Equal(DerivedValueState.Fresh, fixture.Runtime.GetState(fixture.UnitRate, fixture.Link));
         Assert.Equal(6m, fixture.Link.PriceRate);
         Assert.Equal(6m, fixture.Link.UnitRate);
 
@@ -46,15 +46,14 @@ public sealed class ApiV2ProductionTests
         Assert.Equal(5.5m, fixture.Runtime.Evaluate(fixture.UnitRate, fixture.Link));
         Assert.Equal(6m, fixture.Link.PriceRate);
 
-        var requests = Assert.Single(application.Result.RepairRequests);
-        Assert.Same(fixture.Link, requests.Source);
+        Assert.Empty(application.Result.RepairRequests);
         fixture.Runtime.Materialize(fixture.Link);
         Assert.Equal(5.5m, fixture.Link.PriceRate);
         Assert.Equal(5.5m, fixture.Link.UnitRate);
         Assert.Empty(fixture.Repairs);
 
         application.Dispatch.Invoke();
-        Assert.Equal([fixture.Link], fixture.Repairs);
+        Assert.Empty(fixture.Repairs);
     }
 
     [Fact]
@@ -398,7 +397,7 @@ public sealed class ApiV2ProductionTests
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
             .Select(x => x.Price > 0m);
         var invariant = model.Invariant(lines).From(value)
-            .Must((_, valid) => valid).ScheduleRepairWith(repairs.Add);
+            .Must((_, valid) => valid).RepairWhenViolated();
         var line = new PurchaseOrderLine { Id = 1, Price = 10m };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(lines, [line]));
         Assert.True(runtime.Evaluate(invariant, line));
@@ -406,11 +405,11 @@ public sealed class ApiV2ProductionTests
         line.Price = 0m;
         var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(lines, line, x => x.Price, 10m, 0m)));
-        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, line));
+        Assert.Equal(InvariantEvaluationState.Violated, runtime.GetState(invariant, line));
         Assert.Single(application.Result.RepairRequests);
         application.Dispatch.Invoke();
         Assert.Throws<InvalidOperationException>(application.Dispatch.Invoke);
-        Assert.Equal([line], repairs);
+        Assert.Empty(repairs);
     }
 
     private sealed record Fixture(
@@ -505,7 +504,7 @@ public sealed class ApiV2ProductionTests
             var invariant = model.Invariant(links).From(validity)
                 .Must((_, valid) => valid)
                 .Named("link-validity-invariant")
-                .ScheduleRepairWith(repairs.Add);
+                .RepairWhenViolated();
             var compiled = model.Build();
 
             var invoice = new InvoiceLine { Id = 1, Price = 60m, Quantity = 10m };

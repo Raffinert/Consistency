@@ -27,19 +27,16 @@ public sealed class AllocationConsistencyModel
             .Where((supply, allocation) => supply.Id == allocation.SupplyId)
             .Named("supply-allocations");
 
-        CompatibleAllocatedSupplies = model.Relation(Allocations, Supplies)
-            .Where((allocation, supply) =>
-                allocation.SupplyId == supply.Id &&
-                allocation.Demand.ResourceCode == supply.ResourceCode &&
-                allocation.Demand.Date == supply.Date)
-            .Named("compatible-allocated-supplies");
-
         FulfilledQuantity = model.Derived(Supplies)
             .From(SupplyFulfillments)
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Invalid)
                 .MembershipRemoved(DependencySeverity.Dirty)
-                .ItemChanged(DependencySeverity.Invalid))
+                .ItemMemberChanged(
+                    fulfillment => fulfillment.Quantity,
+                    (oldValue, newValue) => newValue > oldValue
+                        ? DependencySeverity.Invalid
+                        : DependencySeverity.Dirty))
             .Sum(fulfillment => fulfillment.Quantity)
             .MaterializeTo(supply => supply.FulfilledQuantity)
             .Named("fulfilled-quantity");
@@ -49,7 +46,11 @@ public sealed class AllocationConsistencyModel
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Invalid)
                 .MembershipRemoved(DependencySeverity.Dirty)
-                .ItemChanged(DependencySeverity.Invalid))
+                .ItemMemberChanged(
+                    allocation => allocation.Quantity,
+                    (oldValue, newValue) => newValue > oldValue
+                        ? DependencySeverity.Invalid
+                        : DependencySeverity.Dirty))
             .Sum(allocation => allocation.Quantity)
             .MaterializeTo(supply => supply.AllocatedQuantity)
             .Named("allocated-quantity");
@@ -69,22 +70,20 @@ public sealed class AllocationConsistencyModel
         CapacityInvariant = model.Invariant(Supplies)
             .From(RemainingCapacity)
             .Must((_, remaining) => remaining >= 0m)
-            .ScheduleRepairWith(Repairs.RequireCapacityRepair)
+            .RepairWhenViolated()
             .Named("supply-capacity-valid");
 
         HasCompatibleSupply = model.Derived(Allocations)
-            .From(CompatibleAllocatedSupplies)
-            .Impact(policy => policy
-                .MembershipAdded(DependencySeverity.Dirty)
-                .MembershipRemoved(DependencySeverity.Invalid)
-                .ItemChanged(DependencySeverity.Invalid))
-            .Any()
+            .FromMembership(
+                CandidateSupplies,
+                allocation => allocation.Demand,
+                allocation => allocation.Supply)
             .Named("allocation-has-compatible-supply");
 
         CompatibilityInvariant = model.Invariant(Allocations)
             .From(HasCompatibleSupply)
             .Must((_, compatible) => compatible)
-            .ScheduleRepairWith(Repairs.RequireCompatibilityRepair)
+            .RepairWhenViolated()
             .Named("allocation-compatible");
 
         Compiled = model.Build();
@@ -104,14 +103,12 @@ public sealed class AllocationConsistencyModel
     public Relation<Demand, Supply> CandidateSupplies { get; }
     public Relation<Supply, Fulfillment> SupplyFulfillments { get; }
     public Relation<Supply, Allocation> SupplyAllocations { get; }
-    public Relation<Allocation, Supply> CompatibleAllocatedSupplies { get; }
     public Derived<Supply, decimal> FulfilledQuantity { get; }
     public Derived<Supply, decimal> AllocatedQuantity { get; }
     public Derived<Supply, decimal> RemainingCapacity { get; }
     public Derived<Allocation, bool> HasCompatibleSupply { get; }
     public Invariant<Supply> CapacityInvariant { get; }
     public Invariant<Allocation> CompatibilityInvariant { get; }
-    public RepairQueue Repairs { get; } = new();
     public CompiledConsistencyModel Compiled { get; }
     public ConsistencyEfCoreMappings Mappings { get; }
 

@@ -537,9 +537,9 @@ internal sealed class FinalInvariant<TSource>(Invariant<TSource> raw) where TSou
         return this;
     }
 
-    public FinalInvariant<TSource> ScheduleRepairWith(Action<TSource> repair)
+    public FinalInvariant<TSource> RepairWhenViolated()
     {
-        Raw.ScheduleRepairWith(repair);
+        Raw.RepairWhenViolated();
         return this;
     }
 }

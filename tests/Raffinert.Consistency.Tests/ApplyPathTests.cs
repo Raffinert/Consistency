@@ -52,7 +52,7 @@ public sealed class ApplyPathTests
             .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
             .Select(source => source.Amount);
         var invariant = model.Invariant(sources).From(value).Must((_, amount) => amount <= 1)
-            .ScheduleRepairWith(source => callbacks.Add(source.Amount));
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Amount = 1 };
         runtime.Add(sources, source);

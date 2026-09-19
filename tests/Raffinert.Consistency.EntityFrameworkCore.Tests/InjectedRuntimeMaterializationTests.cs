@@ -590,7 +590,7 @@ public sealed class InjectedRuntimeMaterializationTests
         await context.SaveChangesAsync();
 
         Assert.Equal(version + 1, runtime.Version);
-        Assert.Equal(2, fixture.EvaluationCounter.RepairCallbacks);
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
         await using var verification = fixture.CreateContext();
         var persisted = await verification.Links.AsNoTracking().OrderBy(value => value.Id).ToArrayAsync();
         Assert.All(persisted, value =>
@@ -620,7 +620,7 @@ public sealed class InjectedRuntimeMaterializationTests
         Assert.Equal(version + 1, runtime.Version);
         Assert.Equal(4, fixture.EvaluationCounter.RatioEvaluations);
         Assert.Equal(4, fixture.EvaluationCounter.NormalizedEvaluations);
-        Assert.Equal(2, fixture.EvaluationCounter.RepairCallbacks);
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
         await using var verification = fixture.CreateContext();
         var persisted = await verification.Links.AsNoTracking().OrderBy(value => value.Id).ToArrayAsync();
         Assert.All(persisted, value => Assert.Equal(11m, value.Ratio));
@@ -693,7 +693,7 @@ public sealed class InjectedRuntimeMaterializationTests
         link.Left.Value = 110m;
         await context.SaveChangesAsync();
 
-        Assert.Equal(1, fixture.EvaluationCounter.RepairCallbacks);
+        Assert.Equal(0, fixture.EvaluationCounter.RepairCallbacks);
         Assert.True(runtime.Version > 0);
     }
 
@@ -945,7 +945,7 @@ public sealed class InjectedRuntimeMaterializationTests
             {
                 ratioInvariant = modelBuilder.Invariant(links).From(ratio)
                     .Must((_, value) => value == null || value >= 0m)
-                    .ScheduleRepairWith(_ => evaluationCounter.RepairCallbacks++)
+                    .RepairWhenViolated()
                     .Named("ratio-valid");
             }
             Derived<Link, decimal>? projectedLeft = null;

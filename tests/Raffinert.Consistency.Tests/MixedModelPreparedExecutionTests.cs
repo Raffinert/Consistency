@@ -15,7 +15,7 @@ public sealed class MixedModelPreparedExecutionTests
     [InlineData(MutationCase.ParentAndLinkRemove)]
     [InlineData(MutationCase.ConservativeWave)]
     [InlineData(MutationCase.DirtyInvalidFanIn)]
-    [InlineData(MutationCase.ScheduleRepair)]
+    [InlineData(MutationCase.RepairViolation)]
     public void Mixed_model_has_equivalent_results_across_all_execution_modes(MutationCase mutationCase)
     {
         var direct = Execute(mutationCase, ExecutionMode.PreparedCommit);
@@ -200,8 +200,8 @@ public sealed class MixedModelPreparedExecutionTests
         switch (mutationCase)
         {
             case MutationCase.ParentIncrease:
-            case MutationCase.ScheduleRepair:
-                scenario.First.Amount = mutationCase == MutationCase.ScheduleRepair ? 30 : 12;
+            case MutationCase.RepairViolation:
+                scenario.First.Amount = mutationCase == MutationCase.RepairViolation ? 30 : 12;
                 return MutationSet.Create(Change.Property(
                     scenario.Parents, scenario.First, parent => parent.Amount, 10, scenario.First.Amount));
             case MutationCase.ParentDecrease:
@@ -295,7 +295,7 @@ public sealed class MixedModelPreparedExecutionTests
             .Select((_, available, used) => available - used).Named("projected-two");
         var invariant = model.Invariant(parents).From(finalChain).From(exactCount)
             .Must((_, chain, count) => chain + count < 25).Named("alpha-invariant")
-            .ScheduleRepairWith(_ => { });
+            .RepairWhenViolated();
 
         var first = new Parent
         {
@@ -352,7 +352,7 @@ public sealed class MixedModelPreparedExecutionTests
     {
         ParentIncrease, ParentDecrease, ItemKeyChange, ItemAdd, ItemRemove, CollectionAdd,
         CollectionRemove, CollectionReset, LinkRetarget, ParentAndLinkRemove, ConservativeWave,
-        DirtyInvalidFanIn, ScheduleRepair
+        DirtyInvalidFanIn, RepairViolation
     }
 
     private enum ExecutionMode { PreparedCommit, PreviewThenCommit, PlanThenCommit, Apply }

@@ -52,9 +52,13 @@ public sealed partial class ConsistencyRuntime
             var derivedEvaluations = derivedEvaluationMode == PlannedDerivedEvaluationMode.Affected
                 ? EvaluateAffectedDerived(result.DependencyPropagation, prepared.LifecycleMutations)
                 : [];
-            var invariantEvaluations = invariantEvaluationMode == PlannedInvariantEvaluationMode.Affected
-                ? EvaluateAffectedInvariants(result.DependencyPropagation, prepared.LifecycleMutations)
-                : [];
+            var invariantEvaluations = EvaluateAffectedInvariants(
+                result.DependencyPropagation,
+                prepared.LifecycleMutations,
+                result.PolicyActions,
+                invariantEvaluationMode == PlannedInvariantEvaluationMode.Affected);
+            _policyRequestsEmitted += result.PolicyActions.ImmediateEvaluations.Count +
+                result.PolicyActions.RepairRequests.Count;
             var forwardPatch = capturePostState
                 ? CaptureForwardPatch(
                     prepared.StructuralMutations, prepared.Changes,
@@ -438,7 +442,6 @@ public sealed partial class ConsistencyRuntime
             .Count();
         _relationPairsAdded += relationImpacts.Values.Sum(value => value.AddedPairs.Count);
         _relationPairsRemoved += relationImpacts.Values.Sum(value => value.RemovedPairs.Count);
-        _policyRequestsEmitted += policyActions.ImmediateEvaluations.Count + policyActions.RepairRequests.Count;
         return new RuntimeCommitResult(publicImpact, relationImpacts, dependencyPropagation, policyActions);
     }
 
@@ -491,13 +494,17 @@ public sealed partial class ConsistencyRuntime
 
     private IReadOnlyList<PlannedInvariantEvaluation> EvaluateAffectedInvariants(
         DependencyPropagationResult propagation,
-        IReadOnlyList<RuntimeMutation> lifecycleMutations)
+        IReadOnlyList<RuntimeMutation> lifecycleMutations,
+        RuntimePolicyActions policyActions,
+        bool evaluateAll)
     {
         var evaluations = new List<(PlannedInvariantEvaluation Value, int Encounter)>();
         var seen = new Dictionary<IInvariantDefinition, HashSet<object>>();
         var encounter = 0;
         foreach (var impact in propagation.InvariantImpacts)
         {
+            if (!evaluateAll && impact.Definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
+                continue;
             if (!seen.TryGetValue(impact.Definition, out var sources))
                 seen.Add(impact.Definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
             foreach (var source in impact.Sources)
@@ -505,7 +512,7 @@ public sealed partial class ConsistencyRuntime
                 if (!sources.Add(source) || !_sets[impact.Definition.SourceSet].Contains(source))
                     continue;
                 var state = _invariants[impact.Definition];
-                state.EvaluateValue(source);
+                state.EvaluateValue(source, policyActions);
                 evaluations.Add((new PlannedInvariantEvaluation(
                     _invariantIds[impact.Definition], source, state.GetValueState(source))
                 {
@@ -517,14 +524,15 @@ public sealed partial class ConsistencyRuntime
         foreach (var added in lifecycleMutations.OfType<ObjectAdded>())
         {
             foreach (var definition in _invariants.Keys.Where(definition =>
-                ReferenceEquals(definition.SourceSet, added.Set)))
+                ReferenceEquals(definition.SourceSet, added.Set) &&
+                (evaluateAll || definition.RepairPolicy == InvariantRepairPolicy.WhenViolated)))
             {
                 if (!seen.TryGetValue(definition, out var sources))
                     seen.Add(definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
                 if (!sources.Add(added.Instance))
                     continue;
                 var state = _invariants[definition];
-                state.EvaluateValue(added.Instance);
+                state.EvaluateValue(added.Instance, policyActions);
                 evaluations.Add((new PlannedInvariantEvaluation(
                     _invariantIds[definition], added.Instance, state.GetValueState(added.Instance))
                 {
@@ -749,6 +757,33 @@ public sealed partial class ConsistencyRuntime
                         OriginIds = MapTriggerOrigins(input.Relation, group.ToArray(), origins)
                     });
             }
+            foreach (var input in derivedDefinition.Inputs.OfType<ProjectedRelationMembershipInput>())
+            {
+                if (!commit.RelationImpacts.TryGetValue(input.Relation, out var impact))
+                    continue;
+                var left = input.Left.Project(source);
+                var right = input.Right.Project(source);
+                if (left is null || right is null)
+                    continue;
+                AddPairCause(impact.AddedPairs, RelationImpactCauseKind.MembershipAdded);
+                AddPairCause(impact.RemovedPairs, RelationImpactCauseKind.MembershipRemoved);
+
+                void AddPairCause(IEnumerable<RelationPair> pairs, RelationImpactCauseKind kind)
+                {
+                    if (!pairs.Any(pair => ReferenceEquals(pair.Left, left) &&
+                            ReferenceEquals(pair.Right, right)))
+                        return;
+                    var triggers = impact.RouteTriggers.Where(trigger =>
+                        trigger.Kind == kind && ReferenceEquals(trigger.Left, left) &&
+                        ReferenceEquals(trigger.Trigger, right)).ToArray();
+                    causes.Add(new RelationDependencyCause(
+                        _relationIds[input.Relation], kind, ImpactCausePrecision.Exact)
+                    {
+                        DefinitionKey = input.Relation.DefinitionKey,
+                        OriginIds = MapTriggerOrigins(input.Relation, triggers, origins)
+                    });
+                }
+            }
             foreach (var evidence in commit.DependencyPropagation.UpstreamEvidence.Where(value =>
                          ReferenceEquals(value.Downstream, derivedDefinition) &&
                          ReferenceEquals(value.DownstreamSource, source)))
@@ -777,7 +812,7 @@ public sealed partial class ConsistencyRuntime
                 .DefaultIfEmpty(DependencySeverity.Dirty)
                 .Aggregate((left, right) => left == DependencySeverity.Invalid || right == DependencySeverity.Invalid
                     ? DependencySeverity.Invalid : DependencySeverity.Dirty);
-            if (invariantDefinition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair &&
+            if (invariantDefinition.Reaction == InvariantReaction.MarkInvalid &&
                 inheritedSeverity == DependencySeverity.Dirty && finalSeverity == DependencySeverity.Invalid)
                 causes.Add(new InvariantReactionCause(
                     invariantDefinition.Reaction, inheritedSeverity, DependencySeverity.Invalid));

@@ -34,6 +34,7 @@ internal interface IRelationRuntimeState
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
     IReadOnlyCollection<object> GetPotentialLeftsForRights(IEnumerable<object> rights);
+    bool IsRelated(object left, object right);
 }
 
 internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState
@@ -263,6 +264,9 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
 
     public bool IsRelated(TLeft left, TRight right) =>
         _rightsByLeft.TryGetValue(left, out var rights) && rights.Contains(right);
+
+    bool IRelationRuntimeState.IsRelated(object left, object right) =>
+        IsRelated((TLeft)left, (TRight)right);
 
     public bool IsReverseRelated(TLeft left, TRight right) =>
         _leftsByRight.TryGetValue(right, out var lefts) && lefts.Contains(left);

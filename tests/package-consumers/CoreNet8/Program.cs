@@ -11,7 +11,7 @@ var doubled = model.Derived(values)
     .MaterializeTo(value => value.Mirror)
     .Named("doubled");
 model.Invariant(values).From(doubled).Must((_, amount) => amount <= 6)
-    .ScheduleRepairWith(_ => { }).Named("repair");
+    .RepairWhenViolated().Named("repair");
 var projected = model.Derived(links).From(link => link.Value, doubled)
     .Select((_, amount) => amount);
 var value = new Value { Amount = 3 };

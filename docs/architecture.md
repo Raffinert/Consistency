@@ -52,8 +52,8 @@ validate + normalize
     -> prepare against runtime version
     -> commit object/navigation/relation state
     -> propagate derived/invariant impacts
-    -> return structured requests
-    -> dispatch optional application callbacks
+    -> return structured repair requests
+    -> dispatch explicitly configured immediate policy actions
 ```
 
 Domain objects must already contain their new values. The runtime owns indexes and cached dependency
@@ -98,9 +98,11 @@ the logical cache current. Targeted `Materialize` synchronizes one descriptor, w
 then writes mirrors on that object. Equal assignments are skipped and prior writes are physically restored if
 a later setter fails; logical caches are retained for retry. Materialization never dispatches repair.
 
-Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or represented as a
-repair request. `ApplyDetailed` exposes requests as data for an outbox/queue. In-process callbacks run
-only through explicit post-commit dispatch.
+Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or
+represented as a structured repair request. `RepairWhenViolated()` is policy metadata: a request is created only
+after evaluation proves the predicate false. `ApplyDetailed` exposes those requests as data for an
+outbox/application workflow. Immediate policy actions, when configured, run only through explicit post-commit
+dispatch; compiled invariants do not capture repair callbacks.
 
 ## EF Core boundary
 

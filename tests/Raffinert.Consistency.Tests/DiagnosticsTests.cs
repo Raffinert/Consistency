@@ -66,7 +66,7 @@ public sealed class DiagnosticsTests
         var repairs = new List<DerivedSourceRecord>();
         var invariant = model.Invariant(sources).From(total).Must((source, value) => value == 0m)
             .Named("Source.ZeroTotal")
-            .ScheduleRepairWith(repairs.Add);
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var source = new DerivedSourceRecord { Id = Guid.NewGuid(), Code = "A" };
         var item = new DerivedItemRecord { Id = Guid.NewGuid(), Code = "B", Quantity = 2m };
@@ -102,7 +102,7 @@ public sealed class DiagnosticsTests
         Assert.Empty(repairs);
 
         application.Dispatch.Invoke();
-        Assert.Equal([source], repairs);
+        Assert.Empty(repairs);
         runtime.ResetDiagnostics();
         Assert.Equal(0, runtime.Diagnostics.PredicateEvaluations);
         Assert.Equal(0, runtime.Diagnostics.IncrementalDerivedUpdates);

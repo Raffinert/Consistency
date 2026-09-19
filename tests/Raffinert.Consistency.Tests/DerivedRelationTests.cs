@@ -469,7 +469,7 @@ public sealed partial class DerivedStateTests
             .ReactWith(InvariantReaction.EvaluateImmediately);
         var repair = model.Invariant(sources).From(quantity)
             .Must((source, value) => value <= 10m)
-            .ScheduleRepairWith(scheduled.Add);
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var source = Source("A");
         runtime.Add(sources, source);
@@ -515,6 +515,180 @@ public sealed partial class DerivedStateTests
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, affected));
         Assert.All(unrelated, source =>
             Assert.Equal(DerivedValueState.Fresh, runtime.GetState(quantity, source)));
+    }
+
+    [Theory]
+    [InlineData(3, 7, DerivedValueState.Invalid)]
+    [InlineData(7, 3, DerivedValueState.Dirty)]
+    public void Relation_item_member_classifier_controls_directional_severity(
+        decimal oldQuantity, decimal newQuantity, DerivedValueState expected)
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var quantity = model.Derived(sources).From(relation)
+            .Impact(policy => policy
+                .ItemChanged(DependencySeverity.Invalid)
+                .ItemMemberChanged(
+                    item => item.Quantity,
+                    (oldValue, newValue) => newValue > oldValue
+                        ? DependencySeverity.Invalid
+                        : DependencySeverity.Dirty))
+            .Select((_, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        var item = Item("A", oldQuantity);
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(oldQuantity, runtime.Evaluate(quantity, source));
+
+        item.Quantity = newQuantity;
+        runtime.Apply(Change.Property(items, item, value => value.Quantity, oldQuantity, newQuantity));
+
+        Assert.Equal(expected, runtime.GetState(quantity, source));
+    }
+
+    [Fact]
+    public void Relation_item_member_rules_merge_with_invalid_dominance_and_fallback_to_item_changed()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var quantity = model.Derived(sources).From(relation)
+            .Impact(policy => policy
+                .ItemChanged(DependencySeverity.Invalid)
+                .ItemMemberChanged(item => item.Quantity, (_, _) => DependencySeverity.Dirty)
+                .ItemMemberChanged(item => item.Enabled, (_, _) => DependencySeverity.Invalid))
+            .Select((_, matches) => matches.Sum(item => item.Quantity) +
+                (matches.Any(item => item.Details != null) ? 0m : 0m));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        var item = Item("A", 3m);
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(3m, runtime.Evaluate(quantity, source));
+
+        item.Quantity = 4m;
+        item.Enabled = true;
+        runtime.Apply(ChangeSet.Create(
+            Change.Property(items, item, value => value.Quantity, 3m, 4m),
+            Change.Property(items, item, value => value.Enabled, false, true)));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
+
+        runtime.Evaluate(quantity, source);
+        item.Details = new DerivedItemDetails { Code = "unrelated" };
+        runtime.Apply(Change.Property(items, item, value => value.Details, null, item.Details));
+        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(quantity, source));
+    }
+
+    [Fact]
+    public void Relation_membership_addition_uses_membership_policy_not_item_member_classifier()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var quantity = model.Derived(sources).From(relation)
+            .Impact(policy => policy
+                .MembershipAdded(DependencySeverity.Dirty)
+                .ItemChanged(DependencySeverity.Invalid)
+                .ItemMemberChanged(item => item.Quantity, (_, _) => DependencySeverity.Invalid))
+            .Select((_, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        runtime.Add(sources, source);
+        Assert.Equal(0m, runtime.Evaluate(quantity, source));
+
+        var item = Item("A", 3m);
+        runtime.Add(items, item);
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
+    }
+
+    [Fact]
+    public void Relation_item_member_classifier_reports_invalid_enum_values()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(x => x.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        var quantity = model.Derived(sources).From(relation)
+            .Impact(policy => policy.ItemMemberChanged(item => item.Quantity,
+                (_, _) => (DependencySeverity)99))
+            .Select((_, matches) => matches.Sum(item => item.Quantity));
+        var runtime = model.Build().CreateRuntime();
+        var source = Source("A");
+        var item = Item("A", 3m);
+        runtime.Add(sources, source);
+        runtime.Add(items, item);
+        Assert.Equal(3m, runtime.Evaluate(quantity, source));
+        item.Quantity = 4m;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => runtime.Apply(
+            Change.Property(items, item, value => value.Quantity, 3m, 4m)));
+    }
+
+    [Fact]
+    public void Projected_relation_membership_reuses_relation_semantics_and_routes_changes()
+    {
+        var model = new ConsistencyModelBuilder();
+        var demands = model.Objects<ProjectedDemand>().Key(value => value.Id);
+        var supplies = model.Objects<ProjectedSupply>().Key(value => value.Id);
+        var allocations = model.Objects<ProjectedAllocation>().Key(value => value.Id);
+        var candidates = model.Relation(demands, supplies)
+            .Where((demand, supply) => demand.Code == supply.Code)
+            .Named("candidate-supplies");
+        var compatible = model.Derived(allocations)
+            .FromMembership(candidates, allocation => allocation.Demand, allocation => allocation.Supply)
+            .Named("allocation-compatible");
+        var invariant = model.Invariant(allocations)
+            .From(compatible)
+            .Must((_, value) => value);
+        var compiled = model.Build();
+        var runtime = compiled.CreateRuntime();
+        var demand = new ProjectedDemand { Id = Guid.NewGuid(), Code = "A" };
+        var supply = new ProjectedSupply { Id = Guid.NewGuid(), Code = "A" };
+        var replacement = new ProjectedSupply { Id = Guid.NewGuid(), Code = "A" };
+        var allocation = new ProjectedAllocation
+        {
+            Id = Guid.NewGuid(),
+            Demand = demand,
+            Supply = supply
+        };
+        runtime.Add(demands, demand);
+        runtime.Add(supplies, supply);
+        runtime.Add(supplies, replacement);
+        runtime.Add(allocations, allocation);
+
+        Assert.True(runtime.Evaluate(compatible, allocation));
+        Assert.True(runtime.Evaluate(invariant, allocation));
+        var diagnostics = compiled.Diagnostics.DerivedValues.Single(value =>
+            value.DefinitionKey == "allocation-compatible");
+        var membershipDiagnostics = Assert.Single(diagnostics.SemanticDependencies,
+            value => value.Kind == DerivedDependencyKind.ProjectedRelationMembership);
+        Assert.Equal("Demand", membershipDiagnostics.LeftSelectorPath);
+        Assert.Equal("Supply", membershipDiagnostics.RightSelectorPath);
+
+        demand.Code = "B";
+        runtime.Apply(Change.Property(demands, demand, value => value.Code, "A", "B"));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(compatible, allocation));
+        Assert.False(runtime.Evaluate(compatible, allocation));
+        demand.Code = "A";
+        runtime.Apply(Change.Property(demands, demand, value => value.Code, "B", "A"));
+        Assert.True(runtime.Evaluate(compatible, allocation));
+
+        supply.Code = "B";
+        runtime.Apply(Change.Property(supplies, supply, value => value.Code, "A", "B"));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(compatible, allocation));
+        Assert.False(runtime.Evaluate(invariant, allocation));
+
+        allocation.Supply = replacement;
+        runtime.Apply(Change.Property(allocations, allocation, value => value.Supply, supply, replacement));
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(compatible, allocation));
+        Assert.True(runtime.Evaluate(compatible, allocation));
+        Assert.True(runtime.Evaluate(invariant, allocation));
     }
 
 }

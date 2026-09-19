@@ -12,7 +12,7 @@ public sealed class RuntimeSeedTests
         var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
         var count = model.Derived(sources).From(relation).Select((_, matches) => matches.Count);
         var invariant = model.Invariant(sources).From(count).Must((_, value) => value > 0)
-            .ScheduleRepairWith(source => callbacks.Add(source.Id));
+            .RepairWhenViolated();
         var compiled = model.Build();
         var source = new Source { Code = "A" };
         var item = new Item { Code = "A" };

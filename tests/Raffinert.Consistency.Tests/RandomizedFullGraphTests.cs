@@ -241,7 +241,7 @@ public sealed class RandomizedFullGraphTests
         var repairs = new List<Guid>();
         var invariant = model.Invariant(sources).From(derived)
             .Must((source, value) => value <= source.Policy!.Maximum)
-            .ScheduleRepairWith(source => repairs.Add(source.Id));
+            .ReactWith(InvariantReaction.MarkInvalid);
         return new Scenario(model.Build().CreateRuntime(), sources, items, relation, derived, invariant, repairs);
     }
 

@@ -101,7 +101,7 @@ smallest conceptual migration:
 | S4 | `Derived + Using + Impact + Compute` | `Derived + From + Select` |
 | S5 | `Derived + Using(projected pair) + Impact + Compute` | `Derived + From(projected pair) + Impact + Select` |
 | S6 | current impact builder | same impact builder |
-| S7 | `Invariant + Using + Must + Named + ScheduleRepairWith` | same concepts |
+| S7 | `Invariant + Using + Must + Named + RepairWhenViolated` | same concepts |
 | S8 | EF mapping adapter | same adapter |
 | S9 | `.Named` | `.Named` |
 

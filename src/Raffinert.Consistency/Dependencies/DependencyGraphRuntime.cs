@@ -105,8 +105,13 @@ internal sealed class DependencyGraphRuntime
         _invariantNodes = compiledGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Invariant)
             .Select(node => _invariantByCompiledId[node.Id]!).ToArray();
         _derivedByRelation = Group(_derivedNodes.SelectMany(node => node.Definition.Inputs
-            .OfType<RelationDerivedInput>()
-            .Select(input => input.Relation)
+            .Select(input => input switch
+            {
+                RelationDerivedInput relation => relation.Relation,
+                ProjectedRelationMembershipInput membership => membership.Relation,
+                _ => null
+            })
+            .OfType<IRelationDefinition>()
             .Select(relation => (relation, node))));
         _derivedByMember = Group(_derivedNodes.SelectMany(node =>
             node.SourceDependencies.Concat(node.ItemDependencies)
@@ -186,7 +191,14 @@ internal sealed class DependencyGraphRuntime
                     node.Definition.SourceSet, node.SourceDependencies, changes));
             if (node.Relation is null)
                 continue;
-            derivedSources[node].UnionWith(impact.GetAffectedRoots(node.Relation, node.Relation.LeftSet));
+            var projectedMembership = node.Definition.Inputs
+                .OfType<ProjectedRelationMembershipInput>().SingleOrDefault();
+            var affectedLefts = impact.GetAffectedRoots(node.Relation, node.Relation.LeftSet);
+            if (projectedMembership is null)
+                derivedSources[node].UnionWith(affectedLefts);
+            else
+                derivedSources[node].UnionWith(_projections.Resolve(
+                    projectedMembership.Left, affectedLefts));
             var rights = impact.GetAffectedRoots(node.Relation, node.Relation.RightSet)
                 .Concat(ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes))
                 .Concat(structuralMutations.Select(mutation => mutation switch
@@ -200,7 +212,10 @@ internal sealed class DependencyGraphRuntime
                 }).OfType<object>())
                 .Distinct(ReferenceEqualityComparer.Instance)
                 .ToArray();
-            derivedSources[node].UnionWith(_relations[node.Relation].GetPotentialLeftsForRights(rights));
+            if (projectedMembership is null)
+                derivedSources[node].UnionWith(_relations[node.Relation].GetPotentialLeftsForRights(rights));
+            else
+                derivedSources[node].UnionWith(_projections.Resolve(projectedMembership.Right, rights));
         }
         if (previous is not null)
             foreach (var pair in previous.Derived)
@@ -340,39 +355,57 @@ internal sealed class DependencyGraphRuntime
             RelationImpact? relationImpact = null;
             if (node.Relation is not null)
                 relationImpacts.TryGetValue(node.Relation, out relationImpact);
-            var membershipRoots = node.Definition.Analysis.HasRelationMembershipDependency
-                ? relationImpact?.AffectedLefts
-                    .Where(_sets[node.Definition.SourceSet].Contains)
-                    .ToArray() ?? []
-                : [];
+            var projectedMembership = node.Definition.Inputs
+                .OfType<ProjectedRelationMembershipInput>().SingleOrDefault();
+            var projectedImpact = projectedMembership is not null && relationImpact is not null
+                ? _projections.Resolve(projectedMembership, relationImpact)
+                : (Added: (IReadOnlyCollection<object>)[], Removed: (IReadOnlyCollection<object>)[]);
+            var membershipRoots = projectedMembership is not null
+                ? projectedImpact.Added.Concat(projectedImpact.Removed)
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()
+                : node.Definition.Analysis.HasRelationMembershipDependency
+                    ? relationImpact?.AffectedLefts
+                        .Where(_sets[node.Definition.SourceSet].Contains)
+                        .ToArray() ?? []
+                    : [];
             var sourceRoots = ResolveRoots(node.Definition.SourceSet, node.SourceDependencies, changes);
             var (dirtySourceRoots, invalidSourceRoots) = node.ClassifySourceRoots(
                 sourceRoots, changes, captureCausalEvidence);
             var itemRoots = node.Relation is null
                 ? []
                 : ResolveRoots(node.Relation.RightSet, node.ItemDependencies, changes);
-            var itemSources = node.Relation is null
+            var (dirtyItemRoots, invalidItemRoots) = node.ClassifyItemRoots(itemRoots, changes);
+            var dirtyItemSources = node.Relation is null
                 ? []
-                : _relations[node.Relation].GetLeftsForRights(itemRoots);
+                : _relations[node.Relation].GetLeftsForRights(dirtyItemRoots);
+            var invalidItemSources = node.Relation is null
+                ? []
+                : _relations[node.Relation].GetLeftsForRights(invalidItemRoots);
             var fallbackSeverity = membershipRoots.Length > 0 && !node.Definition.ImpactPolicy.IsConfigured
                 ? _impactPolicy.Classify(new RelationMembershipDependencyImpact(
                     relationImpact!, node.Definition, changes))
                 : DependencyImpactKind.Dirty;
-            var invalidMembershipRoots = membershipRoots.Where(source =>
-                    node.Definition.ImpactPolicy.IsConfigured
-                        ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact!, source) == DependencyImpactKind.Invalid
-                        : fallbackSeverity == DependencyImpactKind.Invalid)
-                .ToArray();
+            var invalidMembershipRoots = projectedMembership is not null
+                ? projectedImpact.Added
+                    .Where(_ => node.Definition.ImpactPolicy.MembershipAdded == DependencySeverity.Invalid)
+                    .Concat(projectedImpact.Removed.Where(_ =>
+                        node.Definition.ImpactPolicy.MembershipRemoved == DependencySeverity.Invalid))
+                    .Distinct(ReferenceEqualityComparer.Instance).ToArray()
+                : membershipRoots.Where(source =>
+                        node.Definition.ImpactPolicy.IsConfigured
+                            ? node.Definition.ImpactPolicy.ClassifyMembership(relationImpact!, source) == DependencyImpactKind.Invalid
+                            : fallbackSeverity == DependencyImpactKind.Invalid)
+                    .ToArray();
             var dirtyMembershipRoots = membershipRoots.Except(
                 invalidMembershipRoots,
                 ReferenceEqualityComparer.Instance).ToArray();
             node.Apply(
                 dirtySourceRoots,
                 invalidSourceRoots,
-                itemSources,
+                dirtyItemSources,
+                invalidItemSources,
                 dirtyMembershipRoots,
                 invalidMembershipRoots,
-                node.Definition.ImpactPolicy.ItemChanged.ToKind(),
                 relationImpact,
                 changes);
             node.ApplyInherited(GetUpstreams(node), _projections, upstreamEvidence);
@@ -491,7 +524,12 @@ internal sealed class DependencyGraphRuntime
 
         public IDerivedDefinition Definition { get; }
         public IRelationDefinition? Relation => Definition.Inputs
-            .OfType<RelationDerivedInput>().Select(input => input.Relation).SingleOrDefault();
+            .Select(input => input switch
+            {
+                RelationDerivedInput relation => relation.Relation,
+                ProjectedRelationMembershipInput membership => membership.Relation,
+                _ => null
+            }).OfType<IRelationDefinition>().SingleOrDefault();
         public IDerivedRuntimeState State { get; }
         public IReadOnlyList<TrackedExpressionDependency> SourceDependencies { get; }
         public IReadOnlyList<TrackedExpressionDependency> ItemDependencies { get; }
@@ -527,24 +565,23 @@ internal sealed class DependencyGraphRuntime
         public void Apply(
             IEnumerable<object> dirtySourceRoots,
             IEnumerable<object> invalidSourceRoots,
-            IEnumerable<object> itemSources,
+            IEnumerable<object> dirtyItemSources,
+            IEnumerable<object> invalidItemSources,
             IEnumerable<object> dirtyMembershipRoots,
             IEnumerable<object> invalidMembershipRoots,
-            DependencyImpactKind itemSeverity,
             RelationImpact? relationImpact,
             IReadOnlyList<PropertyChange> changes)
         {
             InvalidSources = NewSet(invalidMembershipRoots);
-            if (itemSeverity == DependencyImpactKind.Invalid)
-                InvalidSources.UnionWith(itemSources);
+            InvalidSources.UnionWith(invalidItemSources);
             InvalidSources.UnionWith(invalidSourceRoots);
             DirtySources = NewSet(dirtySourceRoots);
-            if (itemSeverity == DependencyImpactKind.Dirty)
-                DirtySources.UnionWith(itemSources);
+            DirtySources.UnionWith(dirtyItemSources);
             DirtySources.UnionWith(dirtyMembershipRoots);
             DirtySources.ExceptWith(InvalidSources);
             ConservativeSources = Relation?.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation
-                ? NewSet(itemSources.Concat(dirtyMembershipRoots).Concat(invalidMembershipRoots))
+                ? NewSet(dirtyItemSources.Concat(invalidItemSources)
+                    .Concat(dirtyMembershipRoots).Concat(invalidMembershipRoots))
                 : NewSet();
             var incrementallyUpdated = State.ApplyIncremental(DirtySources, relationImpact, changes);
             if (InvalidSources.Count > 0)
@@ -587,6 +624,35 @@ internal sealed class DependencyGraphRuntime
                 (severity == DependencySeverity.Invalid ? invalid : dirty).Add(source);
             }
             DirectEvidence = evidence ?? [];
+            return (dirty, invalid);
+        }
+
+        public (IReadOnlyCollection<object> Dirty, IReadOnlyCollection<object> Invalid) ClassifyItemRoots(
+            IEnumerable<object> itemRoots,
+            IReadOnlyList<PropertyChange> changes)
+        {
+            var dirty = NewSet();
+            var invalid = NewSet();
+            var directDependencies = ItemDependencies
+                .Where(dependency => dependency.Path.Segments.Count == 1)
+                .Select(dependency => dependency.Path.Segments[0].Member)
+                .ToHashSet();
+            var rules = (Definition.ImpactPolicy.ItemMemberRules ?? [])
+                .Where(rule => directDependencies.Contains(rule.Member))
+                .ToDictionary(rule => rule.Member);
+            foreach (var item in itemRoots)
+            {
+                DependencySeverity? severity = null;
+                foreach (var change in changes.Where(change => ReferenceEquals(change.Instance, item)))
+                {
+                    var classified = rules.TryGetValue(change.Member, out var rule)
+                        ? rule.Classify(change.OldValue, change.NewValue)
+                        : Definition.ImpactPolicy.ItemChanged;
+                    severity = severity is null ? classified : Max(severity.Value, classified);
+                }
+                severity ??= Definition.ImpactPolicy.ItemChanged;
+                (severity == DependencySeverity.Invalid ? invalid : dirty).Add(item);
+            }
             return (dirty, invalid);
         }
 
@@ -743,7 +809,7 @@ internal sealed class DependencyGraphRuntime
             InvalidSources = NewSet(_derived.SelectMany(node => node.InvalidSources));
             DirtySources = NewSet(_derived.SelectMany(node => node.DirtySources));
             DirtySources.ExceptWith(InvalidSources);
-            if (Definition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair)
+            if (Definition.Reaction == InvariantReaction.MarkInvalid)
             {
                 InvalidSources.UnionWith(DirtySources);
                 DirtySources.Clear();
@@ -757,7 +823,7 @@ internal sealed class DependencyGraphRuntime
         public void ApplyDirect(IEnumerable<object> sources, RuntimePolicyActions policyActions)
         {
             var affected = NewSet(sources);
-            if (Definition.Reaction is InvariantReaction.MarkInvalid or InvariantReaction.ScheduleRepair)
+            if (Definition.Reaction == InvariantReaction.MarkInvalid)
             {
                 InvalidSources.UnionWith(affected);
                 DirtySources.ExceptWith(InvalidSources);

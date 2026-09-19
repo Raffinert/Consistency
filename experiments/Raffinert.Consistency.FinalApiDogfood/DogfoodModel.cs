@@ -114,7 +114,7 @@ internal sealed record DogfoodDefinitions(
             .From(linkValidity)
             .Must((_, valid) => valid)
             .Named("link-validity-invariant")
-            .ScheduleRepairWith(link => repairs.Add(link.Id));
+            .RepairWhenViolated();
 
         return new DogfoodDefinitions(
             model.Build(), invoiceLines, poLines, links, receipts, allocations, matchingReceipts,

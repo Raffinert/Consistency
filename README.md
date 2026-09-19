@@ -141,7 +141,7 @@ Calculation, invalidation, storage, and consequences are separate concepts:
 | `Evaluate(...)` | Make a logical value current and return it without writing its mirror. |
 | `Materialize(...)` | Synchronize configured physical mirrors. |
 | `Invariant(...)` | Declare required truth. |
-| `ScheduleRepairWith(...)` | Handle a consistency consequence after mutation commit. |
+| `RepairWhenViolated()` | Emit structured repair data when evaluation proves the invariant is violated. |
 
 For example, `UnitRate` receives the logical `PriceRate`; it never reads the potentially stale mirror:
 
@@ -227,7 +227,8 @@ Only saving?                                         db.SaveChanges / SaveChange
 ```
 
 `Materialize(entity)` prepares the pending consistency plan and updates only configured mirrors on that
-entity. Runtime state is installed and policy callbacks dispatch only after a successful SQL save. If
+entity. Runtime state is installed and immediate policy actions dispatch only after a successful SQL save;
+repair requirements remain structured result data. If
 the service changes a semantic input again before saving, the adapter discards the stale pending plan and
 rebuilds it. Until SQL succeeds, committed navigation and projection indexes continue to represent the
 durable baseline; a failed save leaves them unchanged and a retry builds a fresh plan. Cross-object graphs
@@ -610,12 +611,14 @@ planning, bootstrap/projection, commit safety, and related runtime costs.
 
 ## Runtime contracts worth knowing
 
-- Domain mutation is external; change objects report mutations that have already happened.
+- Core runtime domain mutation is external; change objects report mutations that have already happened. EF
+  integration translates ordinary tracked mutation at the `SaveChanges` boundary.
 - Registered object keys are immutable. Remove/re-add when identity genuinely changes.
 - Mutation sets are validated atomically before runtime-owned state is committed.
 - Collection navigation is explicit through add/remove/reset change records.
 - A prepared mutation is versioned and rejected if the runtime advances before commit.
-- Policy callbacks are dispatched only after runtime-owned state commits.
+- Explicit immediate policy actions are dispatched only after runtime-owned state commits; repair requirements are
+  returned as structured result data for application handling.
 - `ConsistencyRuntime` is not thread-safe; callers must externally synchronize mutations and queries.
 - Evaluate-first/write-second rollback applies to one externally synchronized materialization call; it does
   not provide cross-thread atomicity.

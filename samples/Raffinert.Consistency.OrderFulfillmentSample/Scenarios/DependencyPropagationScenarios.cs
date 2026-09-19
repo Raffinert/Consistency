@@ -14,7 +14,7 @@ internal static class DependencyPropagationScenarios
         var remainingQuantity = model.Derived(lines).From(fulfilledQuantity).Impact(p => p.SourceChanged(DependencySeverity.Dirty).SourceMemberChanged(x => x.OrderedQuantity, (oldValue, newValue) => newValue < oldValue ? DependencySeverity.Invalid : DependencySeverity.Dirty)).Select((l, fulfilled) => l.OrderedQuantity - fulfilled).Named("remaining-quantity");
         var unitRate = model.Derived(lines).Impact(p => p.SourceChanged(DependencySeverity.Invalid)).Select(x => x.UnitRate).Named("unit-rate");
         var allocationValidity = model.Derived(allocations).From(x => x.OrderLine, remainingQuantity, unitRate).Impact(p => p.SourceChanged(DependencySeverity.Invalid)).Select((allocation, remaining, rate) => allocation.ReservedQuantity <= remaining && allocation.CapturedRate == rate).Named("allocation-validity");
-        var allocationInvariant = model.Invariant(allocations).From(allocationValidity).Must((_, value) => value).Named("allocation-validity-invariant").ScheduleRepairWith(x => repairs.Add(x.Id));
+        var allocationInvariant = model.Invariant(allocations).From(allocationValidity).Must((_, value) => value).Named("allocation-validity-invariant").RepairWhenViolated();
         var line = new OrderLine { OrderNumber = "ORDER-100", ItemNumber = 1, OrderedQuantity = 10, UnitRate = 25 };
         var fulfillment = new Fulfillment { OrderNumber = "ORDER-100", ItemNumber = 1, Quantity = 5 };
         var allocation = new Allocation { RequestLineId = Guid.NewGuid(), OrderLineId = line.Id, OrderLine = line, ReservedQuantity = 4, CapturedRate = 25 };

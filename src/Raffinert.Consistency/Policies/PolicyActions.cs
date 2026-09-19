@@ -668,18 +668,10 @@ internal sealed class RuntimePolicyActions
 
     public void Dispatch()
     {
-        while (_nextAction < _immediateEvaluations.Count + _repairRequests.Count)
+        while (_nextAction < _immediateEvaluations.Count)
         {
-            if (_nextAction < _immediateEvaluations.Count)
-            {
-                var evaluation = _immediateEvaluations[_nextAction];
-                evaluation.Invariant.EvaluatePolicy(evaluation.Source);
-            }
-            else
-            {
-                var request = _repairRequests[_nextAction - _immediateEvaluations.Count];
-                request.Invariant.DispatchRepair(request.Source);
-            }
+            var evaluation = _immediateEvaluations[_nextAction];
+            evaluation.Invariant.EvaluatePolicy(evaluation.Source);
             _nextAction++;
         }
     }

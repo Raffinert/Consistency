@@ -6,25 +6,34 @@ internal sealed class ProjectionIndexRegistry
 {
     private readonly IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> _sets;
     private readonly IReadOnlyList<Entry> _entries;
-    private readonly IReadOnlyDictionary<ProjectedUpstreamDerivedInput, Entry> _entryByInput;
+    private readonly IReadOnlyDictionary<IProjectedSelectorInput, Entry> _entryByInput;
 
     public ProjectionIndexRegistry(
         IReadOnlyList<IDerivedDefinition> definitions,
         IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets)
     {
         _sets = sets;
-        var inputs = definitions.SelectMany(definition => definition.Inputs
-            .OfType<ProjectedUpstreamDerivedInput>()
-            .Select(input => (DownstreamSet: definition.SourceSet, Input: input))).ToArray();
+        var inputs = definitions.SelectMany(definition => definition.Inputs.SelectMany(input => input switch
+        {
+            ProjectedUpstreamDerivedInput projected =>
+                [(DownstreamSet: definition.SourceSet, Input: (IProjectedSelectorInput)projected)],
+            ProjectedRelationMembershipInput membership =>
+                new[]
+                {
+                    (DownstreamSet: definition.SourceSet, Input: (IProjectedSelectorInput)membership.Left),
+                    (DownstreamSet: definition.SourceSet, Input: (IProjectedSelectorInput)membership.Right)
+                },
+            _ => []
+        })).ToArray();
         ConsumerCount = inputs.Length;
         var entries = new Dictionary<ProjectionEdgeKey, Entry>(ProjectionEdgeKeyComparer.Instance);
-        var entryByInput = new Dictionary<ProjectedUpstreamDerivedInput, Entry>(ReferenceEqualityComparer.Instance);
+        var entryByInput = new Dictionary<IProjectedSelectorInput, Entry>(ReferenceEqualityComparer.Instance);
         foreach (var (downstreamSet, input) in inputs)
         {
             var key = new ProjectionEdgeKey(
                 downstreamSet,
                 input.SelectorPath.Segments.Single().Member,
-                input.UpstreamSet);
+                input.TargetSet);
             if (!entries.TryGetValue(key, out var entry))
                 entries.Add(key, entry = new Entry(downstreamSet, input));
             entryByInput.Add(input, entry);
@@ -74,12 +83,39 @@ internal sealed class ProjectionIndexRegistry
     public IReadOnlyCollection<object> Resolve(
         ProjectedUpstreamDerivedInput input,
         IEnumerable<object> upstreamSources)
+        => Resolve((IProjectedSelectorInput)input, upstreamSources);
+
+    public IReadOnlyCollection<object> Resolve(
+        IProjectedSelectorInput input,
+        IEnumerable<object> upstreamSources)
     {
         var entry = _entryByInput[input];
         var result = new HashSet<object>(ReferenceEqualityComparer.Instance);
         foreach (var upstream in upstreamSources)
             if (entry.TargetToDownstreams.TryGetValue(upstream, out var downstream))
                 result.UnionWith(downstream);
+        return result;
+    }
+
+    public (IReadOnlyCollection<object> Added, IReadOnlyCollection<object> Removed) Resolve(
+        ProjectedRelationMembershipInput input,
+        RelationImpact impact) =>
+        (ResolvePairs(input, impact.AddedPairs), ResolvePairs(input, impact.RemovedPairs));
+
+    private IReadOnlyCollection<object> ResolvePairs(
+        ProjectedRelationMembershipInput input,
+        IEnumerable<RelationPair> pairs)
+    {
+        var leftEntry = _entryByInput[input.Left];
+        var rightEntry = _entryByInput[input.Right];
+        var result = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var pair in pairs)
+        {
+            if (!leftEntry.TargetToDownstreams.TryGetValue(pair.Left, out var byLeft) ||
+                !rightEntry.TargetToDownstreams.TryGetValue(pair.Right, out var byRight))
+                continue;
+            result.UnionWith(byLeft.Where(byRight.Contains));
+        }
         return result;
     }
 
@@ -99,7 +135,7 @@ internal sealed class ProjectionIndexRegistry
             {
                 if (target is null)
                     throw new InvalidOperationException("A projected dependency target cannot be null.");
-                if (!_sets[entry.Input.UpstreamSet].Contains(target))
+                if (!_sets[entry.Input.TargetSet].Contains(target))
                     throw new InvalidOperationException(
                         $"The projected target selected by '{entry.Input.SelectorExpression}' is not registered " +
                         "in the exact upstream object set.");
@@ -135,7 +171,7 @@ internal sealed class ProjectionIndexRegistry
             }
 
             foreach (var removed in structuralMutations.OfType<ObjectRemoved>()
-                         .Where(value => ReferenceEquals(value.Set, entry.Input.UpstreamSet)))
+                         .Where(value => ReferenceEquals(value.Set, entry.Input.TargetSet)))
             {
                 if (!entry.TargetToDownstreams.TryGetValue(removed.Instance, out var downstreams))
                     continue;
@@ -152,7 +188,7 @@ internal sealed class ProjectionIndexRegistry
     {
         if (target is null)
             throw new InvalidOperationException("A projected dependency target cannot be null.");
-        if (!view.Contains(entry.Input.UpstreamSet, target))
+        if (!view.Contains(entry.Input.TargetSet, target))
             throw new InvalidOperationException(
                 $"The projected target selected by '{entry.Input.SelectorExpression}' is not registered " +
                 "in the exact upstream object set.");
@@ -183,10 +219,10 @@ internal sealed class ProjectionIndexRegistry
 
     private sealed class Entry(
         IObjectSetDefinition downstreamSet,
-        ProjectedUpstreamDerivedInput input)
+        IProjectedSelectorInput input)
     {
         public IObjectSetDefinition DownstreamSet => downstreamSet;
-        public ProjectedUpstreamDerivedInput Input => input;
+        public IProjectedSelectorInput Input => input;
         public MemberInfo SelectorMember => input.SelectorPath.Segments.Single().Member;
         public Dictionary<object, object?> DownstreamToTarget { get; } =
             new(ReferenceEqualityComparer.Instance);

@@ -221,9 +221,9 @@ internal sealed class ConfiguredDomainInvariant<TSource> where TSource : class
         return this;
     }
 
-    public ConfiguredDomainInvariant<TSource> ScheduleRepairWith(Action<TSource> repair)
+    public ConfiguredDomainInvariant<TSource> RepairWhenViolated()
     {
-        Raw.ScheduleRepairWith(repair);
+        Raw.RepairWhenViolated();
         return this;
     }
 }

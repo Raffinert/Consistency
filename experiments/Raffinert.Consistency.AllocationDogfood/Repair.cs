@@ -11,39 +11,22 @@ public sealed record RepairRequirement(
     Supply? Supply,
     Allocation? Allocation);
 
-public sealed class RepairQueue
-{
-    private readonly Queue<RepairRequirement> _requirements = new();
-
-    public int Count => _requirements.Count;
-
-    public IReadOnlyList<RepairRequirement> Snapshot => _requirements.ToArray();
-
-    public void RequireCapacityRepair(Supply supply) =>
-        _requirements.Enqueue(new RepairRequirement(RepairRequirementKind.SupplyCapacity, supply, null));
-
-    public void RequireCompatibilityRepair(Allocation allocation) =>
-        _requirements.Enqueue(new RepairRequirement(
-            RepairRequirementKind.AllocationCompatibility, null, allocation));
-
-    public bool TryDequeue(out RepairRequirement requirement) => _requirements.TryDequeue(out requirement!);
-
-    public void Clear() => _requirements.Clear();
-}
-
 public sealed record RepairProcessingResult(
     IReadOnlyList<Allocation> Reallocated,
     IReadOnlyList<RepairRequirement> Unresolved);
 
 public sealed class ReallocateDemand(AllocationConsistencyModel model)
 {
-    public RepairProcessingResult Process(ConsistencyRuntime runtime)
+    public RepairProcessingResult Process(
+        ConsistencyRuntime runtime,
+        IEnumerable<RepairRequestInfo> requests)
     {
         var reallocated = new List<Allocation>();
         var unresolved = new List<RepairRequirement>();
+        var requirements = new Queue<RepairRequirement>(requests.Select(ToRequirement));
         var attempts = 0;
 
-        while (model.Repairs.TryDequeue(out var requirement))
+        while (requirements.TryDequeue(out var requirement))
         {
             if (++attempts > 100)
                 throw new InvalidOperationException("Repair processing did not converge.");
@@ -51,10 +34,10 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
             switch (requirement.Kind)
             {
                 case RepairRequirementKind.SupplyCapacity:
-                    ProcessSupply(requirement, runtime, reallocated, unresolved);
+                    ProcessSupply(requirement, runtime, requirements, reallocated, unresolved);
                     break;
                 case RepairRequirementKind.AllocationCompatibility:
-                    ProcessAllocation(requirement, runtime, reallocated, unresolved);
+                    ProcessAllocation(requirement, runtime, requirements, reallocated, unresolved);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(requirement));
@@ -67,6 +50,7 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
     private void ProcessSupply(
         RepairRequirement requirement,
         ConsistencyRuntime runtime,
+        Queue<RepairRequirement> requirements,
         List<Allocation> reallocated,
         List<RepairRequirement> unresolved)
     {
@@ -79,7 +63,7 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
             .ToArray();
         foreach (var allocation in allocations)
         {
-            if (TryReallocate(allocation, runtime))
+            if (TryReallocate(allocation, runtime, requirements))
             {
                 reallocated.Add(allocation);
                 if (runtime.Evaluate(model.CapacityInvariant, supply))
@@ -93,19 +77,23 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
     private void ProcessAllocation(
         RepairRequirement requirement,
         ConsistencyRuntime runtime,
+        Queue<RepairRequirement> requirements,
         List<Allocation> reallocated,
         List<RepairRequirement> unresolved)
     {
         var allocation = requirement.Allocation!;
         if (runtime.Evaluate(model.CompatibilityInvariant, allocation))
             return;
-        if (TryReallocate(allocation, runtime))
+        if (TryReallocate(allocation, runtime, requirements))
             reallocated.Add(allocation);
         else
             unresolved.Add(requirement);
     }
 
-    private bool TryReallocate(Allocation allocation, ConsistencyRuntime runtime)
+    private bool TryReallocate(
+        Allocation allocation,
+        ConsistencyRuntime runtime,
+        Queue<RepairRequirement> requirements)
     {
         var replacement = runtime.Related(model.CandidateSupplies, allocation.Demand)
             .Where(supply => supply.Id != allocation.SupplyId)
@@ -116,13 +104,28 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
             return false;
 
         var oldSupplyId = allocation.SupplyId;
+        var oldSupply = allocation.Supply;
         allocation.SupplyId = replacement.Id;
         allocation.Supply = replacement;
         var application = runtime.ApplyDetailed(MutationSet.Create(
             Change.Property(model.Allocations, allocation,
-                value => value.SupplyId, oldSupplyId, replacement.Id)),
+                value => value.SupplyId, oldSupplyId, replacement.Id),
+            Change.Property(model.Allocations, allocation,
+                value => value.Supply, oldSupply, replacement)),
             RuntimeImpactDetailLevel.Causal);
-        application.Dispatch.Invoke();
+        foreach (var request in application.Result.RepairRequests)
+            requirements.Enqueue(ToRequirement(request));
         return true;
+    }
+
+    private RepairRequirement ToRequirement(RepairRequestInfo request)
+    {
+        if (request.DefinitionKey == model.CapacityInvariant.DefinitionKey && request.Source is Supply supply)
+            return new RepairRequirement(RepairRequirementKind.SupplyCapacity, supply, null);
+        if (request.DefinitionKey == model.CompatibilityInvariant.DefinitionKey &&
+            request.Source is Allocation allocation)
+            return new RepairRequirement(RepairRequirementKind.AllocationCompatibility, null, allocation);
+        throw new InvalidOperationException(
+            $"Unsupported repair request '{request.DefinitionKey}' for '{request.Source.GetType().Name}'.");
     }
 }
