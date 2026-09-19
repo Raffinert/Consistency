@@ -33,6 +33,53 @@ The dependency-free core targets .NET 8 and .NET 10. The EF Core adapter targets
 Raffinert.Consistency is pre-1.0 and currently available as a release candidate. APIs may still change before
 1.0.
 
+## EF Core + DI: the common application path
+
+For EF Core applications, the intended day-to-day workflow is deliberately small: register the compiled
+consistency model once, inject the scoped runtime next to your `DbContext`, mutate ordinary tracked entities,
+and keep using ordinary `SaveChanges` / `SaveChangesAsync`.
+
+```csharp
+services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(connectionString));
+
+services.AddRaffinertConsistency<AppDbContext>(
+    compiledModel,
+    mappings);
+```
+
+Application services do not need to publish old/new values or manually orchestrate dependency updates:
+
+```csharp
+public sealed class LinkService(
+    AppDbContext db,
+    ConsistencyRuntime consistency)
+{
+    public async Task ChangeAsync(
+        long id,
+        decimal value,
+        CancellationToken cancellationToken)
+    {
+        var link = await db.Links
+            .Include(x => x.Left)
+            .Include(x => x.Right)
+            .SingleAsync(x => x.Id == id, cancellationToken);
+
+        link.Left.Value = value;
+
+        // Only needed when a materialized mirror is read before SaveChanges.
+        consistency.Materialize(link);
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+Tracked entities are admitted into the scoped consistency runtime automatically. If no materialized value is
+needed before persistence, skip `Materialize` and just call `SaveChangesAsync`; the EF integration evaluates
+and synchronizes affected configured state at the save boundary, then commits runtime state only after the
+database save succeeds.
+
 ## Why?
 
 Consistency logic tends to spread as a system grows:
