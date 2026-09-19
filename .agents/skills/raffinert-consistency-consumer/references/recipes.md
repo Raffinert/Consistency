@@ -20,10 +20,10 @@ first binding only when the member is used by the consistency model; ordinary ma
 that model and dirty entities outside the consistency graph do not block binding. Mapped additions and
 removals remain conservatively rejected.
 
-Keep the service constructor limited to the context and scoped runtime:
+Keep the service constructor limited to the context and narrow scoped runtime contract:
 
 ```csharp
-public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+public sealed class LinkService(AppDbContext db, IConsistencyRuntime consistency)
 {
     public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
     {
@@ -39,6 +39,10 @@ public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
     }
 }
 ```
+
+Use `IConsistencyRuntime` for ordinary EF application services that only call `Evaluate` or `Materialize`.
+Inject concrete `ConsistencyRuntime` for advanced mutation, planning, diagnostic, or manual-engine APIs. In
+the EF integration, both service types resolve to the same scoped concrete runtime instance.
 
 Use `Materialize(entity)` only when a mirror is needed before saving. If the service only persists the
 mutation, call ordinary `SaveChanges`/`SaveChangesAsync`. The integration admits mapped tracked entities,

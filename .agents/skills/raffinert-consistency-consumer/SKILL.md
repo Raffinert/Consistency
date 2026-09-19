@@ -400,10 +400,14 @@ when the changed member is used by a consistency key, dependency, invariant, rel
 mapped additions and removals remain conservative. Ordinary mapped properties unused by the consistency
 model, and dirty EF state outside its mappings and dependency graph, do not block binding.
 
-The application service should inject only its `DbContext` and `ConsistencyRuntime`. The EF integration
-uses the same scoped runtime for baseline admission, explicit materialization, and SaveChanges commit.
+The application service should inject only its `DbContext` and `IConsistencyRuntime` when it needs logical
+evaluation or materialization. The interface resolves to the same scoped concrete runtime that the EF
+integration uses for baseline admission, explicit materialization, and SaveChanges commit.
 Mapped tracked entities are admitted automatically; application code must not call `runtime.Add(...)` or
 `runtime.Apply(...)` for ordinary EF changes.
+
+Use `IConsistencyRuntime` for ordinary EF application services that need `Evaluate`/`Materialize`. Use the
+concrete `ConsistencyRuntime` for advanced engine, mutation, planning, or diagnostic code.
 
 Map sets whose tracked lifecycle/property changes participate in persistence orchestration:
 

@@ -36,7 +36,11 @@ public sealed class InjectedRuntimeMaterializationTests
         {
             _ = firstScope.ServiceProvider.GetRequiredService<LinkContext>();
             var runtime = firstRuntime = firstScope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+            var applicationRuntime = firstScope.ServiceProvider.GetRequiredService<IConsistencyRuntime>();
             var session = firstScope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+            Assert.Same(runtime, applicationRuntime);
+            Assert.Same(applicationRuntime,
+                firstScope.ServiceProvider.GetRequiredService<IConsistencyRuntime>());
             Assert.Same(runtime, session.Runtime);
             Assert.Same(firstScope.ServiceProvider.GetRequiredService<LinkContext>(), session.Context);
         }
@@ -44,11 +48,14 @@ public sealed class InjectedRuntimeMaterializationTests
         await using (var secondScope = fixture.Provider.CreateAsyncScope())
         {
             var runtime = secondScope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+            var applicationRuntime = secondScope.ServiceProvider.GetRequiredService<IConsistencyRuntime>();
             var context = secondScope.ServiceProvider.GetRequiredService<LinkContext>();
             var session = secondScope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+            Assert.Same(runtime, applicationRuntime);
             Assert.Same(runtime, session.Runtime);
             Assert.Same(context, session.Context);
             Assert.NotSame(firstRuntime, runtime);
+            Assert.NotSame(firstRuntime, applicationRuntime);
         }
     }
 
@@ -842,7 +849,7 @@ public sealed class InjectedRuntimeMaterializationTests
             runtime.AdmitBaseline(firstSet.Definition, new DualItem { Id = 1, Kind = 1 }));
     }
 
-    private sealed class LinkService(LinkContext db, ConsistencyRuntime consistency)
+    private sealed class LinkService(LinkContext db, IConsistencyRuntime consistency)
     {
         public decimal? ObservedRatio { get; private set; }
         public decimal? ObservedNormalizedRatio { get; private set; }

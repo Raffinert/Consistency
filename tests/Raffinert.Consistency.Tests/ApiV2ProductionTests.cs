@@ -3,6 +3,29 @@ namespace Raffinert.Consistency.Tests;
 public sealed class ApiV2ProductionTests
 {
     [Fact]
+    public void Application_runtime_interface_preserves_evaluation_and_materialization_semantics()
+    {
+        var fixture = Fixture.Create();
+        fixture.Prime();
+        IConsistencyRuntime runtime = fixture.Runtime;
+        Assert.Same(fixture.Runtime, runtime);
+        fixture.Link.PriceRate = 999m;
+        fixture.Link.UnitRate = 998m;
+
+        Assert.Equal(6m, runtime.Evaluate(fixture.PriceRate, fixture.Link));
+        Assert.Equal(999m, fixture.Link.PriceRate);
+        Assert.Equal(998m, fixture.Link.UnitRate);
+
+        Assert.Equal(6m, runtime.Materialize(fixture.PriceRate, fixture.Link));
+        Assert.Equal(6m, fixture.Link.PriceRate);
+        Assert.Equal(998m, fixture.Link.UnitRate);
+
+        runtime.Materialize(fixture.Link);
+        Assert.Equal(6m, fixture.Link.PriceRate);
+        Assert.Equal(6m, fixture.Link.UnitRate);
+    }
+
+    [Fact]
     public void PriceRate_lifecycle_keeps_logical_values_mirrors_and_repair_separate()
     {
         var fixture = Fixture.Create();

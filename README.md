@@ -53,7 +53,7 @@ Application services do not need to publish old/new values or manually orchestra
 ```csharp
 public sealed class LinkService(
     AppDbContext db,
-    ConsistencyRuntime consistency)
+    IConsistencyRuntime consistency)
 {
     public async Task ChangeAsync(
         long id,
@@ -73,6 +73,23 @@ public sealed class LinkService(
         await db.SaveChangesAsync(cancellationToken);
     }
 }
+```
+
+Use `IConsistencyRuntime` in ordinary application services when only `Evaluate` and `Materialize` are
+needed. Inject the concrete `ConsistencyRuntime` when advanced engine APIs such as mutation planning or
+diagnostics are required. Both dependencies resolve to the same scoped runtime in the EF integration.
+
+The narrow application contract can be substituted directly in service tests. For example, with
+NSubstitute:
+
+```csharp
+var consistency = Substitute.For<IConsistencyRuntime>();
+var service = new LinkService(db, consistency);
+
+await service.ChangeAsync(id, value, cancellationToken);
+
+consistency.Received(1).Materialize(
+    Arg.Is<Link>(x => x.Id == id));
 ```
 
 Tracked entities are admitted into the scoped consistency runtime automatically. If no materialized value is
@@ -179,10 +196,10 @@ dependency, invariant, relation, or projected selector; mapped additions and rem
 Ordinary mapped properties unused by the consistency model, and dirty entities outside its mappings and
 dependency graph, do not block binding.
 
-An application service only needs its `DbContext` and the scoped `ConsistencyRuntime`:
+An ordinary application service only needs its `DbContext` and the scoped `IConsistencyRuntime`:
 
 ```csharp
-public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+public sealed class LinkService(AppDbContext db, IConsistencyRuntime consistency)
 {
     public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
     {
@@ -198,6 +215,9 @@ public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
     }
 }
 ```
+
+The interface is the recommended dependency for logical evaluation and materialization. The concrete
+`ConsistencyRuntime` remains available for advanced mutation, planning, and diagnostic workflows.
 
 The short rule is:
 

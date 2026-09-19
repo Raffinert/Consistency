@@ -178,9 +178,10 @@ For injected EF applications, additionally verify:
 ```text
 [ ] AddRaffinertConsistency<TDbContext>(...) is registered once with the compiled model and mappings.
 [ ] No second Raffinert EF registration exists in the same IServiceCollection.
-[ ] The application service injects only DbContext + ConsistencyRuntime.
+[ ] An ordinary application service injects only DbContext + IConsistencyRuntime.
 [ ] Runtime and DbContext resolution works in either order without a circular dependency.
-[ ] The service runtime and EF session/interceptor runtime are reference-equal within a scope.
+[ ] IConsistencyRuntime aliases the same concrete ConsistencyRuntime used by the EF session/interceptor.
+[ ] Concrete ConsistencyRuntime remains injectable for advanced mutation, planning, and diagnostic APIs.
 [ ] A new scope receives a new runtime and DbContext.
 [ ] Mapped entities tracked before and after runtime resolution are baseline-admitted automatically.
 [ ] Runtime first binding happens before consistency-relevant tracked state is mutated.

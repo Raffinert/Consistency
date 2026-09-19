@@ -15,10 +15,11 @@ services.AddScoped<LinkService>();
 ```
 
 Only one `AddRaffinertConsistency<TDbContext>` registration is supported per `IServiceCollection`.
-This creates one scoped `ConsistencyRuntime` and EF session for each `AppDbContext`. Mapped entities
-already tracked when the runtime is resolved, and entities tracked later by queries, are admitted to the
-runtime baseline automatically. The runtime injected into an application service is the same instance
-used by the save interceptor.
+This creates one scoped `ConsistencyRuntime` and EF session for each `AppDbContext`. `IConsistencyRuntime`
+resolves to that same scoped concrete runtime instance bound to the EF consistency session/interceptor.
+Mapped entities already tracked when the runtime is resolved, and entities tracked later by queries, are
+admitted to the runtime baseline automatically. The runtime injected into an application service is the
+same instance used by the save interceptor.
 
 Resolve or inject that runtime before application code mutates consistency-relevant tracked state. First
 binding rejects pending scalar, navigation, or collection changes only when the changed member is used by a
@@ -31,7 +32,7 @@ do not block first binding.
 The application-facing service remains ordinary EF code:
 
 ```csharp
-public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
+public sealed class LinkService(AppDbContext db, IConsistencyRuntime consistency)
 {
     public async Task ChangeAsync(long id, decimal value, CancellationToken cancellationToken)
     {
@@ -47,6 +48,10 @@ public sealed class LinkService(AppDbContext db, ConsistencyRuntime consistency)
     }
 }
 ```
+
+Use `IConsistencyRuntime` for ordinary application code that only evaluates or materializes values. Inject
+the concrete `ConsistencyRuntime` for advanced engine operations such as explicit mutation planning,
+diagnostics, or manual runtime orchestration.
 
 Use this rule:
 

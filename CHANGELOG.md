@@ -4,6 +4,13 @@ All notable package changes are recorded here. This project follows Semantic Ver
 `1.0.0` release exists; during `0.x`, minor versions may contain deliberate breaking API changes and
 patch versions remain backward-compatible bug fixes where practical.
 
+## Unreleased
+
+### Added
+
+- Added `IConsistencyRuntime`, a narrow application-facing abstraction for logical evaluation and
+  materialization, with EF Core DI resolving it to the same scoped `ConsistencyRuntime` instance.
+
 ## 0.2.0-rc.1
 
 ### Public API

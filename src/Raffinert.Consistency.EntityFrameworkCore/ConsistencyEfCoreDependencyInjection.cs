@@ -40,6 +40,8 @@ public static class ConsistencyEfCoreServiceCollectionExtensions
             serviceProvider.GetRequiredService<ConsistencyEfCoreSession<TDbContext>>().BindRuntime(runtime);
             return runtime;
         });
+        services.AddScoped<IConsistencyRuntime>(serviceProvider =>
+            serviceProvider.GetRequiredService<ConsistencyRuntime>());
         services.AddScoped<ConsistencyScopedSaveChangesInterceptor<TDbContext>>();
         services.AddSingleton<IDbContextOptionsConfiguration<TDbContext>,
             ConsistencyDbContextOptionsConfiguration<TDbContext>>();

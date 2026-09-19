@@ -1,1 +1,5 @@
 #nullable enable
+Raffinert.Consistency.IConsistencyRuntime
+Raffinert.Consistency.IConsistencyRuntime.Evaluate<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Consistency.IConsistencyRuntime.Materialize<TSource, TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! derived, TSource! source) -> TValue
+Raffinert.Consistency.IConsistencyRuntime.Materialize<TSource>(TSource! source) -> void
