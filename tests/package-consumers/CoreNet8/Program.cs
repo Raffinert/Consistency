@@ -17,21 +17,22 @@ var projected = model.Derived(links).From(link => link.Value, doubled)
 var value = new Value { Amount = 3 };
 var link = new Link { Value = value };
 CompiledConsistencyModel compiled = model.Build();
-ConsistencyRuntime runtime = compiled.CreateRuntime(seed =>
+ConsistencyRuntime runtimeEngine = compiled.CreateRuntime(seed =>
 {
     seed.Add(values, [value]);
     seed.Add(links, [link]);
 });
+IConsistencyRuntime runtime = runtimeEngine;
 if (runtime.Evaluate(projected, link) != 6) return 1;
 runtime.Materialize(doubled, value);
 if (value.Mirror != 6) return 1;
 value.Amount = 4;
-var prepared = runtime.Prepare(MutationSet.Create(Change.Property(
+var prepared = runtimeEngine.Prepare(MutationSet.Create(Change.Property(
     values, value, item => item.Amount, 3, 4)));
-var plan = runtime.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal,
+var plan = runtimeEngine.PlanDetailed(prepared, RuntimeImpactDetailLevel.Causal,
     PlannedInvariantEvaluationMode.Affected);
 return plan.HasInvariantViolations && plan.InvariantEvaluations.Single().State == InvariantEvaluationState.Violated &&
-    runtime.Version == 0 ? 0 : 1;
+    runtimeEngine.Version == 0 ? 0 : 1;
 
 internal sealed class Value
 {

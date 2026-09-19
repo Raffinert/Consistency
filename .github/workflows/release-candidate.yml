@@ -29,11 +29,18 @@ jobs:
       - name: Validate release version, API baselines, and package payloads
         shell: pwsh
         run: ./eng/VerifyReleaseCandidate.ps1 -PackageDirectory artifacts/packages -RequireEmptyUnshipped
-      - name: Smoke test packed packages
+      - name: Restore packed package consumers
         run: |
           PACKAGE_SOURCE="$GITHUB_WORKSPACE/artifacts/packages"
           for project in CoreNet8 CoreNet10 EfNet10; do
             dotnet restore "tests/package-consumers/$project" --source https://api.nuget.org/v3/index.json --source "$PACKAGE_SOURCE"
+          done
+      - name: Verify packed consumer package versions
+        shell: pwsh
+        run: ./eng/VerifyPackageConsumerAssets.ps1
+      - name: Smoke test packed packages
+        run: |
+          for project in CoreNet8 CoreNet10 EfNet10; do
             dotnet run --project "tests/package-consumers/$project" -c Release --no-restore
           done
       # Prerelease publication remains an intentional manual action; this workflow only uploads verification artifacts.

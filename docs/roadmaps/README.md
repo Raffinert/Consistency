@@ -1,6 +1,6 @@
 # Roadmaps
 
-- **CURRENT RELEASE LINE:** `0.2.0-rc.1` freezes the current public API and injected EF Core workflow; historical implementation plans below are retained only as design/verification history.
+- **CURRENT RELEASE LINE:** `0.2.0-rc.2` adds the narrow application-facing runtime interface while preserving the frozen concrete runtime and injected EF Core workflow; historical implementation plans below are retained only as design/verification history.
 - Tasks 247–255 completed the historical `0.1.0-rc.1` preparation and verification. Public publication remained blocked while the repository was private: [Tasks 247–255](../codex-plan-0.1.0-rc.1-release-preparation.md)
 - Tasks 256–263 completed compiled-DAG runtime authority and traversal hardening at `dddb1d819b7136b16061153715b69db63b68bf83`, with exact-head GitHub Actions CI run 313 (`35245686551`) successful: [Tasks 256–263](../codex-plan-compiled-dag-runtime-authority-and-traversal-hardening.md)
 - Tasks 237–243 completed the external consumer discovery structural-admission, scope, overlay, durability, and manual-UoW closeout. The verified feature baseline is `197913a329f6de006798d89b4bfb3eb428de99e9`, with exact-head GitHub Actions CI run 288 (`35216826855`) successful: [Tasks 237–243](../codex-plan-external-consumer-discovery-post-ccfb24f-gap-closeout.md)
