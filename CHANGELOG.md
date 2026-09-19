@@ -4,40 +4,44 @@ All notable package changes are recorded here. This project follows Semantic Ver
 `1.0.0` release exists; during `0.x`, minor versions may contain deliberate breaking API changes and
 patch versions remain backward-compatible bug fixes where practical.
 
-## 0.2.0-alpha.1
+## 0.2.0-rc.1
 
-### Breaking changes
+### Public API
 
-- Removed the pre-v2 derived declaration aliases `Using`, `Compute`, and `Incrementally`; use `From`,
-  `Select`, and the recognized `Sum`/`Count`/`LongCount`/`Any` operators instead.
-- Removed invariant `Using`; compose invariant values with `From`.
-- Removed the logical derived-value `ConsistencyRuntime.Get` alias; use `Evaluate`. `GetState` remains
-  available for cache-state inspection.
-- Removed explicit EF `ConsistencyEfCoreMappings.Materialize`; declare physical mirrors once with Core
-  `MaterializeTo`, which the EF adapter consumes automatically.
-- Removed the remaining pre-v2 `*UsingBuilder` public type names; v2 fluent stages now expose
-  `DerivedRelationBuilder` and `InvariantValueBuilder`.
+- Standardized derived declarations around `From`, `DependsOn`, `Select`, and recognized
+  `Sum`/`Count`/`LongCount`/`Any` aggregates.
+- Added logical `Evaluate` plus targeted and object-level `Materialize` runtime operations.
+- Added `MaterializeTo` as the single declaration for physical derived mirrors.
+- Added typed local, relation, projected, and mixed derived composition.
+- Froze the reviewed Core and EF Core public surfaces in their shipped API baselines.
 
-### Added and preserved
+### EF Core integration
 
-- Added scoped EF Core DI integration with automatic tracked-entity baseline admission and one-call
-  `runtime.Materialize(entity)` support before ordinary `SaveChanges`/`SaveChangesAsync`.
-- Hardened injected EF runtime baseline semantics so pending navigation/projection changes remain
-  uncommitted until SQL succeeds, dirty first binding is rejected, failed saves retry from a fresh plan,
-  and duplicate EF integration registrations are rejected per service collection.
-- Bound pending EF plans to tracked baseline/coverage state so later mapped tracking or discovery restores
-  stale pending mirrors and rebuilds before persistence, while unrelated dirty EF entities no longer block
-  first runtime binding.
-- Added v2 chaining for two local inputs, mixed projected/local inputs, and two projected inputs so the
-  removed aliases do not reduce declaration capability.
-- Preserved incremental aggregate plans, logical freshness and invalidation behavior, repair dispatch,
-  targeted and object materialization, physical rollback, and exact object-set ownership checks.
+- Added scoped dependency-injection integration with automatic tracked baseline admission and ordinary
+  `SaveChanges`/`SaveChangesAsync` interception.
+- Added EF-aware `Materialize(entity)` for applications that need synchronized mirrors before saving.
+- Added member-aware first-binding guards that allow ordinary mapped properties outside the consistency
+  model while rejecting relevant changes and mapped lifecycle mutations.
+- Added pending-plan reuse and invalidation bound to runtime and baseline revisions, including bounded
+  external-consumer discovery rebuilds.
+- Added transactional rollback and retry protection for materialization, tracked baselines, and SQL failures.
 
-### Compatibility review
+### Correctness and diagnostics
 
-- This deliberate shipped-surface break was reviewed against `RELEASING.md` and advances the pre-1.0 minor
-  version from `0.1` to `0.2`. Public API baseline removals are limited to the compatibility aliases listed
-  above; shared runtime primitives and v2 builder return types remain public.
+- Preserved logical freshness, invalidation, repair dispatch, exact object-set ownership, and evaluate-first,
+  write-second materialization semantics.
+- Preserved incremental aggregate execution and typed dependency composition across local, relation, and
+  projected inputs.
+- Added compiled-model diagnostics for semantic dependencies and materialization targets.
+
+### Known limitations
+
+- `ConsistencyRuntime` is mutable and not thread-safe.
+- External consumer discovery supports eligible direct reference navigations only; unsupported scope shapes
+  require authoritative whole-set coverage or a redesigned consistency boundary.
+- Raw SQL, `ExecuteUpdate`/`ExecuteDelete`, triggers, bulk operations, and external writers are invisible
+  unless the host publishes exact mutations or reconciles/rebuilds the runtime.
+- Authoritative query completeness and database concurrency/isolation remain host responsibilities.
 
 ## 0.1.0-rc.1
 

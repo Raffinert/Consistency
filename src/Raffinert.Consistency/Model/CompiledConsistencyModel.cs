@@ -152,7 +152,7 @@ public sealed class CompiledConsistencyModel
             foreach (var dependency in invariant.Analysis.Dependencies)
                 lines.Add($"  {dependency.Role}: {dependency.Path.DisplayName}");
         }
-        lines.Add("Logical v2 graph:");
+        lines.Add("Logical dependency graph:");
         foreach (var derived in _derivedStates)
         {
             var name = derived.DefinitionKey ?? "<unnamed>";

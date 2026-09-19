@@ -1,3 +1,1 @@
 #nullable enable
-Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreServiceCollectionExtensions
-static Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreServiceCollectionExtensions.AddRaffinertConsistency<TDbContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Raffinert.Consistency.CompiledConsistencyModel! compiledModel, Raffinert.Consistency.EntityFrameworkCore.ConsistencyEfCoreMappings! mappings, Raffinert.Consistency.EntityFrameworkCore.ConsistencySaveOptions? options = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
