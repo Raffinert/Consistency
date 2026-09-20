@@ -122,7 +122,7 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         var input = new ProjectedRelationMembershipInput(relation.Definition, left, right);
         var definition = new ProjectedRelationMembershipDefinition<TSource, TLeft, TRight>(
             _source.Definition, relation.Definition, leftSelector, compiledLeft,
-            rightSelector, compiledRight, input);
+            rightSelector, compiledRight, input, _impactPolicy);
         _model.AddDerived(definition);
         return new Derived<TSource, bool>(definition, _model);
     }
@@ -772,4 +772,3 @@ public sealed class Invariant<TSource>
         return this;
     }
 }
-
