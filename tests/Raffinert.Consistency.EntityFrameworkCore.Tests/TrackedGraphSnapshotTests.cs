@@ -206,6 +206,78 @@ public sealed class TrackedGraphSnapshotTests
     }
 
     [Fact]
+    public void Same_clr_type_with_distinct_entity_metadata_does_not_cross_resolve_equal_keys()
+    {
+        using var context = CreateSharedTypeContext();
+        var unrelated = new Dictionary<string, object> { ["Id"] = 1 };
+        var dependent = new Dictionary<string, object> { ["Id"] = 1, ["PrincipalId"] = 1 };
+        context.Set<Dictionary<string, object>>("PrincipalB").Add(unrelated);
+        context.Set<Dictionary<string, object>>("Dependent").Add(dependent);
+        var dependentType = context.Model.FindEntityType("Dependent")!;
+        var foreignKey = Assert.Single(dependentType.GetForeignKeys());
+
+        var withoutTarget = TrackedGraphSnapshot.Create(context.ChangeTracker)
+            .FindPrincipals(foreignKey.PrincipalEntityType, foreignKey.PrincipalKey, [1], false);
+
+        Assert.Empty(withoutTarget);
+
+        var target = new Dictionary<string, object> { ["Id"] = 1 };
+        context.Set<Dictionary<string, object>>("PrincipalA").Add(target);
+        var withTarget = TrackedGraphSnapshot.Create(context.ChangeTracker)
+            .FindPrincipals(foreignKey.PrincipalEntityType, foreignKey.PrincipalKey, [1], false);
+
+        Assert.Single(withTarget);
+        Assert.Same(target, withTarget[0].Entity);
+    }
+
+    [Fact]
+    public void Base_entity_type_lookup_resolves_tracked_derived_principal()
+    {
+        using var context = CreateInheritanceContext();
+        var principal = new DerivedPrincipal { Id = 1 };
+        var dependent = new InheritanceDependent { Id = 1, PrincipalId = principal.Id };
+        context.AttachRange(principal, dependent);
+        var dependentType = context.Model.FindEntityType(typeof(InheritanceDependent))!;
+        var foreignKey = Assert.Single(dependentType.GetForeignKeys());
+
+        var matches = TrackedGraphSnapshot.Create(context.ChangeTracker)
+            .FindPrincipals(foreignKey.PrincipalEntityType, foreignKey.PrincipalKey, [1], false);
+
+        Assert.Single(matches);
+        Assert.Same(principal, matches[0].Entity);
+    }
+
+    [Fact]
+    public void Fk_only_one_to_one_retarget_captures_both_dependent_and_principal_navigation_changes()
+    {
+        using (var context = CreateFkOnlyRetargetContext(out var first, out var second, out var detail))
+        {
+            detail.ParentId = second.Id;
+            Assert.Same(first, detail.Parent);
+            Assert.Same(detail, first.Detail);
+            Assert.Null(second.Detail);
+
+            var changes = Assert.IsType<ChangeSet>(
+                ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker)).Changes;
+
+            AssertFkOnlyRetargetEvidence(changes, first, second, detail);
+        }
+
+        using (var context = CreateFkOnlyRetargetContext(out var first, out var second, out var detail))
+        {
+            detail.ParentId = second.Id;
+            var model = new ConsistencyModelBuilder();
+            var mappings = new ConsistencyUnitOfWorkMappings()
+                .Map(model.Objects<Parent>().Key(value => value.Id))
+                .Map(model.Objects<Detail>().Key(value => value.Id));
+
+            var mutations = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings).Mutations;
+
+            AssertFkOnlyRetargetEvidence(mutations, first, second, detail);
+        }
+    }
+
+    [Fact]
     public void Ambiguous_original_principal_side_match_fails_closed()
     {
         using var context = CreateContext();
@@ -466,6 +538,42 @@ public sealed class TrackedGraphSnapshotTests
         Assert.Single(NavigationMutations(context).OfType<PropertyChange>(), value =>
             ReferenceEquals(value.Instance, owner) && value.Member.Name == member);
 
+    private static void AssertFkOnlyRetargetEvidence(
+        IEnumerable<RuntimeMutation> mutations,
+        Parent first,
+        Parent second,
+        Detail detail)
+    {
+        var navigationChanges = mutations.OfType<PropertyChange>().ToArray();
+        var dependent = Assert.Single(navigationChanges, value =>
+            ReferenceEquals(value.Instance, detail) && value.Member.Name == nameof(Detail.Parent));
+        Assert.Same(first, dependent.OldValue);
+        Assert.Same(second, dependent.NewValue);
+        var oldPrincipal = Assert.Single(navigationChanges, value =>
+            ReferenceEquals(value.Instance, first) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Same(detail, oldPrincipal.OldValue);
+        Assert.Null(oldPrincipal.NewValue);
+        var newPrincipal = Assert.Single(navigationChanges, value =>
+            ReferenceEquals(value.Instance, second) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Null(newPrincipal.OldValue);
+        Assert.Same(detail, newPrincipal.NewValue);
+    }
+
+    private static NavigationContext CreateFkOnlyRetargetContext(
+        out Parent first,
+        out Parent second,
+        out Detail detail)
+    {
+        var context = CreateContext();
+        first = new Parent { Id = 1 };
+        second = new Parent { Id = 2 };
+        detail = new Detail { Id = 1, Parent = first };
+        first.Detail = detail;
+        context.AddRange(first, second, detail);
+        context.SaveChanges();
+        return context;
+    }
+
     private static void AssertEntry(
         TrackedGraphSnapshot snapshot,
         object entity,
@@ -522,6 +630,50 @@ public sealed class TrackedGraphSnapshotTests
     private static GeneratedContext CreateGeneratedContext() => new(
         new DbContextOptionsBuilder<GeneratedContext>()
             .UseInMemoryDatabase($"generated-graph-{Guid.NewGuid()}").Options);
+
+    private static SharedTypeContext CreateSharedTypeContext() => new(
+        new DbContextOptionsBuilder<SharedTypeContext>()
+            .UseInMemoryDatabase($"shared-graph-{Guid.NewGuid()}").Options);
+
+    private static InheritanceContext CreateInheritanceContext() => new(
+        new DbContextOptionsBuilder<InheritanceContext>()
+            .UseInMemoryDatabase($"inheritance-graph-{Guid.NewGuid()}").Options);
+
+    private sealed class SharedTypeContext(DbContextOptions<SharedTypeContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            model.SharedTypeEntity<Dictionary<string, object>>("PrincipalA", entity =>
+            {
+                entity.IndexerProperty<int>("Id");
+                entity.HasKey("Id");
+            });
+            model.SharedTypeEntity<Dictionary<string, object>>("PrincipalB", entity =>
+            {
+                entity.IndexerProperty<int>("Id");
+                entity.HasKey("Id");
+            });
+            model.SharedTypeEntity<Dictionary<string, object>>("Dependent", entity =>
+            {
+                entity.IndexerProperty<int>("Id");
+                entity.IndexerProperty<int>("PrincipalId");
+                entity.HasKey("Id");
+                entity.HasOne("PrincipalA", null).WithMany().HasForeignKey("PrincipalId");
+            });
+        }
+    }
+
+    private sealed class InheritanceContext(DbContextOptions<InheritanceContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            model.Entity<BasePrincipal>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<DerivedPrincipal>();
+            model.Entity<InheritanceDependent>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<InheritanceDependent>().HasOne(value => value.Principal).WithMany()
+                .HasForeignKey(value => value.PrincipalId);
+        }
+    }
 
     private sealed class GeneratedContext(DbContextOptions<GeneratedContext> options) : DbContext(options)
     {
@@ -649,5 +801,14 @@ public sealed class TrackedGraphSnapshotTests
         public int Id { get; set; }
         public int ParentId { get; set; }
         public GeneratedParent Parent { get; set; } = null!;
+    }
+
+    private class BasePrincipal { public int Id { get; set; } }
+    private sealed class DerivedPrincipal : BasePrincipal;
+    private sealed class InheritanceDependent
+    {
+        public int Id { get; set; }
+        public int PrincipalId { get; set; }
+        public BasePrincipal Principal { get; set; } = null!;
     }
 }

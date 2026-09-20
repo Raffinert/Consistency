@@ -151,6 +151,13 @@ resolved or indexed. Complete relationship tuples are compared with each princip
 types. Policy-aware capture reuses that same tracked snapshot for generated-FK fixup evidence, locating intended
 principals by entity reference without a per-property scan of the change tracker.
 
+Tracked relationship indexes use EF `IEntityType` assignability, not CLR assignability. Shared CLR entity types
+therefore cannot cross-resolve equal keys, while a relationship targeting an EF base type still resolves a valid
+tracked derived entity. Navigation capture preserves original relationship evidence before change detection,
+stabilizes EF fixup once, and then refreshes principal-side one-to-one current values. An FK-only retarget thus
+reports both the dependent reference and the old/new principal references without losing owned-reference or
+replacement evidence.
+
 Relevant tracked scalar, navigation, add, and remove changes make a retained preview stale. Properties outside the
 compiled consistency semantics are filtered out and do not. Arbitrary unreported mutations in dependency-free core
 POCOs remain outside the guarantee because core has no general mutation observer.

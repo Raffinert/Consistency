@@ -1,4 +1,30 @@
-# Allocation consistency dogfood seventh-pass findings
+# Allocation consistency dogfood eighth-pass findings
+
+## EF capture correctness closeout
+
+The eighth pass makes snapshot index membership follow EF metadata identity. Indexes now use
+`IEntityType.IsAssignableFrom(entry.Metadata)`: unrelated shared entity types backed by the same CLR type are
+excluded even when their key values match, while base-target relationships continue to include valid EF-derived
+entries.
+
+FK-only one-to-one retargeting exposed a real ordering gap. Before the fix, dependent-side lookup observed the new
+foreign key while principal-side CLR navigations could still describe the old graph. Capture now records original
+relationship evidence before fixup, invokes change detection once, and refreshes principal-side current references
+from the stabilized graph. Both public adapter surfaces report the dependent retarget, removal from the old
+principal, and addition to the new principal. Existing owned-reference replacement, ambiguity, generated-key,
+partial-null, structural-key, and custom-comparer regressions remain green.
+
+The current one-fingerprint measurements remain indexed, with zero reference candidate checks:
+
+| tracked entries | capture | allocated bytes | references | reference lookups | candidate checks |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 2.243 ms | 690,968 | 200 | 400 | 0 |
+| 1,000 | 17.371 ms | 6,132,592 | 2,000 | 4,000 | 0 |
+| 10,000 | 42.893 ms | 58,067,664 | 20,000 | 40,000 | 0 |
+
+The unchanged rejected-preview workload measured 0.998/1.520 ms and 4,726,736 bytes at 100;
+4.226/10.077 ms and 41,307,208 bytes at 1,000; and 40.424/82.420 ms and 406,749,576 bytes at 10,000.
+Every size retained five reads and six fingerprint validations.
 
 ## EF capture hardening
 

@@ -259,20 +259,10 @@ public static class ChangeTrackerAdapter
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
-        TrackedGraphSnapshot snapshot;
-        IReadOnlyList<RuntimeMutation> navigationChanges;
-        var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
-        changeTracker.AutoDetectChangesEnabled = false;
-        try
-        {
-            snapshot = TrackedGraphSnapshot.Create(changeTracker, diagnostics);
-            navigationChanges = CaptureNavigationChangesCore(snapshot, mappings, diagnostics);
-        }
-        finally
-        {
-            changeTracker.AutoDetectChangesEnabled = autoDetectChanges;
-        }
-        changeTracker.DetectChanges();
+        var navigationCapture = CaptureStabilizedNavigationSnapshot(
+            changeTracker, mappings, diagnostics);
+        var snapshot = navigationCapture.Snapshot;
+        var navigationChanges = navigationCapture.Changes;
         var additions = new List<RuntimeMutation>();
         var removals = new List<RuntimeMutation>();
         var properties = new List<CapturedEfPropertyMutation>();
@@ -311,7 +301,6 @@ public static class ChangeTrackerAdapter
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         var navigationChanges = CaptureNavigationChanges(changeTracker, null);
-        changeTracker.DetectChanges();
         var changes = ReadModifiedProperties(changeTracker, null)
             .Concat(navigationChanges.OfType<PropertyChange>())
             .ToArray();
@@ -325,7 +314,6 @@ public static class ChangeTrackerAdapter
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
         var navigationChanges = CaptureNavigationChanges(changeTracker, mappings);
-        changeTracker.DetectChanges();
         var additions = new List<RuntimeMutation>();
         var removals = new List<RuntimeMutation>();
         foreach (var entry in changeTracker.Entries())
@@ -362,7 +350,6 @@ public static class ChangeTrackerAdapter
         var navigationChanges = CaptureNavigationChanges(changeTracker, mappings, diagnostics);
         if (diagnostics is not null)
             diagnostics.NavigationCaptureTicks += Stopwatch.GetTimestamp() - navigationStart;
-        changeTracker.DetectChanges();
         var additions = new List<RuntimeMutation>();
         var removals = new List<RuntimeMutation>();
         foreach (var entry in changeTracker.Entries())
@@ -475,25 +462,52 @@ public static class ChangeTrackerAdapter
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChanges(
         ChangeTracker changeTracker,
         ConsistencyUnitOfWorkMappings? mappings,
-        EfFingerprintDiagnostics? diagnostics = null)
+        EfFingerprintDiagnostics? diagnostics = null) =>
+        CaptureStabilizedNavigationSnapshot(changeTracker, mappings, diagnostics).Changes;
+
+    private static StabilizedNavigationCapture CaptureStabilizedNavigationSnapshot(
+        ChangeTracker changeTracker,
+        ConsistencyUnitOfWorkMappings? mappings,
+        EfFingerprintDiagnostics? diagnostics)
     {
+        TrackedGraphSnapshot snapshot;
+        List<RuntimeMutation> changes;
+        var principalReferences = new List<PrincipalReferenceEvidence>();
         var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
         changeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            return CaptureNavigationChangesCore(
-                TrackedGraphSnapshot.Create(changeTracker, diagnostics), mappings, diagnostics);
+            snapshot = TrackedGraphSnapshot.Create(changeTracker, diagnostics);
+            changes = CaptureNavigationChangesCore(
+                snapshot, mappings, diagnostics, principalReferences).ToList();
         }
         finally
         {
             changeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
+
+        changeTracker.DetectChanges();
+        foreach (var evidence in principalReferences)
+        {
+            changes.RemoveAll(change => change is PropertyChange property &&
+                ReferenceEquals(property.Instance, evidence.Owner.Entity) &&
+                property.Member == evidence.Member);
+            var currentValue = evidence.Owner.Reference(evidence.Navigation.Name).CurrentValue;
+            if (!ReferenceEquals(evidence.OriginalValue, currentValue))
+                changes.Add(evidence.Mapping is null
+                    ? Change.Property(
+                        evidence.Owner.Entity, evidence.Member, evidence.OriginalValue, currentValue)
+                    : evidence.Mapping.Property(
+                        evidence.Owner.Entity, evidence.Member, evidence.OriginalValue, currentValue));
+        }
+        return new StabilizedNavigationCapture(snapshot, changes);
     }
 
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChangesCore(
         TrackedGraphSnapshot snapshot,
         ConsistencyUnitOfWorkMappings? mappings,
-        EfFingerprintDiagnostics? diagnostics)
+        EfFingerprintDiagnostics? diagnostics,
+        List<PrincipalReferenceEvidence> principalReferences)
     {
         var changes = new List<RuntimeMutation>();
         var resets = new Dictionary<(object Owner, MemberInfo Member),
@@ -509,6 +523,9 @@ public static class ChangeTrackerAdapter
                 var member = GetMember(navigation);
                 if (member is null) continue;
                 var oldValue = ResolveReference(snapshot, owner, navigation, original: true);
+                if (!navigation.IsOnDependent)
+                    principalReferences.Add(new PrincipalReferenceEvidence(
+                        owner, navigation, member, mapping, oldValue));
                 var newValue = ResolveReference(snapshot, owner, navigation, original: false);
                 if (!ReferenceEquals(oldValue, newValue))
                     changes.Add(mapping is null
@@ -531,6 +548,17 @@ public static class ChangeTrackerAdapter
             : reset.Value.CollectionReset(reset.Key.Owner, reset.Key.Member)));
         return changes;
     }
+
+    private sealed record StabilizedNavigationCapture(
+        TrackedGraphSnapshot Snapshot,
+        IReadOnlyList<RuntimeMutation> Changes);
+
+    private sealed record PrincipalReferenceEvidence(
+        EntityEntry Owner,
+        INavigation Navigation,
+        MemberInfo Member,
+        ConsistencyUnitOfWorkMappings.IEntitySetMapping? Mapping,
+        object? OriginalValue);
 
     private static object? ResolveReference(
         TrackedGraphSnapshot snapshot,

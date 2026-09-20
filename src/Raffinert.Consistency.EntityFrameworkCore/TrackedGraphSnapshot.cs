@@ -93,7 +93,7 @@ internal sealed class TrackedGraphSnapshot
             new TrackedValueKeyComparer(comparisonProperties));
         foreach (var entry in Entries)
         {
-            if (!target.ClrType.IsInstanceOfType(entry.Entity))
+            if (!target.IsAssignableFrom(entry.Metadata))
                 continue;
             var values = valueProperties.Select(property =>
                 original
