@@ -15,6 +15,9 @@ internal sealed class EfFingerprintDiagnostics
     internal int CapturedNavigationMutations { get; set; }
     internal long GeneratedFixupPrincipalLookups { get; set; }
     internal long GeneratedFixupTrackedEntryScans { get; set; }
+    internal long PrincipalReferenceEvidenceCaptured { get; set; }
+    internal long PrincipalReferenceCleanupScans { get; set; }
+    internal long PrincipalReferenceChangesEmitted { get; set; }
     internal int ExternalDiscoveryResolverInvocations { get; set; }
     internal int ExternalDiscoveryRows { get; set; }
     internal long DetectChangesTicks { get; set; }

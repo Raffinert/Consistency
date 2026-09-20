@@ -278,6 +278,102 @@ public sealed class TrackedGraphSnapshotTests
     }
 
     [Fact]
+    public void Unchanged_one_to_one_emits_no_navigation_mutations()
+    {
+        using var context = CreateFkOnlyRetargetContext(out _, out _, out _);
+
+        Assert.Null(ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
+    }
+
+    [Fact]
+    public void Fk_only_one_to_one_removal_captures_dependent_and_old_principal_changes()
+    {
+        using var context = CreateFkOnlyRetargetContext(out var first, out var second, out var detail);
+        detail.ParentId = null;
+
+        var changes = Assert.IsType<ChangeSet>(
+            ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker)).Changes;
+
+        var dependent = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, detail) && value.Member.Name == nameof(Detail.Parent));
+        Assert.Same(first, dependent.OldValue);
+        Assert.Null(dependent.NewValue);
+        var principal = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, first) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Same(detail, principal.OldValue);
+        Assert.Null(principal.NewValue);
+        Assert.DoesNotContain(changes, value =>
+            ReferenceEquals(value.Instance, second) && value.Member.Name == nameof(Parent.Detail));
+    }
+
+    [Fact]
+    public void Fk_only_one_to_one_addition_captures_dependent_and_new_principal_changes()
+    {
+        using var context = CreateContext();
+        var parent = new Parent { Id = 1 };
+        var detail = new Detail { Id = 1 };
+        context.AddRange(parent, detail);
+        context.SaveChanges();
+        detail.ParentId = parent.Id;
+
+        var changes = Assert.IsType<ChangeSet>(
+            ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker)).Changes;
+
+        var dependent = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, detail) && value.Member.Name == nameof(Detail.Parent));
+        Assert.Null(dependent.OldValue);
+        Assert.Same(parent, dependent.NewValue);
+        var principal = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, parent) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Null(principal.OldValue);
+        Assert.Same(detail, principal.NewValue);
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(1_000)]
+    [InlineData(10_000)]
+    public void Mass_fk_only_one_to_one_retarget_has_linear_structural_work(int count)
+    {
+        using var context = CreateContext();
+        var originals = Enumerable.Range(1, count)
+            .Select(index => new Parent { Id = index * 2 - 1 }).ToArray();
+        var replacements = Enumerable.Range(1, count)
+            .Select(index => new Parent { Id = index * 2 }).ToArray();
+        var details = Enumerable.Range(1, count)
+            .Select(index => new Detail { Id = index, Parent = originals[index - 1] }).ToArray();
+        for (var index = 0; index < count; index++)
+            originals[index].Detail = details[index];
+        context.AddRange(originals);
+        context.AddRange(replacements);
+        context.AddRange(details);
+        context.SaveChanges();
+        for (var index = 0; index < count; index++)
+            details[index].ParentId = replacements[index].Id;
+        var model = new ConsistencyModelBuilder();
+        var mappings = new ConsistencyUnitOfWorkMappings()
+            .Map(model.Objects<Parent>().Key(value => value.Id))
+            .Map(model.Objects<Detail>().Key(value => value.Id));
+        var diagnostics = new EfFingerprintDiagnostics();
+
+        var unit = ChangeTrackerAdapter.CaptureUnitOfWork(
+            context.ChangeTracker, mappings, (_, _) => true, diagnostics);
+
+        var navigationChanges = unit.Mutations.OfType<PropertyChange>()
+            .Where(value => value.Member.Name is nameof(Detail.Parent) or nameof(Parent.Detail))
+            .ToArray();
+        Assert.Equal(count * 3, navigationChanges.Length);
+        Assert.All(navigationChanges.GroupBy(value => (value.Instance, value.Member)), group =>
+            Assert.Single(group));
+        Assert.Equal(count * 3, diagnostics.ReferenceNavigationsVisited);
+        Assert.Equal(count * 4, diagnostics.ReferenceIndexLookups);
+        Assert.Equal(0, diagnostics.ReferenceCandidateChecks);
+        Assert.Equal(count * 2, diagnostics.PrincipalReferenceEvidenceCaptured);
+        Assert.Equal(0, diagnostics.PrincipalReferenceCleanupScans);
+        Assert.Equal(count * 2, diagnostics.PrincipalReferenceChangesEmitted);
+    }
+
+    [Fact]
     public void Ambiguous_original_principal_side_match_fails_closed()
     {
         using var context = CreateContext();

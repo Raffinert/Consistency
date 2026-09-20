@@ -1,4 +1,26 @@
-# Allocation consistency dogfood eighth-pass findings
+# Allocation consistency dogfood ninth-pass findings
+
+## One-to-one capture linearity closeout
+
+The eighth-pass FK-only one-to-one correctness fix initially emitted provisional principal-side changes and then
+called `RemoveAll` once per principal reference before emitting post-fixup truth. Deterministic diagnostics proved
+that cleanup was quadratic: 10,000 retargets produced 20,000 principal evidences but 399,990,000 change-list
+inspections.
+
+Principal-side capture is now explicitly two-phase. The pre-fixup snapshot resolves and retains original evidence
+without emitting a provisional principal mutation. After one `DetectChanges()`, capture reads the stabilized current
+navigation and emits each real principal change once. Dependent references and collection resets retain their
+indexed pre-fixup behavior.
+
+| retargets | old capture | old cleanup inspections | new capture | allocated bytes | evidences | cleanup scans | emitted | lookups/candidates |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 18.233 ms | 39,900 | 16.569 ms | 1,268,392 | 200 | 0 | 200 | 400 / 0 |
+| 1,000 | 64.238 ms | 3,999,000 | 34.502 ms | 12,194,920 | 2,000 | 0 | 2,000 | 4,000 / 0 |
+| 10,000 | 1,043.365 ms | 399,990,000 | 231.397 ms | 121,376,400 | 20,000 | 0 | 20,000 | 40,000 / 0 |
+
+The deterministic regression also proves exactly three navigation changes per retarget, no duplicate owner/member
+mutation, proportional evidence/emission counts, zero cleanup scans, and zero reference candidate checks. Focused
+tests cover FK-only retarget, removal, addition, no-op, explicit replacement, and ambiguity failure.
 
 ## EF capture correctness closeout
 
@@ -18,12 +40,12 @@ The current one-fingerprint measurements remain indexed, with zero reference can
 
 | tracked entries | capture | allocated bytes | references | reference lookups | candidate checks |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 2.243 ms | 690,968 | 200 | 400 | 0 |
-| 1,000 | 17.371 ms | 6,132,592 | 2,000 | 4,000 | 0 |
-| 10,000 | 42.893 ms | 58,067,664 | 20,000 | 40,000 | 0 |
+| 100 | 2.219 ms | 690,992 | 200 | 400 | 0 |
+| 1,000 | 18.894 ms | 6,132,616 | 2,000 | 4,000 | 0 |
+| 10,000 | 46.860 ms | 58,067,688 | 20,000 | 40,000 | 0 |
 
-The unchanged rejected-preview workload measured 0.998/1.520 ms and 4,726,736 bytes at 100;
-4.226/10.077 ms and 41,307,208 bytes at 1,000; and 40.424/82.420 ms and 406,749,576 bytes at 10,000.
+The unchanged rejected-preview workload measured 0.968/1.554 ms and 4,726,736 bytes at 100;
+5.769/10.950 ms and 41,307,208 bytes at 1,000; and 39.898/89.455 ms and 406,749,576 bytes at 10,000.
 Every size retained five reads and six fingerprint validations.
 
 ## EF capture hardening

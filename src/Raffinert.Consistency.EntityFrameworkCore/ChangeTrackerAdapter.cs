@@ -489,16 +489,17 @@ public static class ChangeTrackerAdapter
         changeTracker.DetectChanges();
         foreach (var evidence in principalReferences)
         {
-            changes.RemoveAll(change => change is PropertyChange property &&
-                ReferenceEquals(property.Instance, evidence.Owner.Entity) &&
-                property.Member == evidence.Member);
             var currentValue = evidence.Owner.Reference(evidence.Navigation.Name).CurrentValue;
             if (!ReferenceEquals(evidence.OriginalValue, currentValue))
+            {
+                if (diagnostics is not null)
+                    diagnostics.PrincipalReferenceChangesEmitted++;
                 changes.Add(evidence.Mapping is null
                     ? Change.Property(
                         evidence.Owner.Entity, evidence.Member, evidence.OriginalValue, currentValue)
                     : evidence.Mapping.Property(
                         evidence.Owner.Entity, evidence.Member, evidence.OriginalValue, currentValue));
+            }
         }
         return new StabilizedNavigationCapture(snapshot, changes);
     }
@@ -524,8 +525,13 @@ public static class ChangeTrackerAdapter
                 if (member is null) continue;
                 var oldValue = ResolveReference(snapshot, owner, navigation, original: true);
                 if (!navigation.IsOnDependent)
+                {
+                    if (diagnostics is not null)
+                        diagnostics.PrincipalReferenceEvidenceCaptured++;
                     principalReferences.Add(new PrincipalReferenceEvidence(
                         owner, navigation, member, mapping, oldValue));
+                    continue;
+                }
                 var newValue = ResolveReference(snapshot, owner, navigation, original: false);
                 if (!ReferenceEquals(oldValue, newValue))
                     changes.Add(mapping is null
