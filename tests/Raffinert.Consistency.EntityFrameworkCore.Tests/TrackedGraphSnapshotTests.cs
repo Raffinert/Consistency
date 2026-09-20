@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Raffinert.Consistency.EntityFrameworkCore;
 
 namespace Raffinert.Consistency.Tests;
@@ -74,6 +75,117 @@ public sealed class TrackedGraphSnapshotTests
     }
 
     [Fact]
+    public void Partial_null_composite_foreign_keys_are_null_relationships()
+    {
+        using var context = CreateContext();
+        var parent = new CompositeParent { Partition = 1, Code = "A" };
+        var nullNull = new CompositeChild { Id = 1 };
+        var valueNull = new CompositeChild { Id = 2, ParentPartition = 1 };
+        var nullValue = new CompositeChild { Id = 3, ParentCode = "A" };
+        var complete = new CompositeChild
+        {
+            Id = 4,
+            ParentPartition = 1,
+            ParentCode = "A"
+        };
+        context.AddRange(parent, nullNull, valueNull, nullValue, complete);
+        context.SaveChanges();
+
+        Assert.Same(parent, complete.Parent);
+        Assert.Null(nullNull.Parent);
+        Assert.Null(valueNull.Parent);
+        Assert.Null(nullValue.Parent);
+        Assert.DoesNotContain(NavigationMutations(context).OfType<PropertyChange>(), mutation =>
+            mutation.Member.Name == nameof(CompositeChild.Parent));
+    }
+
+    [Fact]
+    public void Composite_reference_transitions_to_and_from_partial_null_emit_exact_values()
+    {
+        using (var context = CreateContext())
+        {
+            var parent = new CompositeParent { Partition = 1, Code = "A" };
+            var child = new CompositeChild { Id = 1, Parent = parent };
+            context.AddRange(parent, child);
+            context.SaveChanges();
+
+            child.Parent = null;
+            child.ParentCode = null;
+            var removed = ReferenceChange(context, child, nameof(CompositeChild.Parent));
+
+            Assert.Same(parent, removed.OldValue);
+            Assert.Null(removed.NewValue);
+        }
+
+        using (var context = CreateContext())
+        {
+            var parent = new CompositeParent { Partition = 1, Code = "A" };
+            var child = new CompositeChild { Id = 1, ParentPartition = 1 };
+            context.AddRange(parent, child);
+            context.SaveChanges();
+
+            child.Parent = parent;
+            child.ParentCode = parent.Code;
+            var added = ReferenceChange(context, child, nameof(CompositeChild.Parent));
+
+            Assert.Null(added.OldValue);
+            Assert.Same(parent, added.NewValue);
+        }
+    }
+
+    [Fact]
+    public void Partial_null_composite_foreign_keys_reset_only_real_parent_collections()
+    {
+        using (var context = CreateContext())
+        {
+            var first = new CompositeParent { Partition = 1, Code = "A" };
+            var second = new CompositeParent { Partition = 2, Code = "B" };
+            var child = new CompositeChild { Id = 1, Parent = first };
+            first.Children.Add(child);
+            context.AddRange(first, second, child);
+            context.SaveChanges();
+
+            child.Parent = null;
+            child.ParentCode = null;
+            var resets = NavigationMutations(context).OfType<CollectionChange>().ToArray();
+
+            Assert.Single(resets, mutation => ReferenceEquals(mutation.Owner, first));
+            Assert.DoesNotContain(resets, mutation => ReferenceEquals(mutation.Owner, second));
+        }
+
+        using (var context = CreateContext())
+        {
+            var first = new CompositeParent { Partition = 1, Code = "A" };
+            var second = new CompositeParent { Partition = 2, Code = "B" };
+            var child = new CompositeChild { Id = 1, ParentPartition = 1 };
+            context.AddRange(first, second, child);
+            context.SaveChanges();
+
+            child.Parent = second;
+            child.ParentPartition = second.Partition;
+            child.ParentCode = second.Code;
+            var resets = NavigationMutations(context).OfType<CollectionChange>().ToArray();
+
+            Assert.Single(resets, mutation => ReferenceEquals(mutation.Owner, second));
+            Assert.DoesNotContain(resets, mutation => ReferenceEquals(mutation.Owner, first));
+        }
+
+        using (var context = CreateContext())
+        {
+            var first = new CompositeParent { Partition = 1, Code = "A" };
+            var second = new CompositeParent { Partition = 2, Code = "B" };
+            var child = new CompositeChild { Id = 1, ParentPartition = 1 };
+            context.AddRange(first, second, child);
+            context.SaveChanges();
+
+            child.ParentPartition = 2;
+            var resets = NavigationMutations(context).OfType<CollectionChange>().ToArray();
+
+            Assert.Empty(resets);
+        }
+    }
+
+    [Fact]
     public void Principal_side_one_to_one_reference_uses_original_dependent_index()
     {
         using var context = CreateContext();
@@ -108,6 +220,80 @@ public sealed class TrackedGraphSnapshotTests
             ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
 
         Assert.Contains("not tracked unambiguously", error.Message);
+    }
+
+    [Fact]
+    public void Ambiguous_original_dependent_side_match_fails_closed()
+    {
+        using var context = CreateContext();
+        var first = new Parent { Id = 1 };
+        var second = new Parent { Id = 2 };
+        var child = new Child { Id = 1, Parent = first };
+        context.AddRange(first, second, child);
+        context.SaveChanges();
+        second.Id = first.Id;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker));
+
+        Assert.Contains("not tracked unambiguously", error.Message);
+    }
+
+    [Fact]
+    public void Entry_lookup_uses_reference_identity_for_every_tracked_state()
+    {
+        using var context = CreateContext();
+        var unchanged = new EqualityEntity { Id = 1 };
+        var modified = new EqualityEntity { Id = 2 };
+        var deleted = new EqualityEntity { Id = 3 };
+        context.AddRange(unchanged, modified, deleted);
+        context.SaveChanges();
+        modified.Value = 1;
+        context.Remove(deleted);
+        var added = new EqualityEntity { Id = 4 };
+        context.Add(added);
+        context.ChangeTracker.DetectChanges();
+        var snapshot = TrackedGraphSnapshot.Create(context.ChangeTracker);
+
+        AssertEntry(snapshot, unchanged, EntityState.Unchanged);
+        AssertEntry(snapshot, modified, EntityState.Modified);
+        AssertEntry(snapshot, deleted, EntityState.Deleted);
+        AssertEntry(snapshot, added, EntityState.Added);
+        Assert.Null(snapshot.FindEntry(new EqualityEntity { Id = unchanged.Id }));
+        Assert.Null(snapshot.FindEntry(new EqualityEntity { Id = 99 }));
+    }
+
+    [Fact]
+    public void Byte_array_key_resolution_uses_ef_structural_key_comparer()
+    {
+        using var context = CreateContext();
+        var parent = new BinaryParent { Id = [1, 2, 3] };
+        var child = new BinaryChild { Id = 1 };
+        context.AddRange(parent, child);
+        context.SaveChanges();
+
+        child.ParentId = [1, 2, 3];
+        var change = ReferenceChange(context, child, nameof(BinaryChild.Parent));
+
+        Assert.Null(change.OldValue);
+        Assert.Same(parent, change.NewValue);
+    }
+
+    [Fact]
+    public void Converted_key_resolution_uses_configured_ef_key_comparer()
+    {
+        using var context = CreateContext();
+        var first = new ConvertedParent { Id = new InsensitiveKey("first") };
+        var second = new ConvertedParent { Id = new InsensitiveKey("second") };
+        var child = new ConvertedChild { Id = 1, Parent = first };
+        context.AddRange(first, second, child);
+        context.SaveChanges();
+
+        child.ParentId = new InsensitiveKey("SECOND");
+        var change = ReferenceChange(context, child, nameof(ConvertedChild.Parent));
+
+        Assert.Same(first, change.OldValue);
+        Assert.Same(second, change.NewValue);
     }
 
     [Fact]
@@ -231,6 +417,39 @@ public sealed class TrackedGraphSnapshotTests
         Assert.True(large.CollectionIndexLookups < small.CollectionIndexLookups * 20);
     }
 
+    [Theory]
+    [InlineData(100)]
+    [InlineData(1_000)]
+    [InlineData(10_000)]
+    public void Generated_fixup_policy_capture_uses_one_reference_lookup_per_modified_fk(int count)
+    {
+        using var context = CreateGeneratedContext();
+        var original = new GeneratedParent();
+        var children = Enumerable.Range(1, count)
+            .Select(id => new GeneratedChild { Id = id, Parent = original }).ToArray();
+        context.Add(original);
+        context.AddRange(children);
+        context.SaveChanges();
+        var replacement = new GeneratedParent();
+        context.Add(replacement);
+        foreach (var child in children)
+        {
+            child.Parent = replacement;
+            child.ParentId = replacement.Id;
+        }
+        var model = new ConsistencyModelBuilder();
+        var mappings = new ConsistencyUnitOfWorkMappings()
+            .Map(model.Objects<GeneratedParent>().Key(value => value.Id))
+            .Map(model.Objects<GeneratedChild>().Key(value => value.Id));
+        var diagnostics = new EfFingerprintDiagnostics();
+
+        _ = ChangeTrackerAdapter.CapturePolicyAwareSnapshot(
+            context.ChangeTracker, mappings, (_, _) => true, diagnostics);
+
+        Assert.Equal(count, diagnostics.GeneratedFixupPrincipalLookups);
+        Assert.Equal(0, diagnostics.GeneratedFixupTrackedEntryScans);
+    }
+
     [Fact]
     public void Existing_principal_key_mutation_remains_rejected_by_ef()
     {
@@ -246,6 +465,17 @@ public sealed class TrackedGraphSnapshotTests
     private static PropertyChange ReferenceChange(DbContext context, object owner, string member) =>
         Assert.Single(NavigationMutations(context).OfType<PropertyChange>(), value =>
             ReferenceEquals(value.Instance, owner) && value.Member.Name == member);
+
+    private static void AssertEntry(
+        TrackedGraphSnapshot snapshot,
+        object entity,
+        EntityState state)
+    {
+        var entry = Assert.IsAssignableFrom<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry>(
+            snapshot.FindEntry(entity));
+        Assert.Same(entity, entry.Entity);
+        Assert.Equal(state, entry.State);
+    }
 
     private static IReadOnlyList<RuntimeMutation> NavigationMutations(DbContext context)
     {
@@ -289,6 +519,21 @@ public sealed class TrackedGraphSnapshotTests
         new DbContextOptionsBuilder<NavigationContext>()
             .UseInMemoryDatabase($"tracked-graph-{Guid.NewGuid()}").Options);
 
+    private static GeneratedContext CreateGeneratedContext() => new(
+        new DbContextOptionsBuilder<GeneratedContext>()
+            .UseInMemoryDatabase($"generated-graph-{Guid.NewGuid()}").Options);
+
+    private sealed class GeneratedContext(DbContextOptions<GeneratedContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            model.Entity<GeneratedParent>().Property(value => value.Id).ValueGeneratedOnAdd();
+            model.Entity<GeneratedChild>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<GeneratedChild>().HasOne(value => value.Parent).WithMany()
+                .HasForeignKey(value => value.ParentId);
+        }
+    }
+
     private sealed class NavigationContext(DbContextOptions<NavigationContext> options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder model)
@@ -307,6 +552,25 @@ public sealed class TrackedGraphSnapshotTests
             model.Entity<Node>().Property(value => value.Id).ValueGeneratedNever();
             model.Entity<Node>().HasOne(value => value.Parent).WithMany(value => value.Children)
                 .HasForeignKey(value => value.ParentId).IsRequired(false);
+            model.Entity<EqualityEntity>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<BinaryParent>().HasKey(value => value.Id);
+            model.Entity<BinaryChild>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<BinaryChild>().HasOne(value => value.Parent).WithMany()
+                .HasForeignKey(value => value.ParentId).IsRequired(false);
+            var keyComparer = new ValueComparer<InsensitiveKey>(
+                (left, right) => string.Equals(left.Value, right.Value, StringComparison.OrdinalIgnoreCase),
+                value => StringComparer.OrdinalIgnoreCase.GetHashCode(value.Value),
+                value => new InsensitiveKey(value.Value));
+            model.Entity<ConvertedParent>().HasKey(value => value.Id);
+            model.Entity<ConvertedParent>().Property(value => value.Id)
+                .HasConversion(value => value.Value, value => new InsensitiveKey(value))
+                .Metadata.SetValueComparer(keyComparer);
+            model.Entity<ConvertedChild>().Property(value => value.Id).ValueGeneratedNever();
+            model.Entity<ConvertedChild>().Property(value => value.ParentId)
+                .HasConversion(value => value.Value, value => new InsensitiveKey(value))
+                .Metadata.SetValueComparer(keyComparer);
+            model.Entity<ConvertedChild>().HasOne(value => value.Parent).WithMany()
+                .HasForeignKey(value => value.ParentId);
         }
     }
 
@@ -352,5 +616,38 @@ public sealed class TrackedGraphSnapshotTests
         public int? ParentId { get; set; }
         public Node? Parent { get; set; }
         public ICollection<Node> Children { get; } = [];
+    }
+
+    private sealed class EqualityEntity
+    {
+        public int Id { get; set; }
+        public int Value { get; set; }
+        public override bool Equals(object? value) => value is EqualityEntity other && Id == other.Id;
+        public override int GetHashCode() => Id;
+    }
+
+    private sealed class BinaryParent { public byte[] Id { get; set; } = []; }
+    private sealed class BinaryChild
+    {
+        public int Id { get; set; }
+        public byte[]? ParentId { get; set; }
+        public BinaryParent? Parent { get; set; }
+    }
+
+    private readonly record struct InsensitiveKey(string Value);
+    private sealed class ConvertedParent { public InsensitiveKey Id { get; set; } }
+    private sealed class ConvertedChild
+    {
+        public int Id { get; set; }
+        public InsensitiveKey ParentId { get; set; }
+        public ConvertedParent Parent { get; set; } = null!;
+    }
+
+    private sealed class GeneratedParent { public int Id { get; set; } }
+    private sealed class GeneratedChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+        public GeneratedParent Parent { get; set; } = null!;
     }
 }

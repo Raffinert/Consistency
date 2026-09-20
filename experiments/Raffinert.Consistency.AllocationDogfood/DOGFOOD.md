@@ -1,4 +1,21 @@
-# Allocation consistency dogfood sixth-pass findings
+# Allocation consistency dogfood seventh-pass findings
+
+## EF capture hardening
+
+The seventh pass preserves the sixth-pass indexed navigation design and closes three narrower gaps. Optional
+composite foreign keys now follow EF relationship semantics: any null component means there is no relationship,
+so partial tuples are neither principal lookup keys nor dependent-index entries. Transitions between complete and
+partial-null tuples emit exact old/new navigation evidence and reset only real principal collections.
+
+Policy-aware capture now creates one `TrackedGraphSnapshot` for navigation and scalar/generated-fixup evidence.
+Generated-FK principal lookup uses the snapshot's reference-identity entry map instead of scanning all tracked
+entries per modified FK property. Regression cases at 100, 1,000, and 10,000 modified dependents observe exactly
+one principal lookup per modified FK and zero full-tracker principal scans.
+
+EF's `IProperty.GetKeyValueComparer()` is the key equality authority for tracked relationship indexes. Ordinary
+`object.Equals` is insufficient for supported values such as distinct `byte[]` instances with equal contents and
+value-converted keys with configured comparers. Snapshot dictionaries cache one component-comparer set per index
+and use those comparers for both equality and hashing; ordinary scalar and composite keys retain their behavior.
 
 ## Fixed by framework changes
 
@@ -131,17 +148,17 @@ and lazily builds metadata-aware current/original principal-key and foreign-key 
 
 | tracked entries | old capture | indexed capture | old allocated bytes | indexed allocated bytes | old reference candidate checks | indexed reference lookups |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 4.238 ms | 1.399 ms | 3,531,104 | 647,376 | 41,200 | 400 |
-| 1,000 | 54.220 ms | 12.155 ms | 264,984,704 | 5,708,976 | 4,012,000 | 4,000 |
-| 10,000 | 4,238.213 ms | 27.471 ms | 25,686,713,664 | 53,924,256 | 400,120,000 | 40,000 |
+| 100 | 4.238 ms | 2.254 ms | 3,531,104 | 658,392 | 41,200 | 400 |
+| 1,000 | 54.220 ms | 20.307 ms | 264,984,704 | 5,812,016 | 4,012,000 | 4,000 |
+| 10,000 | 4,238.213 ms | 26.890 ms | 25,686,713,664 | 54,860,888 | 400,120,000 | 40,000 |
 
 The unchanged rejected-save workload now measures:
 
 | allocations | rejection + preview | repair query | allocated bytes | preview reads | fingerprint validations |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 0.865 ms | 1.398 ms | 4,421,704 | 5 | 6 |
-| 1,000 | 3.920 ms | 11.483 ms | 38,342,008 | 5 | 6 |
-| 10,000 | 37.030 ms | 76.410 ms | 377,748,072 | 5 | 6 |
+| 100 | 1.135 ms | 1.755 ms | 4,478,208 | 5 | 6 |
+| 1,000 | 4.204 ms | 10.012 ms | 39,063,176 | 5 | 6 |
+| 10,000 | 40.342 ms | 96.279 ms | 384,347,784 | 5 | 6 |
 
 For comparison, the pre-optimization run on the same machine was 7.899/18.309 ms and 16,647,776 bytes at
 100; 78.069/172.954 ms and 965,278,448 bytes at 1,000; and 8,952.954/22,400.720 ms and
@@ -158,6 +175,25 @@ prototype was rejected for preview validation: a new database consumer can appea
 fingerprint remains unchanged, but authoritative discovery changes the admitted evaluation closure and the full
 fingerprint. External consumer discovery therefore remains part of every preview validation, and final save still
 revalidates persistence authority. No validation lease or weaker mutation-observation contract was introduced.
+These repeated checks strengthen stale-state detection; they do not create an atomic or stable database snapshot.
+Another transaction can change authoritative rows immediately after any preview validation completes. Final
+`SaveChanges` planning and enforcement remains the durability boundary that revalidates authoritative consistency
+requirements. The preview remains internal and experimental.
+
+## Change-tracker enumeration audit
+
+The seventh-pass audit found no nested full-tracker scan in mutation/fingerprint relationship capture.
+
+- One-enumeration-per-operation cases: ordinary unit-of-work lifecycle/scalar capture, snapshot construction,
+  generated-value candidate capture, runtime baseline admission/stabilization, and the initial deleted-entry guard.
+- Per-result scans outside mutation capture remain in materialization write lookup and pending-plan mirror tracking;
+  the store-side referential-action guard can also scan tracked entries for runtime instances. These are separate
+  policy/session paths and remain visible future optimization candidates rather than being mechanically rewritten.
+- Intentional scoped lookups remain for explicit object materialization eligibility and for merging tracked roots
+  into each external-consumer authority request.
+
+Generated-FK fixup was the only per-modified-property scan in policy-aware mutation capture. It is now replaced by
+the snapshot reference map, with diagnostics proving zero full-tracker scans.
 
 ## Multi-step repair: PROVEN
 

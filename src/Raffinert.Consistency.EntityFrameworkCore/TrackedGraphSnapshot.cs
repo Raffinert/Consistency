@@ -9,17 +9,24 @@ internal sealed class TrackedGraphSnapshot
         _principalIndexes = [];
     private readonly Dictionary<DependentIndexKey, Dictionary<TrackedValueKey, List<EntityEntry>>>
         _dependentIndexes = [];
+    private readonly Dictionary<object, EntityEntry> _entriesByReference;
     private readonly EfFingerprintDiagnostics? _diagnostics;
 
     private TrackedGraphSnapshot(EntityEntry[] entries, EfFingerprintDiagnostics? diagnostics)
     {
         Entries = entries;
+        _entriesByReference = new Dictionary<object, EntityEntry>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in entries)
+            _entriesByReference.Add(entry.Entity, entry);
         _diagnostics = diagnostics;
         if (diagnostics is not null)
             diagnostics.TrackedEntries = entries.Length;
     }
 
     internal IReadOnlyList<EntityEntry> Entries { get; }
+
+    internal EntityEntry? FindEntry(object entity) =>
+        _entriesByReference.GetValueOrDefault(entity);
 
     internal static TrackedGraphSnapshot Create(
         ChangeTracker changeTracker,
@@ -39,6 +46,7 @@ internal sealed class TrackedGraphSnapshot
         {
             index = BuildIndex(
                 target,
+                key.Properties,
                 key.Properties,
                 original);
             _principalIndexes.Add(descriptor, index);
@@ -66,7 +74,9 @@ internal sealed class TrackedGraphSnapshot
             index = BuildIndex(
                 target,
                 foreignKey.Properties,
-                original);
+                foreignKey.PrincipalKey.Properties,
+                original,
+                foreignKey);
             _dependentIndexes.Add(descriptor, index);
         }
         return index.TryGetValue(new TrackedValueKey(values), out var matches) ? matches : [];
@@ -74,18 +84,24 @@ internal sealed class TrackedGraphSnapshot
 
     private Dictionary<TrackedValueKey, List<EntityEntry>> BuildIndex(
         IEntityType target,
-        IReadOnlyList<IProperty> properties,
-        bool original)
+        IReadOnlyList<IProperty> valueProperties,
+        IReadOnlyList<IProperty> comparisonProperties,
+        bool original,
+        IForeignKey? foreignKey = null)
     {
-        var index = new Dictionary<TrackedValueKey, List<EntityEntry>>();
+        var index = new Dictionary<TrackedValueKey, List<EntityEntry>>(
+            new TrackedValueKeyComparer(comparisonProperties));
         foreach (var entry in Entries)
         {
             if (!target.ClrType.IsInstanceOfType(entry.Entity))
                 continue;
-            var key = new TrackedValueKey(properties.Select(property =>
+            var values = valueProperties.Select(property =>
                 original
                     ? entry.Property(property.Name).OriginalValue
-                    : entry.Property(property.Name).CurrentValue));
+                    : entry.Property(property.Name).CurrentValue).ToArray();
+            if (foreignKey is not null && EfRelationshipKey.IsNull(foreignKey, values))
+                continue;
+            var key = new TrackedValueKey(values);
             if (!index.TryGetValue(key, out var bucket))
                 index.Add(key, bucket = []);
             bucket.Add(entry);
@@ -96,21 +112,80 @@ internal sealed class TrackedGraphSnapshot
     private readonly record struct PrincipalIndexKey(IEntityType Target, IKey Key, bool Original);
     private readonly record struct DependentIndexKey(IEntityType Target, IForeignKey ForeignKey, bool Original);
 
-    private readonly struct TrackedValueKey : IEquatable<TrackedValueKey>
+    private readonly struct TrackedValueKey
     {
-        private readonly object?[] _values;
+        internal readonly object?[] Values;
 
-        internal TrackedValueKey(IEnumerable<object?> values) => _values = values.ToArray();
+        internal TrackedValueKey(IEnumerable<object?> values) => Values = values.ToArray();
+    }
 
-        public bool Equals(TrackedValueKey other) => _values.AsSpan().SequenceEqual(other._values);
-        public override bool Equals(object? value) => value is TrackedValueKey other && Equals(other);
+    private sealed class TrackedValueKeyComparer : IEqualityComparer<TrackedValueKey>
+    {
+        private readonly ValueComparer[] _comparers;
 
-        public override int GetHashCode()
+        internal TrackedValueKeyComparer(IReadOnlyList<IProperty> properties)
+        {
+            // EF documents GetKeyValueComparer as the comparer used for key values. Using it here
+            // preserves structural arrays and configured value-converted/custom key equality.
+            _comparers = properties.Select(property => property.GetKeyValueComparer()).ToArray();
+        }
+
+        public bool Equals(TrackedValueKey left, TrackedValueKey right)
+        {
+            if (left.Values.Length != right.Values.Length || left.Values.Length != _comparers.Length)
+                return false;
+            for (var index = 0; index < _comparers.Length; index++)
+            {
+                if (!_comparers[index].Equals(left.Values[index], right.Values[index]))
+                    return false;
+            }
+            return true;
+        }
+
+        public int GetHashCode(TrackedValueKey key)
         {
             var hash = new HashCode();
-            foreach (var value in _values)
-                hash.Add(value);
+            for (var index = 0; index < _comparers.Length; index++)
+                hash.Add(key.Values[index] is null ? 0 : _comparers[index].GetHashCode(key.Values[index]!));
             return hash.ToHashCode();
         }
+    }
+}
+
+internal static class EfRelationshipKey
+{
+    internal static bool IsNull(IForeignKey foreignKey, IReadOnlyList<object?> values)
+    {
+        if (foreignKey.Properties.Count != values.Count)
+            throw new ArgumentException("The foreign-key value count does not match its metadata.", nameof(values));
+        return values.Any(value => value is null);
+    }
+
+    internal static bool ValuesEqual(
+        IForeignKey foreignKey,
+        IReadOnlyList<object?> left,
+        IReadOnlyList<object?> right)
+    {
+        if (left.Count != foreignKey.Properties.Count || right.Count != foreignKey.Properties.Count)
+            return false;
+        for (var index = 0; index < foreignKey.Properties.Count; index++)
+        {
+            var comparer = foreignKey.PrincipalKey.Properties[index].GetKeyValueComparer();
+            if (!comparer.Equals(left[index], right[index]))
+                return false;
+        }
+        return true;
+    }
+
+    internal static bool RelationshipsEqual(
+        IForeignKey foreignKey,
+        IReadOnlyList<object?> left,
+        IReadOnlyList<object?> right)
+    {
+        var leftNull = IsNull(foreignKey, left);
+        var rightNull = IsNull(foreignKey, right);
+        return leftNull || rightNull
+            ? leftNull == rightNull
+            : ValuesEqual(foreignKey, left, right);
     }
 }

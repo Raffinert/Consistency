@@ -130,14 +130,26 @@ A tracked-state-only fingerprint is not sufficient: a consumer row can appear in
 already tracked graph, yet that row changes the proposed evaluation closure. Final save also repeats authoritative
 validation and discovery; preview validation is not a substitute for the persistence boundary.
 
+Repeating authority discovery before preview reads strengthens stale-state detection, but it does not establish an
+atomic database snapshot or eliminate external races. Another transaction can change authoritative database state
+after validation completes. Final `SaveChanges` planning and enforcement remains the durability boundary that must
+revalidate authoritative consistency requirements.
+
 Tracked navigation capture uses one stable entry snapshot plus lazy, metadata-aware indexes for current and
 original principal keys and foreign keys. It does not issue database queries or lazy-load navigations. This removes
 the former tracked-entry rescan per reference/collection while preserving composite and nullable keys,
 dependent/principal navigation direction, Added/Deleted evidence, ambiguity failures, and collection-reset
 deduplication. In the allocation dogfood, the unchanged 10,000-allocation rejected-preview workload fell from
-8,952.954 ms rejection plus 22,400.720 ms repair reads and 90,287,397,064 allocated bytes to 37.030 ms plus
-76.410 ms and 377,748,072 bytes. The six validations (creation plus five reads) are retained because they are now
+8,952.954 ms rejection plus 22,400.720 ms repair reads and 90,287,397,064 allocated bytes to 40.342 ms plus
+96.279 ms and 384,347,784 bytes after seventh-pass capture hardening. The six validations (creation plus five reads)
+are retained because they are now
 practical and provide the strongest stale-state guarantee.
+
+Optional composite foreign keys use EF relationship null semantics: if any component is null, no relationship is
+resolved or indexed. Complete relationship tuples are compared with each principal key property's EF
+`GetKeyValueComparer()`, including structural array equality and explicitly configured comparers for converted key
+types. Policy-aware capture reuses that same tracked snapshot for generated-FK fixup evidence, locating intended
+principals by entity reference without a per-property scan of the change tracker.
 
 Relevant tracked scalar, navigation, add, and remove changes make a retained preview stale. Properties outside the
 compiled consistency semantics are filtered out and do not. Arbitrary unreported mutations in dependency-free core

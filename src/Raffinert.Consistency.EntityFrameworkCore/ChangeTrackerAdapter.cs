@@ -254,16 +254,29 @@ public static class ChangeTrackerAdapter
     internal static CapturedEfMutationSnapshot CapturePolicyAwareSnapshot(
         ChangeTracker changeTracker,
         ConsistencyUnitOfWorkMappings mappings,
-        Func<EntityEntry, IProperty, bool>? includeProperty = null)
+        Func<EntityEntry, IProperty, bool>? includeProperty = null,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
-        var navigationChanges = CaptureNavigationChanges(changeTracker, mappings);
+        TrackedGraphSnapshot snapshot;
+        IReadOnlyList<RuntimeMutation> navigationChanges;
+        var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
+        changeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            snapshot = TrackedGraphSnapshot.Create(changeTracker, diagnostics);
+            navigationChanges = CaptureNavigationChangesCore(snapshot, mappings, diagnostics);
+        }
+        finally
+        {
+            changeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
         changeTracker.DetectChanges();
         var additions = new List<RuntimeMutation>();
         var removals = new List<RuntimeMutation>();
         var properties = new List<CapturedEfPropertyMutation>();
-        foreach (var entry in changeTracker.Entries())
+        foreach (var entry in snapshot.Entries)
         {
             var mapping = mappings.Resolve(entry);
             if (mapping is not null && entry.State == EntityState.Added)
@@ -284,7 +297,7 @@ public static class ChangeTrackerAdapter
                     mapping,
                     entry,
                     property.Metadata,
-                    CaptureGeneratedFixupEvidence(changeTracker, entry, property.Metadata)));
+                    CaptureGeneratedFixupEvidence(snapshot, entry, property.Metadata, diagnostics)));
             }
         }
         return new CapturedEfMutationSnapshot(
@@ -529,7 +542,7 @@ public static class ChangeTrackerAdapter
         if (navigation.IsOnDependent)
         {
             var values = foreignKey.Properties.Select(p => Value(owner, p, original)).ToArray();
-            if (values.All(x => x is null)) return null;
+            if (EfRelationshipKey.IsNull(foreignKey, values)) return null;
             var principals = snapshot.FindPrincipals(
                 navigation.TargetEntityType, foreignKey.PrincipalKey, values, original);
             return ResolveUnique(principals, original, navigation.Name);
@@ -559,19 +572,25 @@ public static class ChangeTrackerAdapter
         original ? entry.Property(property.Name).OriginalValue : entry.Property(property.Name).CurrentValue;
 
     private static GeneratedForeignKeyFixupEvidence? CaptureGeneratedFixupEvidence(
-        ChangeTracker tracker,
+        TrackedGraphSnapshot snapshot,
         EntityEntry dependent,
-        IProperty property)
+        IProperty property,
+        EfFingerprintDiagnostics? diagnostics)
     {
         var foreignKeys = dependent.Metadata.GetForeignKeys()
             .Where(foreignKey => foreignKey.Properties.Contains(property))
             .ToArray();
         if (foreignKeys.Length != 1) return null;
         var foreignKey = foreignKeys[0];
+        var foreignKeyValues = foreignKey.Properties
+            .Select(component => Value(dependent, component, original: false)).ToArray();
+        if (EfRelationshipKey.IsNull(foreignKey, foreignKeyValues)) return null;
         var navigation = foreignKey.DependentToPrincipal;
         var principal = navigation is null ? null : dependent.Reference(navigation.Name).CurrentValue;
         if (principal is null) return null;
-        var principalEntry = tracker.Entries().SingleOrDefault(entry => ReferenceEquals(entry.Entity, principal));
+        if (diagnostics is not null)
+            diagnostics.GeneratedFixupPrincipalLookups++;
+        var principalEntry = snapshot.FindEntry(principal);
         if (principalEntry is null) return null;
         var component = Enumerable.Range(0, foreignKey.Properties.Count)
             .Single(index => foreignKey.Properties[index] == property);
@@ -603,10 +622,14 @@ public static class ChangeTrackerAdapter
                 diagnostics.CollectionCandidateChecks++;
             var current = foreignKey.Properties.Select(p => Value(e, p, false)).ToArray();
             var original = foreignKey.Properties.Select(p => Value(e, p, true)).ToArray();
-            return (e.State == EntityState.Added && current.SequenceEqual(ownerCurrent)) ||
-                   (e.State == EntityState.Deleted && original.SequenceEqual(ownerOriginal)) ||
-                   (!current.SequenceEqual(original) &&
-                    (current.SequenceEqual(ownerCurrent) || original.SequenceEqual(ownerOriginal)));
+            var currentMatches = !EfRelationshipKey.IsNull(foreignKey, current) &&
+                EfRelationshipKey.ValuesEqual(foreignKey, current, ownerCurrent);
+            var originalMatches = !EfRelationshipKey.IsNull(foreignKey, original) &&
+                EfRelationshipKey.ValuesEqual(foreignKey, original, ownerOriginal);
+            return (e.State == EntityState.Added && currentMatches) ||
+                   (e.State == EntityState.Deleted && originalMatches) ||
+                   (!EfRelationshipKey.RelationshipsEqual(foreignKey, current, original) &&
+                    (currentMatches || originalMatches));
         });
     }
 
@@ -690,9 +713,9 @@ internal sealed record GeneratedForeignKeyFixupEvidence(
         for (var index = 0; index < ForeignKey.Properties.Count; index++)
         {
             var principal = PrincipalEntry.Property(ForeignKey.PrincipalKey.Properties[index].Name);
-            if (principal.IsTemporary || !Equals(
-                    dependent.Property(ForeignKey.Properties[index].Name).CurrentValue,
-                    principal.CurrentValue))
+            var dependentValue = dependent.Property(ForeignKey.Properties[index].Name).CurrentValue;
+            var comparer = ForeignKey.PrincipalKey.Properties[index].GetKeyValueComparer();
+            if (principal.IsTemporary || !comparer.Equals(dependentValue, principal.CurrentValue))
                 return false;
         }
         return true;
