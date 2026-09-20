@@ -17,6 +17,8 @@ public sealed record RepairProcessingResult(
 
 public sealed class ReallocateDemand(AllocationConsistencyModel model)
 {
+    internal int FullRuntimeReseedCount { get; private set; }
+
     public RepairProcessingResult ProcessCurrentGraph(
         IEnumerable<RepairRequestInfo> requests,
         IEnumerable<Demand> demands,
@@ -33,6 +35,7 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
         var currentSupplies = supplies.ToArray();
         var currentAllocations = allocations.ToArray();
         var currentFulfillments = fulfillments.ToArray();
+        FullRuntimeReseedCount++;
         var currentRuntime = model.Compiled.CreateRuntime(seed =>
         {
             seed.Add(model.Demands, currentDemands);

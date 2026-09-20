@@ -727,6 +727,42 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
+    public async Task Rejected_preview_fingerprints_each_read_and_reuses_current_rejected_plan_only()
+    {
+        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var session = scope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Left.Value = -1m;
+        var firstError = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+
+        using var firstPreview = session.CreateRejectedPreview(firstError);
+        Assert.Equal(-0.1m, firstPreview.Evaluate(fixture.Ratio, link));
+        Assert.Equal(-0.1m, firstPreview.Evaluate(fixture.Ratio, link));
+        Assert.True(session.RejectedPreviewValidationCount > 1);
+        Assert.Equal(0L, runtime.Version);
+
+        var secondError = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+
+        var stale = Assert.Throws<InvalidOperationException>(() =>
+            firstPreview.Evaluate(fixture.Ratio, link));
+        Assert.Contains("no longer current", stale.Message);
+        var superseded = Assert.Throws<InvalidOperationException>(() =>
+            session.CreateRejectedPreview(firstError));
+        Assert.Contains("current rejected save", superseded.Message);
+        using var secondPreview = session.CreateRejectedPreview(secondError);
+        Assert.Equal(-0.1m, secondPreview.Evaluate(fixture.Ratio, link));
+        link.Left.Value = -2m;
+        Assert.Throws<InvalidOperationException>(() =>
+            secondPreview.Evaluate(fixture.Ratio, link));
+        Assert.Equal(0L, runtime.Version);
+    }
+
+    [Fact]
     public async Task Enforced_non_repair_invariant_rejects_without_repair_request()
     {
         await using var fixture = await Fixture.CreateAsync(

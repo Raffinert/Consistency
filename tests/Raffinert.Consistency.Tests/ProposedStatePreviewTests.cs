@@ -137,6 +137,21 @@ public sealed class ProposedStatePreviewTests
         Assert.Contains("stale", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Preview_DoesNotGuaranteeDetectionOfUnreportedCorePocoMutation()
+    {
+        var fixture = Fixture.Create();
+        fixture.FirstSupply.Capacity = 9m;
+        var plan = fixture.Plan(Change.Property(
+            fixture.Supplies, fixture.FirstSupply, value => value.Capacity, 10m, 9m));
+        using var preview = fixture.Runtime.CreatePreview(plan);
+
+        fixture.SecondSupply.Capacity = 17m;
+
+        Assert.Equal(17m, preview.Evaluate(fixture.Remaining, fixture.SecondSupply));
+        Assert.Equal(0L, fixture.Runtime.Version);
+    }
+
     private sealed class Fixture
     {
         private Fixture()

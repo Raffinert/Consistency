@@ -1,4 +1,4 @@
-# Allocation consistency dogfood fourth-pass findings
+# Allocation consistency dogfood fifth-pass findings
 
 ## Fixed by framework changes
 
@@ -69,8 +69,20 @@ The internal preview reuses the prepared plan's final object-set overlay and cur
 isolated derived/invariant query caches and evaluates relations against the final proposed object membership and
 relation predicates. It does not install the forward patch into the committed runtime, rebuild all relation indexes,
 dispatch policy work, materialize mirrors, or own a repair workflow. Runtime version, committed relation/index
-state, and committed derived/invariant state remain unchanged. Runtime advancement, prepared-domain drift, or a
-relevant EF tracked mutation invalidates the view deterministically.
+state, and committed derived/invariant state remain unchanged.
+
+Preview detects runtime-plan drift and prepared-mutation drift. The EF rejected-preview integration also detects
+changes visible to the adapter's relevant tracked-state fingerprint. The dependency-free core cannot detect
+arbitrary POCO mutations that were never reported as changes. A core preview may therefore read a current CLR value
+that changed outside its prepared mutation; that behavior is not a validated snapshot guarantee.
+
+| Drift type | Detected? | Mechanism |
+| --- | --- | --- |
+| committed runtime version/baseline revision changes | yes | runtime plan validation |
+| prepared mutation member changes | yes | prepared domain assumptions |
+| relevant EF tracked mutation after rejected save | yes | EF mutation fingerprint / validation |
+| EF add/remove/navigation changes represented in tracked capture | yes | EF fingerprint |
+| arbitrary unreported core POCO mutation outside prepared mutation | not guaranteed | core has no arbitrary mutation observer |
 
 The rejected EF flow is now:
 
@@ -89,21 +101,56 @@ tracked mutation
 The application still owns candidate selection, ordering, unresolved behavior, and convergence. The baseline
 `ProcessCurrentGraph(...)` full reseed path remains for comparison and future fallback testing.
 
-### Benchmark result
+### Core preview construction
 
 Five measured iterations after one warm-up produced these representative medians on the local development
 machine. Setup is the time to create a query context; query is the first remaining-capacity query.
 
 | graph size | full reseed setup/query | preview setup/query | full allocated bytes | preview allocated bytes |
 | ---: | ---: | ---: | ---: | ---: |
-| 100 | 0.503 / 0.025 ms | 0.016 / 0.026 ms | 455,256 | 6,000 |
-| 1,000 | 4.148 / 0.069 ms | 0.016 / 0.078 ms | 4,126,144 | 13,200 |
-| 10,000 | 37.890 / 0.363 ms | 0.025 / 0.651 ms | 39,923,760 | 85,200 |
+| 100 | 0.473 / 0.036 ms | 0.013 / 0.042 ms | 459,632 | 10,968 |
+| 1,000 | 4.007 / 0.093 ms | 0.012 / 0.115 ms | 4,137,720 | 25,368 |
+| 10,000 | 45.152 / 1.182 ms | 0.032 / 2.281 ms | 40,050,936 | 169,368 |
 
 Preview creation and allocations are materially smaller and nearly independent of graph size. Its first relation
 query is slightly slower at 10,000 because the prototype scans proposed candidates rather than maintaining a
 second index. This is sufficient evidence to keep the experiment, but not to graduate a public API before query
-workload and relation-overlay semantics are broadened.
+workload and relation-overlay semantics are broadened. These are core-only figures and do not include EF change
+detection, discovery, or mutation fingerprinting.
+
+### Actual EF rejected-preview repair query
+
+The EF benchmark uses an ordinary rejected `SaveChanges`, obtains the retained-plan preview from the scoped EF
+session, and runs the same five-read repair-decision workload. Values below are medians from five Release iterations
+after warm-up on this development machine; allocated bytes cover rejection/preview creation plus the query.
+
+| allocations | rejection + preview | repair query | allocated bytes | preview reads | fingerprint validations |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 7.370 ms | 17.174 ms | 16,647,776 | 5 | 6 |
+| 1,000 | 74.113 ms | 183.987 ms | 965,276,368 | 5 | 6 |
+| 10,000 | 9,652.541 ms | 23,744.168 ms | 90,287,394,824 | 5 | 6 |
+
+Each decision validates once while creating the preview and once before each of its five reads. Repeated full EF
+fingerprinting, including change detection and coverage capture, dominates this graph shape and erases the core
+preview setup advantage. Relation scanning remains visible in the core query numbers but is not the dominant EF
+cost here.
+
+## EF validation: NEEDS SEPARATE DESIGN
+
+The measurement justifies optimization, but snapshot-tracked POCO changes do not provide a reliable cheap session
+revision. Validating only at preview creation or trusting an unobservable caller mutation boundary would weaken
+stale-state detection. This pass therefore keeps the safe per-read fingerprint validation. A future design needs an
+explicit validated query scope or another mutation-observation contract before this cost can be removed safely.
+
+## Multi-step repair: PROVEN
+
+The same-source scenario converges in three save attempts: two rejected saves, two preview instances, two repair
+mutations, and one final successful save. Runtime version remains unchanged through both rejections and advances
+once on success. The first allocation moves to S2 and the second to S3; no full runtime reseed is used.
+
+The second-order scenario first rejects S1. Its application-owned first move places the allocation on S2, making S2
+the source of the next independently planned repair request. A fresh preview then selects viable S3, and the third
+save succeeds with final remaining capacities of 2, 2, and 6. This also uses zero full runtime reseeds.
 
 ## API decision: KEEP EXPERIMENTAL
 
@@ -121,6 +168,9 @@ repair query workloads and deciding whether indexed relation overlays are needed
   the responsibility of a mutation source or adapter.
 - Replacement ranking, convergence policy, and unresolved-repair workflow remain application concerns. Core
   consistency does not become a workflow engine.
+- Preview relation queries scan proposed candidates rather than maintaining a second index.
+- Safe EF previews retain one expensive tracked-state fingerprint per read; the benchmark shows this needs a
+  separate design rather than an unsafe cache.
 - Persistence can enforce the configured invariant and preserve runtime/SQL transaction boundaries, but it
   cannot infer untracked SQL-side effects outside the adapter's supported evidence model.
 

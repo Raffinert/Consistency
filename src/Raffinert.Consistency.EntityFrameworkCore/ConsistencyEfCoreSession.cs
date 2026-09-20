@@ -33,6 +33,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     internal TDbContext Context => _context;
     internal ConsistencyRuntime Runtime => _runtime ??= Bind(_runtimeFactory());
+    internal long RejectedPreviewValidationCount { get; private set; }
 
     internal void BindRuntime(ConsistencyRuntime runtime) => Bind(runtime);
 
@@ -465,9 +466,13 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     private void ValidateRejected(RejectedConsistencySave rejected)
     {
+        if (!ReferenceEquals(_rejected, rejected))
+            throw new InvalidOperationException(
+                "The proposed-state view is stale because its rejected save is no longer current.");
         if (Runtime.BaselineRevision != rejected.BaselineRevision)
             throw new InvalidOperationException(
                 "The proposed-state view is stale because the tracked runtime baseline changed.");
+        RejectedPreviewValidationCount++;
         var current = ConsistencyCoordinator.CaptureFingerprint(
             _context, Runtime, _mappings, _options, IncludeSemanticProperty);
         if (!rejected.Fingerprint.Equals(current))

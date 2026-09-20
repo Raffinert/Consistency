@@ -8,7 +8,7 @@ internal static class ProposedStateBenchmark
 
     public static void Run()
     {
-        Console.WriteLine("Proposed-state repair query benchmark (5 measured iterations; lower is better)");
+        Console.WriteLine("Core proposed-state repair query benchmark (5 measured iterations; lower is better)");
         Console.WriteLine("size | full reseed setup/query ms | preview setup/query ms | full bytes | preview bytes");
         foreach (var size in Sizes)
         {
@@ -134,7 +134,7 @@ internal static class ProposedStateBenchmark
             });
             var setupMs = ElapsedMilliseconds(setupStart);
             var queryStart = Stopwatch.GetTimestamp();
-            _ = baseline.Evaluate(Model.RemainingCapacity, Supply);
+            RunRepairDecision(baseline);
             var queryMs = ElapsedMilliseconds(queryStart);
             return new Measurement(setupMs, queryMs,
                 GC.GetAllocatedBytesForCurrentThread() - before);
@@ -150,7 +150,7 @@ internal static class ProposedStateBenchmark
             using var preview = Runtime.CreatePreview(Plan);
             var setupMs = ElapsedMilliseconds(setupStart);
             var queryStart = Stopwatch.GetTimestamp();
-            _ = preview.Evaluate(Model.RemainingCapacity, Supply);
+            RunRepairDecision(preview);
             var queryMs = ElapsedMilliseconds(queryStart);
             return new Measurement(setupMs, queryMs,
                 GC.GetAllocatedBytesForCurrentThread() - before);
@@ -158,5 +158,31 @@ internal static class ProposedStateBenchmark
 
         private static double ElapsedMilliseconds(long start) =>
             (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
+
+        private void RunRepairDecision(ConsistencyRuntime runtime)
+        {
+            _ = runtime.Evaluate(Model.CapacityInvariant, Supply);
+            var allocation = runtime.Related(Model.SupplyAllocations, Supply)
+                .OrderBy(value => value.Id).First();
+            var replacement = runtime.Related(Model.CandidateSupplies, allocation.Demand)
+                .Where(value => value.Id != allocation.SupplyId)
+                .OrderBy(value => value.Id)
+                .First(value => runtime.Evaluate(Model.RemainingCapacity, value) >= allocation.Quantity);
+            _ = replacement;
+            _ = runtime.Evaluate(Model.CompatibilityInvariant, allocation);
+        }
+
+        private void RunRepairDecision(ConsistencyPreview preview)
+        {
+            _ = preview.Evaluate(Model.CapacityInvariant, Supply);
+            var allocation = preview.Related(Model.SupplyAllocations, Supply)
+                .OrderBy(value => value.Id).First();
+            var replacement = preview.Related(Model.CandidateSupplies, allocation.Demand)
+                .Where(value => value.Id != allocation.SupplyId)
+                .OrderBy(value => value.Id)
+                .First(value => preview.Evaluate(Model.RemainingCapacity, value) >= allocation.Quantity);
+            _ = replacement;
+            _ = preview.Evaluate(Model.CompatibilityInvariant, allocation);
+        }
     }
 }

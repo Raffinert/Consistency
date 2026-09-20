@@ -67,7 +67,11 @@ internal static class Scenarios
         (nameof(EfScenarios.EfRejectedSave_CanBeRepairedAndRetried),
             EfScenarios.EfRejectedSave_CanBeRepairedAndRetried),
         (nameof(EfScenarios.EfRejectedPreview_InvalidatesAfterTrackedChange),
-            EfScenarios.EfRejectedPreview_InvalidatesAfterTrackedChange)
+            EfScenarios.EfRejectedPreview_InvalidatesAfterTrackedChange),
+        (nameof(EfScenarios.EfRejectedSave_MultiStepRepair_ReplansUntilConsistent),
+            EfScenarios.EfRejectedSave_MultiStepRepair_ReplansUntilConsistent),
+        (nameof(EfScenarios.EfRejectedSave_RepairCanCreateViolationOnAnotherSupply),
+            EfScenarios.EfRejectedSave_RepairCanCreateViolationOnAnotherSupply)
     ];
 
     public static async Task RunAsync()
@@ -83,6 +87,7 @@ internal static class Scenarios
             Console.WriteLine($"PASS {scenario.Name}");
         }
         ProposedStateBenchmark.Run();
+        RejectedEfPreviewBenchmark.Run();
         Console.WriteLine($"Allocation dogfood scenarios passed: {Core.Length + Ef.Length}.");
     }
 

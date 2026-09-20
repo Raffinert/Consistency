@@ -117,10 +117,12 @@ The allocation dogfood demonstrates an internal experimental rejected-plan query
 The scoped EF session retains the rejected prepared plan and the tracked mutation fingerprint; application code
 can obtain a read-only proposed-state view for `Evaluate`, `Related`, and invariant queries. The view represents
 the final tracked object membership and current proposed CLR values, while the committed runtime remains at its
-durable baseline. If the runtime baseline or relevant tracked state changes, the view becomes stale and must not be
-used. After a repair mutation, the application obtains a fresh view/re-plans before making further consistency
-queries. The view does not materialize, dispatch, persist, or select a replacement, and it is not a stable public
-API.
+durable baseline. Preview detects runtime-plan drift and prepared-mutation drift. The EF rejected-preview integration
+also detects changes visible to the adapter's relevant tracked-state fingerprint, including represented scalar,
+navigation, add, and remove changes. The dependency-free core cannot detect arbitrary POCO mutations that were never
+reported as changes; reading a current CLR value is not a validated snapshot guarantee. After a repair mutation, the
+application obtains a fresh view/re-plans before making further consistency queries. The view does not materialize,
+dispatch, persist, or select a replacement, and it is not a stable public API.
 
 The ordering is:
 
