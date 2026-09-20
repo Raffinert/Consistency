@@ -82,6 +82,8 @@ public sealed record RelationDependencyCause(
     : DependencyImpactCause(CausePrecision)
 {
     public string? DefinitionKey { get; init; }
+    public string? LeftSelectorPath { get; init; }
+    public string? RightSelectorPath { get; init; }
     public IReadOnlyList<int> OriginIds { get; init; } = [];
 }
 
@@ -375,7 +377,11 @@ public static class RuntimeImpactTraceRenderer
     private static string Describe(DependencyImpactCause cause) => cause switch
     {
         DirectSourceMemberCause direct => $"{direct.MemberName} changed ({direct.Policy})",
-        RelationDependencyCause relation => $"{relation.DefinitionKey ?? $"relation-{relation.RelationId}"} {relation.Kind}",
+        RelationDependencyCause relation =>
+            $"{relation.DefinitionKey ?? $"relation-{relation.RelationId}"} {relation.Kind}" +
+            (relation.LeftSelectorPath is null || relation.RightSelectorPath is null
+                ? ""
+                : $" via {relation.LeftSelectorPath} -> {relation.RightSelectorPath}"),
         UpstreamDerivedCause upstream => $"upstream {upstream.DefinitionKey ?? $"derived-{upstream.DerivedId}"}",
         InvariantReactionCause reaction => $"{reaction.Reaction} escalated {reaction.InputSeverity} to {reaction.OutputSeverity}",
         _ => cause.GetType().Name

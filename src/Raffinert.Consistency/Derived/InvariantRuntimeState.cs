@@ -79,8 +79,7 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
     int GetSourcesStateEntryCount(object state);
     void ApplyImpact(
         IEnumerable<object> sources,
-        DependencyImpactKind impact,
-        RuntimePolicyActions policyActions);
+        DependencyImpactKind impact);
     void EvaluatePolicy(object source);
     bool EvaluateValue(object source, RuntimePolicyActions? policyActions = null);
     InvariantEvaluationState GetValueState(object source);
@@ -141,25 +140,12 @@ internal sealed class InvariantRuntimeState<TSource>(
 
     public void ApplyImpact(
         IEnumerable<object> sources,
-        DependencyImpactKind impact,
-        RuntimePolicyActions policyActions)
+        DependencyImpactKind impact)
     {
         var typedSources = sources.Cast<TSource>().Distinct(ReferenceEqualityComparer<TSource>.Instance).ToArray();
-        switch (definition.Reaction)
-        {
-            case InvariantReaction.EvaluateImmediately:
-                Mark(typedSources, impact);
-                if (definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
-                    foreach (var source in typedSources)
-                        policyActions.AddImmediateEvaluation(this, source);
-                break;
-            case InvariantReaction.MarkInvalid:
-                Mark(typedSources, DependencyImpactKind.Invalid);
-                break;
-            default:
-                Mark(typedSources, impact);
-                break;
-        }
+        Mark(typedSources, definition.Reaction == InvariantReaction.MarkInvalid
+            ? DependencyImpactKind.Invalid
+            : impact);
     }
 
     public void EvaluatePolicy(object source) => Evaluate((TSource)source);

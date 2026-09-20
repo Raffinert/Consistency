@@ -4,9 +4,11 @@ This executable exercises Raffinert against a neutral allocation model: demands 
 resource and date, fulfillment and allocation rows feed incremental totals, remaining capacity is derived
 transitively, and capacity and compatibility invariants protect persistence.
 
-It is an experiment rather than a polished sample. Several deliberately retained conservative behaviors are
-documented in [DOGFOOD.md](DOGFOOD.md), including aggregate update direction, repair-policy escalation, and
-the duplicate relation needed to express allocation compatibility.
+It is an experiment rather than a polished sample. It exercises directional impact classification, projects
+allocation compatibility from the candidate-supply relation instead of repeating its predicate, and proves
+repair-enabled invariants before emitting structured repair requests. Core callers report POCO mutations
+explicitly; EF observes ordinary tracked changes at `SaveChanges`. The findings and remaining limitations are
+documented in [DOGFOOD.md](DOGFOOD.md).
 
 Run it from the repository root:
 

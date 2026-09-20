@@ -154,19 +154,34 @@ internal static class EfScenarios
     {
         await using var fixture = await EfFixture.CreateAsync();
         await using var scope = fixture.Provider.CreateAsyncScope();
-        var (db, _) = await LoadCompleteGraphAsync(scope.ServiceProvider);
+        var (db, runtime) = await LoadCompleteGraphAsync(scope.ServiceProvider);
         var supply = await db.Supplies.SingleAsync(value => value.Id == 1);
         var allocation = await db.Allocations
             .Include(value => value.Demand).Include(value => value.Supply)
             .SingleAsync(value => value.Id == 1);
-        var replacement = await db.Supplies.SingleAsync(value => value.Id == 2);
         supply.ChangeCapacity(6m);
-        await ScenarioAssert.ThrowsAsync<ConsistencyInvariantViolationException>(
+        var version = runtime.Version;
+        var error = await ScenarioAssert.ThrowsAsync<ConsistencyInvariantViolationException>(
             () => db.SaveChangesAsync(),
             "The initial rich-domain mutation must be rejected before persistence.");
 
-        allocation.SupplyId = replacement.Id;
-        allocation.Supply = replacement;
+        var request = error.RepairRequests.Single();
+        ScenarioAssert.True(request.DefinitionKey == "supply-capacity-valid",
+            "The rejected save must expose the enforced repair-enabled invariant request.");
+        ScenarioAssert.Same(supply, request.Source,
+            "The repair request must retain the tracked affected supply.");
+        ScenarioAssert.Equal(version, runtime.Version,
+            "Inspecting repair data must not install the rejected runtime plan.");
+        var repair = new ReallocateDemand(fixture.Model).ProcessCurrentGraph(
+            error.RepairRequests,
+            db.Demands.Local,
+            db.Supplies.Local,
+            db.Allocations.Local,
+            db.Fulfillments.Local);
+        ScenarioAssert.Same(allocation, repair.Reallocated.Single(),
+            "Application-owned repair must move the allocation identified from structured repair data.");
+        ScenarioAssert.Equal(0, repair.Unresolved.Count,
+            "The tracked current graph has a deterministic replacement supply.");
         await db.SaveChangesAsync();
 
         await using var verification = fixture.CreateContext();

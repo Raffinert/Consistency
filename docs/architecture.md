@@ -100,9 +100,12 @@ a later setter fails; logical caches are retained for retry. Materialization nev
 
 Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or
 represented as a structured repair request. `RepairWhenViolated()` is policy metadata: a request is created only
-after evaluation proves the predicate false. `ApplyDetailed` exposes those requests as data for an
-outbox/application workflow. Immediate policy actions, when configured, run only through explicit post-commit
-dispatch; compiled invariants do not capture repair callbacks.
+after evaluation proves the predicate false. Every affected repair-enabled invariant source is evaluated while
+producing the operation or binding-plan result, so predicate inputs may become `Fresh` even when propagation
+classified them as `Dirty` or `Invalid`. Repair-disabled invariants remain lazy unless their reaction or a host
+policy explicitly requests evaluation. `ApplyDetailed` exposes requests as data for an outbox/application
+workflow. Immediate policy actions, when configured, run only through explicit post-commit dispatch; compiled
+invariants do not capture repair callbacks.
 
 ## EF Core boundary
 

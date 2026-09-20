@@ -336,7 +336,6 @@ internal sealed class DependencyGraphRuntime
     public DependencyPropagationResult ApplyChangeImpacts(
         IReadOnlyDictionary<IRelationDefinition, RelationImpact> relationImpacts,
         IReadOnlyList<PropertyChange> changes,
-        RuntimePolicyActions policyActions,
         bool captureCausalEvidence)
     {
         List<UpstreamPropagationEvidence>? upstreamEvidence = captureCausalEvidence ? [] : null;
@@ -419,13 +418,13 @@ internal sealed class DependencyGraphRuntime
         {
             if (!currentInvariants.Contains(node))
                 continue;
-            node.ApplyInherited(policyActions, invariantUpstreamEvidence);
+            node.ApplyInherited(invariantUpstreamEvidence);
             var invariantRoots = ResolveRoots(
                 node.Definition.SourceSet,
                 node.SourceDependencies,
                 changes);
             if (invariantRoots.Count > 0)
-                node.ApplyDirect(invariantRoots, policyActions);
+                node.ApplyDirect(invariantRoots);
         }
         _previousDerived = currentDerived;
         _previousInvariants = currentInvariants;
@@ -455,10 +454,9 @@ internal sealed class DependencyGraphRuntime
 
         var currentInvariants = new HashSet<InvariantNode>(_previousInvariants);
         AddReachableInvariants(currentDerived, currentInvariants);
-        var discardedPolicyActions = new RuntimePolicyActions();
         foreach (var node in _invariantNodes)
             if (currentInvariants.Contains(node))
-                node.ApplyInherited(discardedPolicyActions, null);
+                node.ApplyInherited(null);
 
         _previousDerived = currentDerived;
         _previousInvariants = currentInvariants;
@@ -790,9 +788,7 @@ internal sealed class DependencyGraphRuntime
             HashSet<object> InvalidSources,
             HashSet<object> DirtySources);
 
-        public void ApplyInherited(
-            RuntimePolicyActions policyActions,
-            List<InvariantUpstreamEvidence>? evidence)
+        public void ApplyInherited(List<InvariantUpstreamEvidence>? evidence)
         {
             if (evidence is not null)
                 foreach (var upstream in _derived)
@@ -815,25 +811,25 @@ internal sealed class DependencyGraphRuntime
                 DirtySources.Clear();
             }
             if (InvalidSources.Count > 0)
-                State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid, policyActions);
+                State.ApplyImpact(InvalidSources, DependencyImpactKind.Invalid);
             if (DirtySources.Count > 0)
-                State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty, policyActions);
+                State.ApplyImpact(DirtySources, DependencyImpactKind.Dirty);
         }
 
-        public void ApplyDirect(IEnumerable<object> sources, RuntimePolicyActions policyActions)
+        public void ApplyDirect(IEnumerable<object> sources)
         {
             var affected = NewSet(sources);
             if (Definition.Reaction == InvariantReaction.MarkInvalid)
             {
                 InvalidSources.UnionWith(affected);
                 DirtySources.ExceptWith(InvalidSources);
-                State.ApplyImpact(affected, DependencyImpactKind.Invalid, policyActions);
+                State.ApplyImpact(affected, DependencyImpactKind.Invalid);
             }
             else
             {
                 DirtySources.UnionWith(affected);
                 DirtySources.ExceptWith(InvalidSources);
-                State.ApplyImpact(affected, DependencyImpactKind.Dirty, policyActions);
+                State.ApplyImpact(affected, DependencyImpactKind.Dirty);
             }
         }
 

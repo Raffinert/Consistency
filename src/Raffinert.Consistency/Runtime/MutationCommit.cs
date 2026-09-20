@@ -432,7 +432,7 @@ public sealed partial class ConsistencyRuntime
         LastRelationImpacts = relationImpacts;
         var policyActions = new RuntimePolicyActions();
         var dependencyPropagation = _dependencyGraph.ApplyChangeImpacts(
-            relationImpacts, changes, policyActions, captureCausalEvidence);
+            relationImpacts, changes, captureCausalEvidence);
         _dependencyGraph.RebaseCoverageAdmissions(coverageAdmissionDeltas);
         var publicImpact = impact.ToPublic();
         _reindexedRoots += publicImpact.Access.ReindexedRoots;
@@ -498,13 +498,14 @@ public sealed partial class ConsistencyRuntime
         RuntimePolicyActions policyActions,
         bool evaluateAll)
     {
+        // Propagation records freshness first. Host planning can then evaluate every affected invariant;
+        // otherwise repair-enabled invariants evaluate eagerly to prove violation, while immediate reaction
+        // remains an explicit post-commit action for repair-disabled invariants.
         var evaluations = new List<(PlannedInvariantEvaluation Value, int Encounter)>();
         var seen = new Dictionary<IInvariantDefinition, HashSet<object>>();
         var encounter = 0;
         foreach (var impact in propagation.InvariantImpacts)
         {
-            if (!evaluateAll && impact.Definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
-                continue;
             if (!seen.TryGetValue(impact.Definition, out var sources))
                 seen.Add(impact.Definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
             foreach (var source in impact.Sources)
@@ -512,6 +513,12 @@ public sealed partial class ConsistencyRuntime
                 if (!sources.Add(source) || !_sets[impact.Definition.SourceSet].Contains(source))
                     continue;
                 var state = _invariants[impact.Definition];
+                if (!evaluateAll && impact.Definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
+                {
+                    if (impact.Definition.Reaction == InvariantReaction.EvaluateImmediately)
+                        policyActions.AddImmediateEvaluation(state, source);
+                    continue;
+                }
                 state.EvaluateValue(source, policyActions);
                 evaluations.Add((new PlannedInvariantEvaluation(
                     _invariantIds[impact.Definition], source, state.GetValueState(source))
@@ -524,14 +531,19 @@ public sealed partial class ConsistencyRuntime
         foreach (var added in lifecycleMutations.OfType<ObjectAdded>())
         {
             foreach (var definition in _invariants.Keys.Where(definition =>
-                ReferenceEquals(definition.SourceSet, added.Set) &&
-                (evaluateAll || definition.RepairPolicy == InvariantRepairPolicy.WhenViolated)))
+                ReferenceEquals(definition.SourceSet, added.Set)))
             {
                 if (!seen.TryGetValue(definition, out var sources))
                     seen.Add(definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
                 if (!sources.Add(added.Instance))
                     continue;
                 var state = _invariants[definition];
+                if (!evaluateAll && definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
+                {
+                    if (definition.Reaction == InvariantReaction.EvaluateImmediately)
+                        policyActions.AddImmediateEvaluation(state, added.Instance);
+                    continue;
+                }
                 state.EvaluateValue(added.Instance, policyActions);
                 evaluations.Add((new PlannedInvariantEvaluation(
                     _invariantIds[definition], added.Instance, state.GetValueState(added.Instance))
@@ -780,6 +792,10 @@ public sealed partial class ConsistencyRuntime
                         _relationIds[input.Relation], kind, ImpactCausePrecision.Exact)
                     {
                         DefinitionKey = input.Relation.DefinitionKey,
+                        LeftSelectorPath = string.Join(".", input.Left.SelectorPath.Segments
+                            .Select(segment => segment.Member.Name)),
+                        RightSelectorPath = string.Join(".", input.Right.SelectorPath.Segments
+                            .Select(segment => segment.Member.Name)),
                         OriginIds = MapTriggerOrigins(input.Relation, triggers, origins)
                     });
                 }

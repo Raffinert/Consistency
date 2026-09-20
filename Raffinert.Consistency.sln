@@ -27,6 +27,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.Entit
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.DependencyMaintenanceSample", "samples\Raffinert.Consistency.DependencyMaintenanceSample\Raffinert.Consistency.DependencyMaintenanceSample.csproj", "{F295FCEB-F991-4327-921D-4C93F766B52A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "experiments", "experiments", "{923C8476-709E-4C85-9D5B-71B531060C63}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Raffinert.Consistency.AllocationDogfood", "experiments\Raffinert.Consistency.AllocationDogfood\Raffinert.Consistency.AllocationDogfood.csproj", "{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -133,6 +137,18 @@ Global
 		{F295FCEB-F991-4327-921D-4C93F766B52A}.Release|x64.Build.0 = Release|Any CPU
 		{F295FCEB-F991-4327-921D-4C93F766B52A}.Release|x86.ActiveCfg = Release|Any CPU
 		{F295FCEB-F991-4327-921D-4C93F766B52A}.Release|x86.Build.0 = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|x64.Build.0 = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Debug|x86.Build.0 = Debug|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|x64.ActiveCfg = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|x64.Build.0 = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|x86.ActiveCfg = Release|Any CPU
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -146,5 +162,6 @@ Global
 		{D6A8D5D3-7FA9-4E11-93EF-5A75387B1E76} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{B779839E-33A9-4CB9-A12F-10459494C964} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{F295FCEB-F991-4327-921D-4C93F766B52A} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{90E9A58B-DC74-46A4-8B88-8A930BEB0CEF} = {923C8476-709E-4C85-9D5B-71B531060C63}
 	EndGlobalSection
 EndGlobal

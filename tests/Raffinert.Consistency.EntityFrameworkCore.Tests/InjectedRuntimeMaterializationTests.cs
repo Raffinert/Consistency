@@ -698,18 +698,55 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
-    public async Task Enforced_invariant_still_blocks_injected_save_before_sql()
+    public async Task Enforced_repair_enabled_invariant_exposes_filtered_request_before_sql()
     {
-        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var fixture = await Fixture.CreateAsync(
+            enforceRatioInvariant: true,
+            includeUnenforcedRepairInvariant: true);
         await using var scope = fixture.Provider.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
         var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
         var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var version = runtime.Version;
 
         link.Left.Value = -1m;
 
-        await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(() => context.SaveChangesAsync());
-        Assert.Equal(0, runtime.Version);
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+
+        var violation = Assert.Single(error.Violations);
+        Assert.Equal("ratio-valid", violation.DefinitionKey);
+        Assert.Same(link, violation.Source);
+        var request = Assert.Single(error.RepairRequests);
+        Assert.Equal("ratio-valid", request.DefinitionKey);
+        Assert.Same(link, request.Source);
+        Assert.Equal(version, runtime.Version);
+        Assert.Equal(6m, link.Ratio);
+        await using var verification = fixture.CreateContext();
+        Assert.Equal(60m, (await verification.Items.AsNoTracking().SingleAsync(value => value.Id == 1)).Value);
+    }
+
+    [Fact]
+    public async Task Enforced_non_repair_invariant_rejects_without_repair_request()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            enforceRatioInvariant: true,
+            repairEnabledInvariant: false);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var runtime = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var version = runtime.Version;
+        link.Left.Value = -1m;
+
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+
+        Assert.Equal("ratio-valid", Assert.Single(error.Violations).DefinitionKey);
+        Assert.Empty(error.RepairRequests);
+        Assert.Equal(version, runtime.Version);
+        await using var verification = fixture.CreateContext();
+        Assert.Equal(60m, (await verification.Items.AsNoTracking().SingleAsync(value => value.Id == 1)).Value);
     }
 
     [Fact]
@@ -912,6 +949,8 @@ public sealed class InjectedRuntimeMaterializationTests
             bool includeProjection = false,
             bool includeRepairPolicy = false,
             bool enforceRatioInvariant = false,
+            bool repairEnabledInvariant = true,
+            bool includeUnenforcedRepairInvariant = false,
             bool completeScope = true,
             bool includeSecondLink = false,
             bool useConsumerDiscovery = false,
@@ -944,10 +983,16 @@ public sealed class InjectedRuntimeMaterializationTests
             if (includeRepairPolicy || enforceRatioInvariant)
             {
                 ratioInvariant = modelBuilder.Invariant(links).From(ratio)
-                    .Must((_, value) => value == null || value >= 0m)
-                    .RepairWhenViolated()
-                    .Named("ratio-valid");
+                    .Must((_, value) => value == null || value >= 0m);
+                if (repairEnabledInvariant)
+                    ratioInvariant.RepairWhenViolated();
+                ratioInvariant.Named("ratio-valid");
             }
+            if (includeUnenforcedRepairInvariant)
+                modelBuilder.Invariant(links).From(ratio)
+                    .Must((_, value) => value == null || value >= 1m)
+                    .RepairWhenViolated()
+                    .Named("unenforced-ratio-repair");
             Derived<Link, decimal>? projectedLeft = null;
             if (includeProjection)
             {

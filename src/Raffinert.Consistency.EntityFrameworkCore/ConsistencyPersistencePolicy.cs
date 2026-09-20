@@ -54,7 +54,15 @@ internal static class ConsistencyPersistencePolicyEngine
             var violations = plan.InvariantEvaluations.Where(evaluation =>
                 policy.EnforcedInvariantIds.Contains(evaluation.InvariantId) &&
                 evaluation.State == InvariantEvaluationState.Violated).ToArray();
-            if (violations.Length > 0) throw new ConsistencyInvariantViolationException(violations);
+            if (violations.Length > 0)
+            {
+                var repairRequests = plan.Result.RepairRequests.Where(request => violations.Any(violation =>
+                    violation.InvariantId == request.InvariantId &&
+                    ReferenceEquals(violation.Source, request.Source))).ToArray();
+                throw new ConsistencyInvariantViolationException(
+                    Array.AsReadOnly(violations),
+                    Array.AsReadOnly(repairRequests));
+            }
             if (forceMaterialization || policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
                 materializationRollback = ApplyMaterializations(
                     context, runtime, policy.Materializations, plan, materializationSelector);

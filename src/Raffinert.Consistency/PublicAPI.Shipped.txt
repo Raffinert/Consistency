@@ -44,11 +44,15 @@ Raffinert.Consistency.RelationDependencyCause.DefinitionKey.get -> string?
 Raffinert.Consistency.RelationDependencyCause.DefinitionKey.init -> void
 Raffinert.Consistency.RelationDependencyCause.Kind.get -> Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationDependencyCause.Kind.init -> void
+Raffinert.Consistency.RelationDependencyCause.LeftSelectorPath.get -> string?
+Raffinert.Consistency.RelationDependencyCause.LeftSelectorPath.init -> void
 Raffinert.Consistency.RelationDependencyCause.OriginIds.get -> System.Collections.Generic.IReadOnlyList<int>!
 Raffinert.Consistency.RelationDependencyCause.OriginIds.init -> void
 Raffinert.Consistency.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Consistency.RelationImpactCauseKind Kind, Raffinert.Consistency.ImpactCausePrecision CausePrecision) -> void
 Raffinert.Consistency.RelationDependencyCause.RelationId.get -> int
 Raffinert.Consistency.RelationDependencyCause.RelationId.init -> void
+Raffinert.Consistency.RelationDependencyCause.RightSelectorPath.get -> string?
+Raffinert.Consistency.RelationDependencyCause.RightSelectorPath.init -> void
 Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationImpactCauseKind.ConservativeCandidate = 3 -> Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationImpactCauseKind.MembershipAdded = 0 -> Raffinert.Consistency.RelationImpactCauseKind

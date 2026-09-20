@@ -33,9 +33,17 @@ public sealed class IncompleteConsistencyScopeException : Exception
 
 public sealed class ConsistencyInvariantViolationException : Exception
 {
-    internal ConsistencyInvariantViolationException(IReadOnlyList<PlannedInvariantEvaluation> violations)
-        : base("One or more enforced consistency invariants would be violated.") => Violations = violations;
+    internal ConsistencyInvariantViolationException(
+        IReadOnlyList<PlannedInvariantEvaluation> violations,
+        IReadOnlyList<RepairRequestInfo> repairRequests)
+        : base("One or more enforced consistency invariants would be violated.")
+    {
+        Violations = violations;
+        RepairRequests = repairRequests;
+    }
+
     public IReadOnlyList<PlannedInvariantEvaluation> Violations { get; }
+    public IReadOnlyList<RepairRequestInfo> RepairRequests { get; }
 }
 
 public sealed class ConsistencyMaterializationSourceNotTrackedException : Exception

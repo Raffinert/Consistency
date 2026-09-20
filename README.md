@@ -143,6 +143,11 @@ Calculation, invalidation, storage, and consequences are separate concepts:
 | `Invariant(...)` | Declare required truth. |
 | `RepairWhenViolated()` | Emit structured repair data when evaluation proves the invariant is violated. |
 
+Repair-enabled invariants are evaluated for every affected source before the operation result is produced,
+because a repair request requires proof that the predicate is false. Required upstream derived values may
+therefore become `Fresh` after an incoming `Dirty` or `Invalid` impact. Invariants without repair policy remain
+lazy unless another explicit reaction or persistence policy requests evaluation.
+
 For example, `UnitRate` receives the logical `PriceRate`; it never reads the potentially stale mirror:
 
 ```csharp

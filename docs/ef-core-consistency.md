@@ -107,6 +107,12 @@ await db.SaveChangesConsistentlyAsync(
 Only an explicitly `Enforce`d evaluation whose state is `Violated` blocks persistence. `Unknown`, `Dirty`,
 `Invalid`, an unenforced violation, and `ScheduleRepair` policy data do not automatically block SQL.
 
+When an enforced violation rejects the save, `ConsistencyInvariantViolationException.Violations` contains only
+the enforced violated evaluations and `RepairRequests` contains the matching structured requests for those
+evaluations. A violated invariant without `RepairWhenViolated()` still rejects but contributes no repair request.
+The exception is produced from the reversible plan: SQL is not executed, runtime version does not advance, and
+the caller may inspect repair data without installing the rejected plan.
+
 The ordering is:
 
 ```text

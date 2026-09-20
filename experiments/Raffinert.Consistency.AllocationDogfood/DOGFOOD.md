@@ -1,4 +1,4 @@
-# Allocation consistency dogfood second-pass findings
+# Allocation consistency dogfood third-pass findings
 
 ## Fixed by framework changes
 
@@ -8,16 +8,30 @@
 - Repairability is immutable model metadata configured with `RepairWhenViolated()`. A repair request is emitted
   only after an affected repairable invariant is evaluated and its predicate returns false. Safe capacity
   increases and safe quantity decreases therefore produce no repair work.
-- `ApplyDetailed` and the EF save result expose structured `RepairRequestInfo` data. The compiled model contains
-  no application callback or mutable repair queue; the allocation application translates requests into local
-  repair requirements and owns replacement selection.
+- Core exposes structured repair data through `ApplyDetailed(...).Result.RepairRequests`. An ordinary EF save
+  rejected by an enforced invariant exposes the relevant requests through
+  `ConsistencyInvariantViolationException.RepairRequests`. The compiled model contains no application callback
+  or mutable repair queue; the allocation application translates requests into local repair requirements and
+  owns replacement selection.
 - `FromMembership(candidateSupplies, allocation => allocation.Demand, allocation => allocation.Supply)` reuses
   the existing candidate relation and its indexes. Allocation compatibility has one semantic authority: the
   candidate relation predicate.
 - Projected membership tracks both selected references and changes that alter the underlying relation. Its
-  derived value participates in invariant propagation and causal traces.
+  derived value participates in invariant propagation; causal relation causes identify the underlying relation
+  plus both projection selector paths.
 - The rich `Supply.ChangeCapacity` method remains Raffinert-free. EF continues to observe ordinary tracked
   mutations at the `SaveChangesAsync` boundary.
+
+## Eager repair proof
+
+`RepairWhenViolated()` is not merely a label on a future handler. To prove whether repair is needed, Raffinert
+evaluates every affected source of a repair-enabled invariant during mutation application or planning. Upstream
+derived values needed by the predicate therefore become `Fresh` even when the incoming dependency impact was
+`Dirty` or `Invalid`. A request is emitted only when that evaluated predicate is false, and at most once per
+invariant/source in one operation result.
+
+An invariant without `RepairWhenViolated()` retains its configured lazy reaction semantics unless another
+explicit policy requests evaluation, such as EF enforcement or `EvaluateImmediately`.
 
 ## Still awkward
 
@@ -25,6 +39,9 @@
   identity into a domain-specific repair requirement before choosing a replacement.
 - Core POCO callers must report mutations explicitly, while EF callers rely on tracked changes and save-time
   translation. The distinction is honest but requires two integration habits.
+- A repair after an EF-rejected plan must not treat that plan as committed runtime state. This dogfood seeds an
+  application-owned runtime from the complete current tracked graph, applies application repair there, and lets
+  the ordinary EF retry plan the final tracked mutation set against the unchanged scoped runtime baseline.
 - The compact projected-membership declaration is clear for this case, but larger models still need explicit
   names and diagnostics to make cross-object ownership easy to follow.
 - Causal traces identify definitions, members, relation pairs, and sources. They do not yet include the evaluated

@@ -17,6 +17,32 @@ public sealed record RepairProcessingResult(
 
 public sealed class ReallocateDemand(AllocationConsistencyModel model)
 {
+    public RepairProcessingResult ProcessCurrentGraph(
+        IEnumerable<RepairRequestInfo> requests,
+        IEnumerable<Demand> demands,
+        IEnumerable<Supply> supplies,
+        IEnumerable<Allocation> allocations,
+        IEnumerable<Fulfillment> fulfillments)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(demands);
+        ArgumentNullException.ThrowIfNull(supplies);
+        ArgumentNullException.ThrowIfNull(allocations);
+        ArgumentNullException.ThrowIfNull(fulfillments);
+        var currentDemands = demands.ToArray();
+        var currentSupplies = supplies.ToArray();
+        var currentAllocations = allocations.ToArray();
+        var currentFulfillments = fulfillments.ToArray();
+        var currentRuntime = model.Compiled.CreateRuntime(seed =>
+        {
+            seed.Add(model.Demands, currentDemands);
+            seed.Add(model.Supplies, currentSupplies);
+            seed.Add(model.Allocations, currentAllocations);
+            seed.Add(model.Fulfillments, currentFulfillments);
+        });
+        return Process(currentRuntime, requests);
+    }
+
     public RepairProcessingResult Process(
         ConsistencyRuntime runtime,
         IEnumerable<RepairRequestInfo> requests)

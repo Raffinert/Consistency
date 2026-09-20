@@ -584,7 +584,7 @@ public sealed partial class DerivedStateTests
     }
 
     [Fact]
-    public void Relation_membership_addition_uses_membership_policy_not_item_member_classifier()
+    public void Relation_membership_changes_use_membership_policy_not_item_member_classifier()
     {
         var model = new ConsistencyModelBuilder();
         var sources = model.Objects<DerivedSourceRecord>().Key(x => x.Id);
@@ -593,6 +593,7 @@ public sealed partial class DerivedStateTests
         var quantity = model.Derived(sources).From(relation)
             .Impact(policy => policy
                 .MembershipAdded(DependencySeverity.Dirty)
+                .MembershipRemoved(DependencySeverity.Dirty)
                 .ItemChanged(DependencySeverity.Invalid)
                 .ItemMemberChanged(item => item.Quantity, (_, _) => DependencySeverity.Invalid))
             .Select((_, matches) => matches.Sum(item => item.Quantity));
@@ -603,6 +604,11 @@ public sealed partial class DerivedStateTests
 
         var item = Item("A", 3m);
         runtime.Add(items, item);
+
+        Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
+
+        Assert.Equal(3m, runtime.Evaluate(quantity, source));
+        runtime.Remove(items, item);
 
         Assert.Equal(DerivedValueState.Dirty, runtime.GetState(quantity, source));
     }
@@ -690,5 +696,225 @@ public sealed partial class DerivedStateTests
         Assert.True(runtime.Evaluate(compatible, allocation));
         Assert.True(runtime.Evaluate(invariant, allocation));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Projected_membership_join_key_changes_route_only_exact_consumers_and_report_selectors(
+        bool changeLeft)
+    {
+        var scenario = CreateProjectedMembershipScenario();
+        RuntimeApplication application;
+        if (changeLeft)
+        {
+            scenario.DemandA.Code = "X";
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+                scenario.Demands, scenario.DemandA, value => value.Code, "A", "X")),
+                RuntimeImpactDetailLevel.Causal);
+        }
+        else
+        {
+            scenario.SupplyA.Code = "X";
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+                scenario.Supplies, scenario.SupplyA, value => value.Code, "A", "X")),
+                RuntimeImpactDetailLevel.Causal);
+        }
+
+        var impacted = Assert.Single(application.Result.DerivedImpacts).Sources;
+        Assert.Equal(2, impacted.Count);
+        Assert.Contains(impacted, value => ReferenceEquals(value.Source, scenario.First));
+        Assert.Contains(impacted, value => ReferenceEquals(value.Source, scenario.Second));
+        Assert.DoesNotContain(impacted, value => ReferenceEquals(value.Source, scenario.Unrelated));
+        Assert.Equal(2, application.Result.RepairRequests.Count);
+        foreach (var allocation in new[] { scenario.First, scenario.Second })
+        {
+            Assert.Equal(DerivedValueState.Fresh,
+                scenario.Runtime.GetState(scenario.Compatible, allocation));
+            Assert.Equal(InvariantEvaluationState.Violated,
+                scenario.Runtime.GetState(scenario.Invariant, allocation));
+            var sourceImpact = Assert.Single(impacted, value => ReferenceEquals(value.Source, allocation));
+            var cause = Assert.IsType<RelationDependencyCause>(Assert.Single(sourceImpact.Causes));
+            Assert.Equal("candidate-supplies", cause.DefinitionKey);
+            Assert.Equal("Demand", cause.LeftSelectorPath);
+            Assert.Equal("Supply", cause.RightSelectorPath);
+            Assert.Equal(RelationImpactCauseKind.MembershipRemoved, cause.Kind);
+        }
+        Assert.Equal(DerivedValueState.Fresh,
+            scenario.Runtime.GetState(scenario.Compatible, scenario.Unrelated));
+        Assert.Equal(InvariantEvaluationState.Valid,
+            scenario.Runtime.GetState(scenario.Invariant, scenario.Unrelated));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Projected_membership_selector_retarget_affects_only_changed_source(bool retargetLeft)
+    {
+        var scenario = CreateProjectedMembershipScenario();
+        RuntimeApplication application;
+        if (retargetLeft)
+        {
+            scenario.First.Demand = scenario.DemandB;
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+                scenario.Allocations, scenario.First, value => value.Demand,
+                scenario.DemandA, scenario.DemandB)));
+        }
+        else
+        {
+            scenario.First.Supply = scenario.SupplyB;
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+                scenario.Allocations, scenario.First, value => value.Supply,
+                scenario.SupplyA, scenario.SupplyB)));
+        }
+
+        var impacted = Assert.Single(application.Result.DerivedImpacts).Sources;
+        Assert.Same(scenario.First, Assert.Single(impacted).Source);
+        Assert.Same(scenario.First, Assert.Single(application.Result.RepairRequests).Source);
+        Assert.Equal(DerivedValueState.Fresh,
+            scenario.Runtime.GetState(scenario.Compatible, scenario.First));
+        Assert.Equal(InvariantEvaluationState.Violated,
+            scenario.Runtime.GetState(scenario.Invariant, scenario.First));
+        Assert.Equal(DerivedValueState.Fresh,
+            scenario.Runtime.GetState(scenario.Compatible, scenario.Second));
+        Assert.Equal(InvariantEvaluationState.Valid,
+            scenario.Runtime.GetState(scenario.Invariant, scenario.Second));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Projected_membership_selected_target_can_be_atomically_retargeted_and_removed(
+        bool removeLeft)
+    {
+        var scenario = CreateProjectedMembershipScenario();
+        RuntimeApplication application;
+        if (removeLeft)
+        {
+            scenario.First.Demand = scenario.ReplacementDemandA;
+            scenario.Second.Demand = scenario.ReplacementDemandA;
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(
+                Change.Property(scenario.Allocations, scenario.First, value => value.Demand,
+                    scenario.DemandA, scenario.ReplacementDemandA),
+                Change.Property(scenario.Allocations, scenario.Second, value => value.Demand,
+                    scenario.DemandA, scenario.ReplacementDemandA),
+                Change.Remove(scenario.Demands, scenario.DemandA)));
+        }
+        else
+        {
+            scenario.First.Supply = scenario.ReplacementSupplyA;
+            scenario.Second.Supply = scenario.ReplacementSupplyA;
+            application = scenario.Runtime.ApplyDetailed(MutationSet.Create(
+                Change.Property(scenario.Allocations, scenario.First, value => value.Supply,
+                    scenario.SupplyA, scenario.ReplacementSupplyA),
+                Change.Property(scenario.Allocations, scenario.Second, value => value.Supply,
+                    scenario.SupplyA, scenario.ReplacementSupplyA),
+                Change.Remove(scenario.Supplies, scenario.SupplyA)));
+        }
+
+        var impacted = Assert.Single(application.Result.DerivedImpacts).Sources;
+        Assert.Equal(2, impacted.Count);
+        Assert.DoesNotContain(impacted, value => ReferenceEquals(value.Source, scenario.Unrelated));
+        Assert.Empty(application.Result.RepairRequests);
+        foreach (var allocation in new[] { scenario.First, scenario.Second })
+        {
+            Assert.Equal(DerivedValueState.Fresh,
+                scenario.Runtime.GetState(scenario.Compatible, allocation));
+            Assert.Equal(InvariantEvaluationState.Valid,
+                scenario.Runtime.GetState(scenario.Invariant, allocation));
+        }
+    }
+
+    [Fact]
+    public void Projected_membership_unselected_relation_pair_does_not_invalidate_any_source()
+    {
+        var scenario = CreateProjectedMembershipScenario();
+        var unselected = new ProjectedSupply { Id = Guid.NewGuid(), Code = "A" };
+
+        var application = scenario.Runtime.ApplyDetailed(MutationSet.Create(
+            Change.Add(scenario.Supplies, unselected)));
+
+        Assert.Empty(application.Result.DerivedImpacts);
+        Assert.Empty(application.Result.InvariantImpacts);
+        Assert.Empty(application.Result.RepairRequests);
+        Assert.Equal(DerivedValueState.Fresh,
+            scenario.Runtime.GetState(scenario.Compatible, scenario.First));
+        Assert.Equal(InvariantEvaluationState.Valid,
+            scenario.Runtime.GetState(scenario.Invariant, scenario.First));
+    }
+
+    private static ProjectedMembershipScenario CreateProjectedMembershipScenario()
+    {
+        var model = new ConsistencyModelBuilder();
+        var demands = model.Objects<ProjectedDemand>().Key(value => value.Id);
+        var supplies = model.Objects<ProjectedSupply>().Key(value => value.Id);
+        var allocations = model.Objects<ProjectedAllocation>().Key(value => value.Id);
+        var candidates = model.Relation(demands, supplies)
+            .Where((demand, supply) => demand.Code == supply.Code)
+            .Named("candidate-supplies");
+        var compatible = model.Derived(allocations)
+            .FromMembership(candidates, allocation => allocation.Demand, allocation => allocation.Supply)
+            .Named("allocation-compatible");
+        var invariant = model.Invariant(allocations).From(compatible)
+            .Must((_, value) => value)
+            .RepairWhenViolated()
+            .Named("allocation-compatible-valid");
+        var demandA = new ProjectedDemand { Id = Guid.NewGuid(), Code = "A" };
+        var replacementDemandA = new ProjectedDemand { Id = Guid.NewGuid(), Code = "A" };
+        var demandB = new ProjectedDemand { Id = Guid.NewGuid(), Code = "B" };
+        var supplyA = new ProjectedSupply { Id = Guid.NewGuid(), Code = "A" };
+        var replacementSupplyA = new ProjectedSupply { Id = Guid.NewGuid(), Code = "A" };
+        var supplyB = new ProjectedSupply { Id = Guid.NewGuid(), Code = "B" };
+        var first = new ProjectedAllocation
+        {
+            Id = Guid.NewGuid(),
+            Demand = demandA,
+            Supply = supplyA
+        };
+        var second = new ProjectedAllocation
+        {
+            Id = Guid.NewGuid(),
+            Demand = demandA,
+            Supply = supplyA
+        };
+        var unrelated = new ProjectedAllocation
+        {
+            Id = Guid.NewGuid(),
+            Demand = demandB,
+            Supply = supplyB
+        };
+        var runtime = model.Build().CreateRuntime(seed =>
+        {
+            seed.Add(demands, [demandA, replacementDemandA, demandB]);
+            seed.Add(supplies, [supplyA, replacementSupplyA, supplyB]);
+            seed.Add(allocations, [first, second, unrelated]);
+        });
+        foreach (var allocation in new[] { first, second, unrelated })
+        {
+            Assert.True(runtime.Evaluate(compatible, allocation));
+            Assert.True(runtime.Evaluate(invariant, allocation));
+        }
+        return new ProjectedMembershipScenario(
+            runtime, demands, supplies, allocations, compatible, invariant,
+            demandA, replacementDemandA, demandB,
+            supplyA, replacementSupplyA, supplyB,
+            first, second, unrelated);
+    }
+
+    private sealed record ProjectedMembershipScenario(
+        ConsistencyRuntime Runtime,
+        ObjectSet<ProjectedDemand> Demands,
+        ObjectSet<ProjectedSupply> Supplies,
+        ObjectSet<ProjectedAllocation> Allocations,
+        Derived<ProjectedAllocation, bool> Compatible,
+        Invariant<ProjectedAllocation> Invariant,
+        ProjectedDemand DemandA,
+        ProjectedDemand ReplacementDemandA,
+        ProjectedDemand DemandB,
+        ProjectedSupply SupplyA,
+        ProjectedSupply ReplacementSupplyA,
+        ProjectedSupply SupplyB,
+        ProjectedAllocation First,
+        ProjectedAllocation Second,
+        ProjectedAllocation Unrelated);
 
 }
