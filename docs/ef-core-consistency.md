@@ -158,6 +158,12 @@ stabilizes EF fixup once, and then refreshes principal-side one-to-one current v
 reports both the dependent reference and the old/new principal references without losing owned-reference or
 replacement evidence.
 
+Original relationship indexes represent the persisted/runtime baseline and therefore exclude `Added` entries.
+An added dependent has no original relationship even when EF exposes an original FK equal to its current FK.
+Mutation fingerprints resolve scalar EF metadata once through a reference-identity entry map, snapshot values with
+the property's effective `ValueComparer`, and use that comparer for later equality. Mutable values with configured
+snapshot semantics cannot silently mutate an already-retained rejected or pending fingerprint.
+
 Relevant tracked scalar, navigation, add, and remove changes make a retained preview stale. Properties outside the
 compiled consistency semantics are filtered out and do not. Arbitrary unreported mutations in dependency-free core
 POCOs remain outside the guarantee because core has no general mutation observer.

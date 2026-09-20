@@ -572,6 +572,8 @@ public static class ChangeTrackerAdapter
         INavigation navigation,
         bool original)
     {
+        if (original && owner.State == EntityState.Added)
+            return null;
         var foreignKey = navigation.ForeignKey;
         if (navigation.IsOnDependent)
         {

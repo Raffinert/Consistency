@@ -206,6 +206,92 @@ public sealed class TrackedGraphSnapshotTests
     }
 
     [Fact]
+    public void Added_entries_are_excluded_from_original_relationship_indexes()
+    {
+        using (var context = CreateContext())
+        {
+            var parent = new Parent { Id = 1 };
+            context.Add(parent);
+            context.SaveChanges();
+            var added = new Detail { Id = 1, ParentId = parent.Id };
+            context.Add(added);
+            var foreignKey = Assert.Single(context.Entry(added).Metadata.GetForeignKeys());
+            Assert.Equal(parent.Id, context.Entry(added).Property(value => value.ParentId).OriginalValue);
+            var snapshot = TrackedGraphSnapshot.Create(context.ChangeTracker);
+
+            Assert.Empty(snapshot.FindDependents(
+                foreignKey.DeclaringEntityType, foreignKey, [parent.Id], original: true));
+            Assert.Single(snapshot.FindDependents(
+                foreignKey.DeclaringEntityType, foreignKey, [parent.Id], original: false));
+        }
+
+        using (var context = CreateContext())
+        {
+            var detail = new Detail { Id = 1, ParentId = 1 };
+            context.Add(detail);
+            context.SaveChanges();
+            var added = new Parent { Id = 1 };
+            context.Add(added);
+            var foreignKey = Assert.Single(context.Entry(detail).Metadata.GetForeignKeys());
+            var snapshot = TrackedGraphSnapshot.Create(context.ChangeTracker);
+
+            Assert.Empty(snapshot.FindPrincipals(
+                foreignKey.PrincipalEntityType, foreignKey.PrincipalKey, [added.Id], original: true));
+            Assert.Single(snapshot.FindPrincipals(
+                foreignKey.PrincipalEntityType, foreignKey.PrincipalKey, [added.Id], original: false));
+        }
+    }
+
+    [Fact]
+    public void Added_one_to_one_dependent_has_no_principal_side_baseline_relationship()
+    {
+        using var context = CreateContext();
+        var parent = new Parent { Id = 1 };
+        context.Add(parent);
+        context.SaveChanges();
+        var added = new Detail { Id = 1, ParentId = parent.Id };
+        context.Add(added);
+
+        var changes = Assert.IsType<ChangeSet>(
+            ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker)).Changes;
+
+        var principal = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, parent) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Null(principal.OldValue);
+        Assert.Same(added, principal.NewValue);
+        var dependent = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, added) && value.Member.Name == nameof(Detail.Parent));
+        Assert.Null(dependent.OldValue);
+        Assert.Same(parent, dependent.NewValue);
+        Assert.All(changes.OfType<PropertyChange>()
+            .Where(value => ReferenceEquals(value.Instance, parent) &&
+                value.Member.Name == nameof(Parent.Detail)),
+            value => Assert.Same(principal, value));
+    }
+
+    [Fact]
+    public void Existing_one_to_one_dependent_can_be_replaced_by_added_dependent()
+    {
+        using var context = CreateContext();
+        var parent = new Parent { Id = 1 };
+        var original = new Detail { Id = 1, Parent = parent };
+        parent.Detail = original;
+        context.AddRange(parent, original);
+        context.SaveChanges();
+        original.ParentId = null;
+        var added = new Detail { Id = 2, ParentId = parent.Id };
+        context.Add(added);
+
+        var changes = Assert.IsType<ChangeSet>(
+            ChangeTrackerAdapter.CreateChangeSet(context.ChangeTracker)).Changes;
+
+        var principal = Assert.Single(changes, value =>
+            ReferenceEquals(value.Instance, parent) && value.Member.Name == nameof(Parent.Detail));
+        Assert.Same(original, principal.OldValue);
+        Assert.Same(added, principal.NewValue);
+    }
+
+    [Fact]
     public void Same_clr_type_with_distinct_entity_metadata_does_not_cross_resolve_equal_keys()
     {
         using var context = CreateSharedTypeContext();
@@ -566,8 +652,8 @@ public sealed class TrackedGraphSnapshotTests
         var firstCapture = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
         var secondCapture = ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings);
 
-        Assert.True(EfMutationFingerprint.Create(firstCapture.Mutations)
-            .Equals(EfMutationFingerprint.Create(secondCapture.Mutations)));
+        Assert.True(EfMutationFingerprint.Create(context.ChangeTracker, firstCapture.Mutations)
+            .Equals(EfMutationFingerprint.Create(context.ChangeTracker, secondCapture.Mutations)));
     }
 
     [Fact]

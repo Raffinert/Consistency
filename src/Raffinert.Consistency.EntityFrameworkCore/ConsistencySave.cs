@@ -228,7 +228,7 @@ internal static class ConsistencyCoordinator
         var admissions = ExternalConsumerDiscovery.Discover(
             context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
         var unit = Combine(captured, admissions);
-        var fingerprint = EfMutationFingerprint.Create(unit.Mutations);
+        var fingerprint = EfMutationFingerprint.Create(context.ChangeTracker, unit.Mutations);
         PreparedImpactPlan? plan;
         MaterializationRollback? materializationRollback;
         try
@@ -270,7 +270,7 @@ internal static class ConsistencyCoordinator
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
         var unit = Combine(captured, admissions);
-        var fingerprint = EfMutationFingerprint.Create(unit.Mutations);
+        var fingerprint = EfMutationFingerprint.Create(context.ChangeTracker, unit.Mutations);
         PreparedImpactPlan? plan;
         MaterializationRollback? materializationRollback;
         try
@@ -319,7 +319,8 @@ internal static class ConsistencyCoordinator
         if (diagnostics is not null)
             diagnostics.ExternalDiscoveryTicks += Stopwatch.GetTimestamp() - phaseStart;
         phaseStart = Stopwatch.GetTimestamp();
-        var fingerprint = EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+        var fingerprint = EfMutationFingerprint.Create(
+            context.ChangeTracker, Combine(captured, admissions).Mutations);
         if (diagnostics is not null)
             diagnostics.FingerprintConstructionTicks += Stopwatch.GetTimestamp() - phaseStart;
         return fingerprint;
@@ -345,6 +346,7 @@ internal static class ConsistencyCoordinator
         ArgumentNullException.ThrowIfNull(mappings);
         context.ChangeTracker.DetectChanges();
         return EfMutationFingerprint.Create(
+            context.ChangeTracker,
             CaptureUnitOfWork(context, mappings, includeProperty).Mutations);
     }
 
@@ -369,7 +371,8 @@ internal static class ConsistencyCoordinator
         var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
-        return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+        return EfMutationFingerprint.Create(
+            context.ChangeTracker, Combine(captured, admissions).Mutations);
     }
 
     private static ConsistencyUnitOfWork CaptureUnitOfWork(

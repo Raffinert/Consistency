@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -94,6 +95,8 @@ internal sealed class TrackedGraphSnapshot
         foreach (var entry in Entries)
         {
             if (!target.IsAssignableFrom(entry.Metadata))
+                continue;
+            if (original && entry.State == EntityState.Added)
                 continue;
             var values = valueProperties.Select(property =>
                 original

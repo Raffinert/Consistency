@@ -1,5 +1,16 @@
 # Allocation consistency dogfood ninth-pass findings
 
+## PR review correctness closeout
+
+Original tracked-relationship indexes now exclude `Added` entries, so a new one-to-one dependent cannot appear as
+part of the persisted/runtime baseline. Added-dependent insertion and replacement preserve exact principal-side
+old/new evidence without ambiguity.
+
+EF mutation fingerprints no longer retain live scalar property references. Fingerprint construction builds one
+reference-identity entry map, resolves scalar `IProperty` metadata, snapshots old/current values with the effective
+EF `ValueComparer`, and uses that comparer for equality. Regressions cover in-place structural `byte[]` mutation,
+a configured custom mutable comparer, equal distinct values, rejected-preview staleness, and pending-plan rebuild.
+
 ## One-to-one capture linearity closeout
 
 The eighth-pass FK-only one-to-one correctness fix initially emitted provisional principal-side changes and then
