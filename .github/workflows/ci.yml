@@ -39,12 +39,17 @@ jobs:
         run: dotnet format Raffinert.Consistency.sln --no-restore --verify-no-changes
       - name: Pack
         run: dotnet pack Raffinert.Consistency.sln -c Release --no-build -o artifacts/packages
-      - name: Smoke test packed packages
+      - name: Restore packed package consumers
         run: |
           PACKAGE_SOURCE="$GITHUB_WORKSPACE/artifacts/packages"
           dotnet restore tests/package-consumers/CoreNet8 --source https://api.nuget.org/v3/index.json --source "$PACKAGE_SOURCE"
           dotnet restore tests/package-consumers/CoreNet10 --source https://api.nuget.org/v3/index.json --source "$PACKAGE_SOURCE"
           dotnet restore tests/package-consumers/EfNet10 --source https://api.nuget.org/v3/index.json --source "$PACKAGE_SOURCE"
+      - name: Verify packed consumer package versions
+        shell: pwsh
+        run: ./eng/VerifyPackageConsumerAssets.ps1
+      - name: Smoke test packed packages
+        run: |
           dotnet run --project tests/package-consumers/CoreNet8 -c Release --no-restore
           dotnet run --project tests/package-consumers/CoreNet10 -c Release --no-restore
           dotnet run --project tests/package-consumers/EfNet10 -c Release --no-restore
