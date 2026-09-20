@@ -274,9 +274,9 @@ internal sealed class ConfiguredInvariantProvider<TSource> where TSource : class
         return this;
     }
 
-    public ConfiguredInvariantProvider<TSource> ScheduleRepairWith(Action<TSource> repair)
+    public ConfiguredInvariantProvider<TSource> RepairWhenViolated()
     {
-        Raw.ScheduleRepairWith(repair);
+        Raw.RepairWhenViolated();
         return this;
     }
 }

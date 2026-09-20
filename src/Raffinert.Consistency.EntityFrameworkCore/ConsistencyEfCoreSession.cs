@@ -15,6 +15,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
     private readonly List<OwnedMaterializationWrite> _ownedWrites = [];
     private ConsistencyRuntime? _runtime;
     private PendingConsistencySave? _pending;
+    private RejectedConsistencySave? _rejected;
     private bool _baselineMayNeedStabilization;
 
     public ConsistencyEfCoreSession(
@@ -32,6 +33,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
 
     internal TDbContext Context => _context;
     internal ConsistencyRuntime Runtime => _runtime ??= Bind(_runtimeFactory());
+    internal long RejectedPreviewValidationCount { get; private set; }
 
     internal void BindRuntime(ConsistencyRuntime runtime) => Bind(runtime);
 
@@ -83,6 +85,7 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         finally
         {
             _pending = null;
+            _rejected = null;
             _ownedWrites.Clear();
         }
     }
@@ -149,6 +152,17 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         RecordOwnedWrites(plan, null);
     }
 
+    internal ConsistencyPreview CreateRejectedPreview(ConsistencyInvariantViolationException error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        var rejected = _rejected;
+        if (rejected is null || !ReferenceEquals(rejected.Error, error))
+            throw new InvalidOperationException(
+                "The invariant rejection is not the current rejected save for this EF session.");
+        ValidateRejected(rejected);
+        return Runtime.CreatePreview(rejected.Plan, () => ValidateRejected(rejected));
+    }
+
     private PendingConsistencySave PrepareForSaveCore()
     {
         var runtime = Runtime;
@@ -168,8 +182,17 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
             StabilizeCurrentTrackedBaselines();
         }
 
-        _pending = PrepareStable(runtime, () => ConsistencyCoordinator.Prepare(
-            _context, runtime, _mappings, _options, IncludeSemanticProperty));
+        try
+        {
+            _pending = PrepareStable(runtime, () => ConsistencyCoordinator.Prepare(
+                _context, runtime, _mappings, _options, IncludeSemanticProperty));
+            _rejected = null;
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            RememberRejected(error);
+            throw;
+        }
         return _pending;
     }
 
@@ -193,9 +216,18 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
             StabilizeCurrentTrackedBaselines();
         }
 
-        _pending = await PrepareStableAsync(runtime, () => ConsistencyCoordinator.PrepareAsync(
-            _context, runtime, _mappings, _options, cancellationToken, IncludeSemanticProperty))
-            .ConfigureAwait(false);
+        try
+        {
+            _pending = await PrepareStableAsync(runtime, () => ConsistencyCoordinator.PrepareAsync(
+                _context, runtime, _mappings, _options, cancellationToken, IncludeSemanticProperty))
+                .ConfigureAwait(false);
+            _rejected = null;
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            RememberRejected(error);
+            throw;
+        }
         return _pending;
     }
 
@@ -420,10 +452,39 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         _ownedWrites.Clear();
     }
 
+    private void RememberRejected(ConsistencyInvariantViolationException error)
+    {
+        if (error.Fingerprint is null)
+            throw new InvalidOperationException(
+                "The rejected EF plan is missing its tracked mutation fingerprint.", error);
+        _rejected = new RejectedConsistencySave(
+            error,
+            error.RejectedPlan,
+            error.Fingerprint,
+            error.BaselineRevision);
+    }
+
+    private void ValidateRejected(RejectedConsistencySave rejected)
+    {
+        if (!ReferenceEquals(_rejected, rejected))
+            throw new InvalidOperationException(
+                "The proposed-state view is stale because its rejected save is no longer current.");
+        if (Runtime.BaselineRevision != rejected.BaselineRevision)
+            throw new InvalidOperationException(
+                "The proposed-state view is stale because the tracked runtime baseline changed.");
+        RejectedPreviewValidationCount++;
+        var current = ConsistencyCoordinator.CaptureFingerprint(
+            _context, Runtime, _mappings, _options, IncludeSemanticProperty);
+        if (!rejected.Fingerprint.Equals(current))
+            throw new InvalidOperationException(
+                "The proposed-state view is stale because relevant tracked state changed after rejection.");
+    }
+
     public void Dispose()
     {
         _context.ChangeTracker.Tracked -= Tracked;
         _pending = null;
+        _rejected = null;
         _ownedWrites.Clear();
     }
 
@@ -432,4 +493,10 @@ internal sealed class ConsistencyEfCoreSession<TDbContext> : IRuntimeMaterializa
         System.Reflection.MemberInfo Member,
         MaterializationDescriptor Descriptor,
         object? Value);
+
+    private sealed record RejectedConsistencySave(
+        ConsistencyInvariantViolationException Error,
+        PreparedImpactPlan Plan,
+        EfMutationFingerprint Fingerprint,
+        long BaselineRevision);
 }

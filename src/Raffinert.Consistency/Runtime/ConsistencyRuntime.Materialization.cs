@@ -73,7 +73,7 @@ public sealed partial class ConsistencyRuntime
 
     /// <summary>
     /// Synchronizes every configured representation physically located on the registered source object.
-    /// Logical values are prepared before any property is written; repair callbacks are not dispatched.
+    /// Logical values are prepared before any property is written; repair requests are not dispatched.
     /// </summary>
     public void Materialize<TSource>(TSource source) where TSource : class
     {

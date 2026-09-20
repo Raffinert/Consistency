@@ -8,8 +8,7 @@ public sealed class PreparedDetailedCommitTests
     public void Preview_is_repeatable_non_mutating_and_matches_commit(
         RuntimeImpactDetailLevel detailLevel)
     {
-        var callbacks = new List<int>();
-        var scenario = CreateScenario(callbacks);
+        var scenario = CreateScenario([]);
         scenario.Source.Value = 2;
         var prepared = scenario.Runtime.Prepare(MutationSet.Create(Change.Property(
             scenario.Set, scenario.Source, source => source.Value, 1, 2)));
@@ -23,7 +22,7 @@ public sealed class PreparedDetailedCommitTests
         Assert.False(prepared.IsCommitted);
         Assert.False(prepared.IsDispatched);
         Assert.Equal(diagnostics, scenario.Runtime.Diagnostics);
-        Assert.Empty(callbacks);
+        Assert.Single(first.RepairRequests);
         Assert.Equal(first.ChangeImpact, second.ChangeImpact);
         AssertEquivalent(first, second);
 
@@ -31,7 +30,7 @@ public sealed class PreparedDetailedCommitTests
 
         Assert.Equal(first.ChangeImpact, committed.ChangeImpact);
         AssertEquivalent(first, committed);
-        Assert.Empty(callbacks);
+        Assert.Single(committed.RepairRequests);
     }
 
     [Fact]
@@ -234,9 +233,8 @@ public sealed class PreparedDetailedCommitTests
         var result = scenario.Runtime.CommitDetailed(prepared, detailLevel);
 
         Assert.Equal(detailLevel, result.DetailLevel);
-        Assert.Empty(callbacks);
+        Assert.Single(result.RepairRequests);
         scenario.Runtime.Dispatch(prepared);
-        Assert.Equal([2], callbacks);
         Assert.Throws<InvalidOperationException>(() => scenario.Runtime.Commit(prepared));
         Assert.Throws<InvalidOperationException>(() => scenario.Runtime.CommitDetailed(prepared));
     }
@@ -323,7 +321,7 @@ public sealed class PreparedDetailedCommitTests
         var set = model.Objects<Source>().Key(source => source.Id);
         var value = model.Derived(set).Select(source => source.Value);
         var invariant = model.Invariant(set).From(value).Must((_, current) => current <= 1)
-            .ScheduleRepairWith(source => callbacks.Add(source.Value));
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Value = 1 };
         runtime.Add(set, source);

@@ -94,9 +94,12 @@ public sealed class CompiledConsistencyModel
             lines.Add($"  Pair membership retained: {relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized}");
             lines.Add($"  Relation materialization: {(relation.PropagationPlan == RelationPropagationPlan.ExactMaterialized ? "ExactPropagation" : "None")}");
             lines.Add($"  Dependency analysis: {FormatDependencyAnalysis(relation.Analysis.DependencyAnalysis)}");
-            var materialized = _derivedStates.Any(derived =>
-                derived.Inputs.OfType<RelationDerivedInput>()
-                    .Any(input => ReferenceEquals(input.Relation, relation)));
+            var materialized = _derivedStates.Any(derived => derived.Inputs.Any(input => input switch
+            {
+                RelationDerivedInput direct => ReferenceEquals(direct.Relation, relation),
+                ProjectedRelationMembershipInput projected => ReferenceEquals(projected.Relation, relation),
+                _ => false
+            }));
             lines.Add($"  Dependency tracking: {FormatDependencyTracking(
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies,
@@ -122,6 +125,8 @@ public sealed class CompiledConsistencyModel
             var inputs = derived.Inputs.Select(input => input switch
             {
                 RelationDerivedInput relation => $"relation:{relation.Relation.RightSet.ObjectType.Name}",
+                ProjectedRelationMembershipInput membership =>
+                    $"membership:{membership.Relation.DefinitionKey ?? membership.Relation.RightSet.ObjectType.Name}",
                 UpstreamDerivedInput upstream =>
                     $"derived:{upstream.Upstream.DefinitionKey ?? upstream.Upstream.SourceSet.ObjectType.Name}",
                 _ => throw new NotSupportedException($"Unknown derived input '{input.GetType().Name}'.")
@@ -175,6 +180,11 @@ public sealed class CompiledConsistencyModel
                         lines.Add($"    from {projected.Upstream.DefinitionKey ?? "<unnamed>"}");
                         lines.Add($"    projection {FormatPath(projected.SelectorPath)} -> " +
                             $"{projected.Upstream.DefinitionKey ?? "<unnamed>"}");
+                        break;
+                    case ProjectedRelationMembershipInput membership:
+                        lines.Add($"    from membership {membership.Relation.DefinitionKey ?? "<unnamed>"}");
+                        lines.Add($"    projections {FormatPath(membership.Left.SelectorPath)}, " +
+                            FormatPath(membership.Right.SelectorPath));
                         break;
                     case UpstreamDerivedInput upstream:
                         lines.Add($"    from {upstream.Upstream.DefinitionKey ?? "<unnamed>"}");
@@ -234,7 +244,12 @@ public sealed class CompiledConsistencyModel
             _derivedStates.Select((derived, id) => new DerivedModelDiagnostics(
                 id,
                 derived.SourceSet.Id,
-                derived.Inputs.OfType<RelationDerivedInput>().Select(input => input.Relation)
+                derived.Inputs.Select(input => input switch
+                    {
+                        RelationDerivedInput direct => direct.Relation,
+                        ProjectedRelationMembershipInput projected => projected.Relation,
+                        _ => null
+                    }).OfType<IRelationDefinition>()
                     .Select(relation => relationIds[relation]).ToArray(),
                 derived.Inputs.OfType<UpstreamDerivedInput>().Select(input => input.Upstream)
                     .Select(upstream => derivedIds[upstream]).ToArray(),
@@ -256,6 +271,9 @@ public sealed class CompiledConsistencyModel
                 SourceMemberRuleCount = derived.ImpactPolicy.SourceMemberRules.Count,
                 SourceMemberRuleNames = derived.ImpactPolicy.SourceMemberRules
                     .Select(rule => rule.Member.Name).ToArray(),
+                ItemMemberRuleCount = derived.ImpactPolicy.ItemMemberRules?.Count ?? 0,
+                ItemMemberRuleNames = derived.ImpactPolicy.ItemMemberRules?
+                    .Select(rule => rule.Member.Name).ToArray() ?? [],
                 SemanticDependencies = CreateSemanticDependencies(
                     derived, relationIds, derivedIds)
             })
@@ -270,7 +288,10 @@ public sealed class CompiledConsistencyModel
                 ToPublicCompleteness(invariant.Analysis.Flags),
                 invariant.AllowIncompleteDependencies,
                 invariant.Reaction)
-            { DefinitionKey = invariant.DefinitionKey })
+            {
+                DefinitionKey = invariant.DefinitionKey,
+                RepairPolicy = invariant.RepairPolicy
+            })
                 .ToArray())
         {
             Materializations = _materializations.Select(value => new MaterializationModelDiagnostics(
@@ -316,6 +337,20 @@ public sealed class CompiledConsistencyModel
                     policy.MembershipAdded,
                     policy.MembershipRemoved,
                     policy.ItemChanged),
+                ProjectedRelationMembershipInput membership => new DerivedDependencyModelDiagnostics(
+                    DerivedDependencyKind.ProjectedRelationMembership,
+                    null,
+                    null,
+                    relationIds[membership.Relation],
+                    false,
+                    policy.SourceChanged,
+                    policy.MembershipAdded,
+                    policy.MembershipRemoved,
+                    policy.ItemChanged)
+                {
+                    LeftSelectorPath = FormatPath(membership.Left.SelectorPath),
+                    RightSelectorPath = FormatPath(membership.Right.SelectorPath)
+                },
                 ProjectedUpstreamDerivedInput projected => new DerivedDependencyModelDiagnostics(
                     DerivedDependencyKind.ProjectedDerivedValue,
                     FormatPath(projected.SelectorPath),
@@ -353,9 +388,12 @@ public sealed class CompiledConsistencyModel
 
     private string CreatePropagationReason(IRelationDefinition relation)
     {
-        var consumers = _derivedStates.Where(derived =>
-            derived.Inputs.OfType<RelationDerivedInput>()
-                .Any(input => ReferenceEquals(input.Relation, relation))).ToArray();
+        var consumers = _derivedStates.Where(derived => derived.Inputs.Any(input => input switch
+        {
+            RelationDerivedInput direct => ReferenceEquals(direct.Relation, relation),
+            ProjectedRelationMembershipInput projected => ReferenceEquals(projected.Relation, relation),
+            _ => false
+        })).ToArray();
         if (relation.PropagationPlan == RelationPropagationPlan.ConservativeInvalidation)
             return "Explicit full-recompute consumer preference";
         if (consumers.Any(derived => derived.RequiresExactPropagation))

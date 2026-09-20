@@ -9,7 +9,7 @@ var values = model.Objects<Value>().Named("values").Key(value => value.Id);
 var doubled = model.Derived(values).Select(value => value.Amount * 2)
     .MaterializeTo(value => value.Mirror).Named("doubled");
 var invariant = model.Invariant(values).From(doubled).Must((_, amount) => amount <= 6)
-    .ScheduleRepairWith(_ => { }).Named("repair");
+    .RepairWhenViolated().Named("repair");
 await using var connection = new SqliteConnection("Data Source=:memory:");
 await connection.OpenAsync();
 var contextOptions = new DbContextOptionsBuilder<ConsumerContext>().UseSqlite(connection).Options;

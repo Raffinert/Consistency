@@ -250,9 +250,9 @@ internal sealed class ConfiguredHybridInvariant<TSource> where TSource : class
         return this;
     }
 
-    public ConfiguredHybridInvariant<TSource> ScheduleRepairWith(Action<TSource> repair)
+    public ConfiguredHybridInvariant<TSource> RepairWhenViolated()
     {
-        Raw.ScheduleRepairWith(repair);
+        Raw.RepairWhenViolated();
         return this;
     }
 }

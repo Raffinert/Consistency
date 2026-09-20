@@ -153,20 +153,15 @@ public sealed class ManualPersistenceUnitOfWorkTests
     }
 
     [Fact]
-    public void Manual_dispatch_failure_remains_resumable_after_database_and_runtime_commit()
+    public void Manual_dispatch_is_a_noop_for_structured_repair_requests()
     {
         using var database = new ManualDatabase(); using var context = database.CreateContext();
         var parent = SeedParent(context);
-        var attempts = 0;
         var model = new ConsistencyModelBuilder(); var parents = model.Objects<Parent>().Key(x => x.Id);
         var value = model.Derived(parents).Select(x => x.Touch);
         var valid = model.Invariant(parents).From(value).Must((_, current) => current >= 0);
         model.Invariant(parents).From(value).Must((_, current) => current == 0)
-            .ScheduleRepairWith(_ =>
-            {
-                attempts++;
-                if (attempts == 1) throw new DispatchFailure();
-            });
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => seed.Add(parents, [parent]));
         parent.Touch = 1;
         var work = context.CaptureConsistencyUnitOfWork(runtime,
@@ -175,10 +170,8 @@ public sealed class ManualPersistenceUnitOfWorkTests
         context.SaveChanges();
         _ = work.CommitAfterDatabaseCommit();
 
-        Assert.Throws<DispatchFailure>(() => work.Dispatch());
-        Assert.Equal(1, runtime.Version);
         work.Dispatch();
-        Assert.Equal(2, attempts);
+        Assert.Equal(1, runtime.Version);
         Assert.Throws<InvalidOperationException>(() => work.Dispatch());
     }
 

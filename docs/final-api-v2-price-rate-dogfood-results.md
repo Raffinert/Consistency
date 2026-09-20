@@ -1,6 +1,7 @@
 # Final API v2 PriceRate / UnitRate dogfood results
 
-Status: focused spike complete. The isolated executable passes; no production public API or runtime implementation was changed.
+Status: historical focused spike. The isolated executable passed; the subsequent production implementation adopted
+the vocabulary and replaced model-owned repair callbacks with structured repair data.
 
 The prior experiments remain the baseline: Variant C had the lowest migration and generic-stage cost; a universal provider facade added complexity without runtime capability; semantic aggregates can hide `.Incrementally()`; cross-object projection is the hardest declaration; opaque calculators still need explicit dependencies; derived computation remains separate from invariants and repair; `Evaluate` is logical-only; targeted and object `Materialize` synchronize configured mirrors; object materialization is not graph-wide repair; and logical edges must use derived handles rather than mirror properties. This spike did not contradict those findings.
 
@@ -56,7 +57,7 @@ var linkInvariant = model
     .From(linkValidity)
     .Must((_, valid) => valid)
     .Named("link-validity-invariant")
-    .ScheduleRepairWith(Rematch);
+    .RepairWhenViolated();
 
 var logicalRate = runtime.Evaluate(priceRate, link);
 var synchronizedRate = runtime.Materialize(priceRate, link);
@@ -70,7 +71,9 @@ A new reader can distinguish the three roles without engine knowledge: handles i
 
 The executable starts with logical and mirrored PriceRate/UnitRate at 6. Changing invoice price from 60 to 55 makes PriceRate and UnitRate Invalid while both properties remain 6. `Evaluate(priceRate, link)` returns 5.5 and leaves `link.PriceRate` at 6. `Evaluate(unitRate, link)` also returns 5.5, proving that it consumes the current logical PriceRate through the handle rather than reading the stale mirror.
 
-`Materialize(link)` then writes both mirrors to 5.5, touches no other object, and does not dispatch repair. Dispatching the mutation result invokes the one pending repair exactly once. Targeted `Materialize(priceRate, link)` returns 5.5 and repairs a deliberately corrupted PriceRate mirror without changing UnitRate.
+`Materialize(link)` then writes both mirrors to 5.5, touches no other object, and does not create or consume repair
+work. The detailed operation result retains the one structured repair request for application handling. Targeted
+`Materialize(priceRate, link)` returns 5.5 and repairs a deliberately corrupted PriceRate mirror without changing UnitRate.
 
 ## 3. `From` versus `DependsOn`
 
@@ -121,7 +124,7 @@ After PriceRate is registered as a target, `.DependsOn(x => x.PriceRate)` is rej
 
 ## 8. Invariant and repair behavior
 
-The invariant remains a separate declaration with explicit `From`, `Must`, and `ScheduleRepairWith` stages. Price mutation produced one repair request. Evaluating and materializing PriceRate/UnitRate did not consume or dispatch it. The normal dispatch boundary ran it exactly once. Pure value synchronization therefore did not acquire hidden business-repair behavior.
+The invariant remains a separate declaration with explicit `From`, `Must`, and `RepairWhenViolated()` stages. Price mutation produced one structured repair request after evaluation proved the predicate false. Evaluating and materializing PriceRate/UnitRate did not consume or dispatch it. Pure value synchronization therefore did not acquire hidden business-repair behavior.
 
 ## 9. Type-system, diagnostics, and IntelliSense
 
@@ -146,7 +149,7 @@ The useful conceptual IntelliSense surface is small:
 | `Derived(set).From(relation)` | `Impact`, `Sum`, `Count`, `LongCount`, `Any` |
 | completed derived value | `MaterializeTo`, `Named` |
 | `Invariant(set).From(value)` | `Must` |
-| completed invariant | `Named`, `ScheduleRepairWith` |
+| completed invariant | `Named`, `RepairWhenViolated` |
 
 The facade uses focused stages, but not Variant-A-style provider proliferation. Aggregate methods do not leak onto scalar stages.
 

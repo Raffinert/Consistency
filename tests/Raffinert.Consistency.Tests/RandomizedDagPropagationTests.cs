@@ -296,7 +296,7 @@ public sealed class RandomizedDagPropagationTests
             var e = model.Derived(sources).From(c).From(d).Select((_, left, right) => left - right);
             var invariant = model.Invariant(sources).From(e).From(c)
                 .Must((_, balance, total) => balance <= 0 && total >= 0)
-                .ScheduleRepairWith(_ => { });
+            .ReactWith(InvariantReaction.MarkInvalid);
             return new Scenario(model.Build().CreateRuntime(), sources, items, a, b, c, d, e,
                 invariant, conservative);
         }

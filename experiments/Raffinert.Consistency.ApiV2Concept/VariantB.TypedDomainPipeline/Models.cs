@@ -57,7 +57,7 @@ internal static class Models
         var allocationInvariant = model.Invariant(allocations, allocationValidity)
             .Must((_, valid) => valid)
             .Named("allocation-validity-invariant")
-            .ScheduleRepairWith(allocation => repairs.Add(allocation.Id));
+            .RepairWhenViolated();
 
         return new ScenarioModel(
             "Variant B",

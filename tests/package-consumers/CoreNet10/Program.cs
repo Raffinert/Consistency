@@ -8,7 +8,7 @@ var doubled = model.Derived(values)
     .MaterializeTo(value => value.Mirror)
     .Named("doubled");
 model.Invariant(values).From(doubled).Must((_, amount) => amount <= 6)
-    .ScheduleRepairWith(_ => { }).Named("repair");
+    .RepairWhenViolated().Named("repair");
 var value = new Value { Amount = 3 };
 var runtimeEngine = model.Build().CreateRuntime(seed => seed.Add(values, [value]));
 IConsistencyRuntime runtime = runtimeEngine;

@@ -17,7 +17,7 @@ a second graph or execution runtime.
 | `MaterializeTo` | Derived definition identity plus compiled property access | Add one Core-owned descriptor containing exact source set, target, read/write delegates, and equality behavior. |
 | `Evaluate` | Existing cache state machinery | Expose the non-writing logical read operation. |
 | Targeted/object `Materialize` | Derived state lookup and runtime object-set membership | Add exact-target and indexed source-object synchronization with evaluate-first/write-second rollback. |
-| Invariant `From` | Existing invariant derived-value composition | Add a thin alias; `Must` and repair scheduling remain separate. |
+| Invariant `From` | Existing invariant derived-value composition | Add a thin alias; `Must` and `RepairWhenViolated()` remain separate. |
 | EF materialization | Existing affected-derived persistence planning | Consume Core descriptors automatically. |
 | Logical diagnostics | Existing compiled model IDs and debug view | Retain direct, local-derived, projected-derived, and relation-valued edge kinds plus materialization metadata. |
 
@@ -31,7 +31,7 @@ configured targets for that source membership rather than a model scan.
 Object materialization prepares every logical value before its first physical write. If a setter fails,
 already-written physical values are restored while successfully prepared logical caches remain Fresh for a
 retry. Equal targets are not assigned. Physical scope never expands to projected dependency objects, and
-materialization does not dispatch repair callbacks.
+materialization does not create or dispatch repair requirements.
 
 The runtime remains single-threaded by contract. These rollback semantics do not claim cross-thread atomicity.
 
@@ -49,5 +49,5 @@ operator plan, and `materializes-to` entries. Existing low-level diagnostics rem
 ## API surface
 
 The public declaration vocabulary is `From`, `DependsOn`, `Select`, recognized aggregate operators,
-`MaterializeTo`, and invariant `From`/`Must`. Pre-v2 compatibility aliases were removed for the `0.2` line;
+`MaterializeTo`, and invariant `From`/`Must`/`RepairWhenViolated()`. Pre-v2 compatibility aliases were removed for the `0.2` line;
 all declarations continue to compile into the same production definitions and execution plans.

@@ -108,6 +108,24 @@ public sealed class SourceMemberImpactTests
         Assert.True(scenario.RuntimeModel.Diagnostics.Invariants.Count == 0);
     }
 
+    [Fact]
+    public void Diagnostics_describe_conditional_relation_item_policy_members()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<DerivedSourceRecord>().Key(source => source.Id);
+        var items = model.Objects<DerivedItemRecord>().Key(item => item.Id);
+        var relation = model.Relation(sources, items).Where((source, item) => source.Code == item.Code);
+        _ = model.Derived(sources).From(relation)
+            .Impact(policy => policy.ItemMemberChanged(
+                item => item.Quantity, (_, _) => DependencySeverity.Invalid))
+            .Select((_, matches) => matches.Sum(item => item.Quantity));
+
+        var diagnostics = model.Build().Diagnostics.DerivedValues.Single();
+
+        Assert.Equal(1, diagnostics.ItemMemberRuleCount);
+        Assert.Equal([nameof(DerivedItemRecord.Quantity)], diagnostics.ItemMemberRuleNames);
+    }
+
     private static Scenario CreateSourceOnly(int quantity)
     {
         var model = new ConsistencyModelBuilder();

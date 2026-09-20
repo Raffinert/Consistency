@@ -86,14 +86,13 @@ internal abstract class ConsistencyModelContext
     protected ContextInvariant<T> Invariant<T>(
         ContextSet<T> source,
         ContextValue<T, bool> value,
-        string name,
-        Action<T> repair)
+        string name)
         where T : class =>
         new(_builder.Invariant(source.Raw)
             .Using(value.Raw)
             .Must((_, valid) => valid)
             .Named(name)
-            .ScheduleRepairWith(repair));
+            .RepairWhenViolated());
 
     internal CompiledConsistencyModel Build() => _builder.Build();
 }

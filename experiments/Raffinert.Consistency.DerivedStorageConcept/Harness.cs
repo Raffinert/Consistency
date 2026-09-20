@@ -113,7 +113,7 @@ internal sealed class ConceptModel
             .Using(linkValidity)
             .Must((_, valid) => valid)
             .Named("link-validity-invariant")
-            .ScheduleRepairWith(link => repairs.Add(link.Id));
+            .RepairWhenViolated();
 
         var matching = builder.Relation(lines, fulfillments)
             .Where((line, fulfillment) =>

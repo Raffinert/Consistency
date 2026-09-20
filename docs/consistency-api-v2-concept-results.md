@@ -1,6 +1,7 @@
 # Consistency API v2 concept results
 
-Status: design evidence only. No production API is selected or implemented.
+Status: historical design evidence. The production surface now incorporates the selected vocabulary and the
+follow-up repair contract is structured data rather than a model-owned callback.
 
 The disposable project at
 `experiments/Raffinert.Consistency.ApiV2Concept` compiled with zero warnings and
@@ -19,7 +20,7 @@ adapter; none implemented runtime behavior.
 | Cross-object projection clarity | Typed `Using(selector, first, second)` is precise but dense | `remaining.For(allocations, selector).Combine(rate)` reads naturally; generic type is complex | `allocations.SelectWith(selector, remaining, rate)` places ownership most clearly | `Derived(allocations).From(selector, remaining, rate)` is explicit and close to current | `Project(Allocations,...,selector,values,...)` is clear but positional |
 | Nested dependency clarity | `DependsOn` before `Compute` clearly augments opaque code | Same input-first declaration under `SourceProvider` | Same input-first declaration under a typed set | Nearly identical to current, ending in `Select` | Helper chain retains explicit paths; property organization adds no special benefit |
 | Dirty/Invalid policy locality | Impact sits between input selection and computation | Relation impact is on `PerLeft`; transition impact is on the member value node | Relation impact is on `DomainRelation`; transition impact is on the object value edge | Relation impact follows `From(relation)`; direct impact follows source selection | Impact is an explicit helper argument and can be far from a long computation |
-| Invariant/repair clarity | Distinct `Invariant + Using + Must + ScheduleRepairWith` | Distinct invariant provider and repair policy | Distinct domain invariant and repair policy | Keeps current concepts | Distinct context property, but reaction is constructed in one helper call |
+| Invariant/repair clarity | Distinct `Invariant + Using + Must + RepairWhenViolated` | Distinct invariant provider and repair policy | Distinct domain invariant and repair policy | Keeps current concepts | Distinct context property, but repair policy is constructed in one helper call |
 | EF separation | Separate adapter is established and executable | Raw handles are retained internally; mappings remain separate | Same | Same with smallest adapter mismatch | Context exposes internal handles; mappings remain separate |
 | Stable naming | Explicit `.Named(string)` everywhere | Explicit `.Named`; no variable magic | Explicit `.Named`; no variable magic | Explicit `.Named`; no variable magic | Explicit constructor strings; property names are not silently durable identity |
 | Type inference quality | Strong for current supported arities | Works, but projected/combined providers produce long inferred types | Works with types named after domain semantics | Works and stays close to current builder types | Works inside helper calls; constructor diagnostics can be positional |
@@ -44,8 +45,8 @@ For each of the five declarations, the executable harness verified:
 - quantity increase produces Dirty state and decrease produces Invalid state;
 - `Allocation -> OrderLine` reverse routing reaches allocation validity and its
   repair policy;
-- one detailed repair request is emitted and dispatch invokes the configured
-  callback;
+- one detailed structured repair request is emitted; repair handling remains
+  outside the compiled model;
 - a shared nested `SourceItem` mutation updates every associated mirror;
 - retargeting an association moves reverse routing to the new source;
 - EF materializes `Association.UnitRate` and blocks an invariant-violating save;
@@ -72,7 +73,7 @@ var allocationValidity = model.Derived(allocations)
     .Named("allocation-validity");
 var allocationInvariant = model.Invariant(allocations).Using(allocationValidity)
     .Must((_, valid) => valid).Named("allocation-validity-invariant")
-    .ScheduleRepairWith(RepairAllocation);
+    .RepairWhenViolated();
 ```
 
 ### Variant A
@@ -92,7 +93,7 @@ var allocationValidity = remainingQuantity.For(allocations, x => x.OrderLine)
     .Named("allocation-validity");
 var allocationInvariant = model.Invariant(allocations, allocationValidity)
     .Must((_, valid) => valid).Named("allocation-validity-invariant")
-    .ScheduleRepairWith(RepairAllocation);
+    .RepairWhenViolated();
 ```
 
 ### Variant B
@@ -112,7 +113,7 @@ var allocationValidity = allocations.SelectWith(x => x.OrderLine, remainingQuant
     .Named("allocation-validity");
 var allocationInvariant = model.Invariant(allocations, allocationValidity)
     .Must((_, valid) => valid).Named("allocation-validity-invariant")
-    .ScheduleRepairWith(RepairAllocation);
+    .RepairWhenViolated();
 ```
 
 ### Variant C
@@ -133,7 +134,7 @@ var allocationValidity = model.Derived(allocations)
     .Named("allocation-validity");
 var allocationInvariant = model.Invariant(allocations, allocationValidity)
     .Must((_, valid) => valid).Named("allocation-validity-invariant")
-    .ScheduleRepairWith(RepairAllocation);
+    .RepairWhenViolated();
 ```
 
 ### Variant D
@@ -162,12 +163,12 @@ AllocationInvariant = Invariant(Allocations, AllocationValidity,
 | Depends on FulfilledQuantity | `Using(fulfilledQuantity)` | `Combine(fulfilledQuantity)` | `Combine(fulfilledQuantity)` | `From(...fulfilledQuantity)` | `Combine(...FulfilledQuantity)` |
 | Allocation reaches OrderLine | Typed `Using` selector | `remaining.For(allocations, selector)` | `allocations.SelectWith(selector,...)` | `Derived(allocations).From(selector,...)` | `Project(Allocations,...selector,...)` |
 | Dirty versus Invalid | Visible next to relation/source dependency | Visible on relation/member providers | Visible on domain relation/member value | Visible directly after `From`/source selection | Visible, but policy is a helper argument |
-| Rule schedules repair | Explicit final method | Explicit final method | Explicit final method | Explicit final method | Hidden inside the `Invariant` helper convention; readability cost |
+| Rule creates repair data after a proven violation | Explicit final method | Explicit final method | Explicit final method | Explicit final method | Hidden inside the `Invariant` helper convention; readability cost |
 
 The blocks show one convention cost shared by every fluent option: root-set
 creation is not recoverable from S3-S7 declarations alone. Variant D adds a
-second hidden convention: its helper performs both `Must` and repair scheduling.
-That compactness should not be copied without making reactions visible.
+second hidden convention: its helper performs both `Must` and repair-policy configuration.
+That compactness should not be copied without making policy visible.
 
 ## Type-system and diagnostics findings
 
@@ -243,7 +244,7 @@ The experiment provides examples but does not select a winner.
 A viable API must retain typed object-set ownership, relation orientation and
 pair impacts, nested dependency completeness, derived DAG edges, typed projected
 reverse routing, Dirty/Invalid and transition policies, distinct invariants and
-repair reactions, explicit durable names, and separate EF mapping/discovery/scope
+repair policies, explicit durable names, and separate EF mapping/discovery/scope
 configuration.
 
 ## Smallest viable production change

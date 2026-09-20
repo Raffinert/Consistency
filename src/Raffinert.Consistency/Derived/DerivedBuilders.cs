@@ -33,8 +33,14 @@ public enum InvariantReaction
 {
     EvaluateImmediately,
     MarkDirty,
-    MarkInvalid,
-    ScheduleRepair
+    MarkInvalid
+}
+
+/// <summary>Controls whether an evaluated invariant violation emits structured repair work.</summary>
+public enum InvariantRepairPolicy
+{
+    None,
+    WhenViolated
 }
 
 public sealed class DerivedBuilder<TSource> where TSource : class
@@ -95,6 +101,49 @@ public sealed class DerivedBuilder<TSource> where TSource : class
         if (!ReferenceEquals(relation.Definition.Left, _source.Definition))
             throw new ArgumentException("The relation's left object set must be the derived state's source set.", nameof(relation));
         return new DerivedRelationBuilder<TSource, TItem>(_model, _source, relation);
+    }
+
+    /// <summary>Projects two source references into an existing relation's exact membership index.</summary>
+    public Derived<TSource, bool> FromMembership<TLeft, TRight>(
+        Relation<TLeft, TRight> relation,
+        Expression<Func<TSource, TLeft>> leftSelector,
+        Expression<Func<TSource, TRight>> rightSelector)
+        where TLeft : class
+        where TRight : class
+    {
+        ArgumentNullException.ThrowIfNull(relation);
+        ArgumentNullException.ThrowIfNull(leftSelector);
+        ArgumentNullException.ThrowIfNull(rightSelector);
+        _model.EnsureRelation(relation.Definition);
+        var compiledLeft = leftSelector.Compile();
+        var compiledRight = rightSelector.Compile();
+        var left = CreateEndpoint(relation.Definition.LeftSet, leftSelector, compiledLeft);
+        var right = CreateEndpoint(relation.Definition.RightSet, rightSelector, compiledRight);
+        var input = new ProjectedRelationMembershipInput(relation.Definition, left, right);
+        var definition = new ProjectedRelationMembershipDefinition<TSource, TLeft, TRight>(
+            _source.Definition, relation.Definition, leftSelector, compiledLeft,
+            rightSelector, compiledRight, input, _impactPolicy);
+        _model.AddDerived(definition);
+        return new Derived<TSource, bool>(definition, _model);
+    }
+
+    private static ProjectedRelationEndpoint CreateEndpoint<TTarget>(
+        IObjectSetDefinition targetSet,
+        Expression<Func<TSource, TTarget>> expression,
+        Func<TSource, TTarget> compiled)
+        where TTarget : class
+    {
+        var analysis = ExpressionDependencyAnalyzer.AnalyzeSourceDerived(expression);
+        var dependencies = analysis.Dependencies
+            .Where(value => value.Role == ExpressionParameterRole.DerivedSource)
+            .ToArray();
+        if (expression.Body is not MemberExpression || analysis.Flags != 0 || dependencies.Length != 1 ||
+            dependencies[0].Path.Segments.Count != 1)
+            throw new ArgumentException(
+                "A relation-membership selector must be a direct non-null tracked reference member.",
+                nameof(expression));
+        return new ProjectedRelationEndpoint(
+            targetSet, expression, source => compiled((TSource)source), dependencies[0].Path);
     }
 
     public DerivedUpstreamBuilder<TSource, TValue> From<TValue>(Derived<TSource, TValue> upstream)
@@ -489,10 +538,11 @@ public sealed class DerivedRelationBuilder<TSource, TItem>
     }
 
     /// <summary>Configures semantic severity independently of the relation's access plan.</summary>
-    public DerivedRelationBuilder<TSource, TItem> Impact(Action<DerivedImpactPolicyBuilder<TSource>> configure)
+    public DerivedRelationBuilder<TSource, TItem> Impact(
+        Action<DerivedRelationImpactPolicyBuilder<TSource, TItem>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new DerivedImpactPolicyBuilder<TSource>();
+        var builder = new DerivedRelationImpactPolicyBuilder<TSource, TItem>();
         configure(builder);
         _impactPolicy = builder.Build();
         return this;
@@ -697,18 +747,17 @@ public sealed class Invariant<TSource>
     public Invariant<TSource> ReactWith(InvariantReaction reaction)
     {
         _ensureMutable();
-        if (reaction == InvariantReaction.ScheduleRepair)
-            throw new ArgumentException("Use ScheduleRepairWith(...) to configure a repair scheduler.", nameof(reaction));
+        if (!Enum.IsDefined(reaction))
+            throw new ArgumentOutOfRangeException(nameof(reaction));
         Definition.Reaction = reaction;
         return this;
     }
 
-    public Invariant<TSource> ScheduleRepairWith(Action<TSource> scheduler)
+    /// <summary>Emits a structured repair request only when evaluation proves a violation.</summary>
+    public Invariant<TSource> RepairWhenViolated()
     {
         _ensureMutable();
-        ArgumentNullException.ThrowIfNull(scheduler);
-        Definition.SetRepairScheduler(scheduler);
-        Definition.Reaction = InvariantReaction.ScheduleRepair;
+        Definition.RepairPolicy = InvariantRepairPolicy.WhenViolated;
         return this;
     }
 
@@ -723,4 +772,3 @@ public sealed class Invariant<TSource>
         return this;
     }
 }
-

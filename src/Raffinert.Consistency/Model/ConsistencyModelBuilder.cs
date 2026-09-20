@@ -97,7 +97,12 @@ public sealed class ConsistencyModelBuilder
                 invariant.AllowIncompleteDependencies);
         }
         foreach (var relation in _derivedStates.SelectMany(derived => derived.Inputs)
-                     .OfType<RelationDerivedInput>().Select(input => input.Relation).Distinct())
+                     .Select(input => input switch
+                     {
+                         RelationDerivedInput direct => direct.Relation,
+                         ProjectedRelationMembershipInput projected => projected.Relation,
+                         _ => null
+                     }).OfType<IRelationDefinition>().Distinct())
         {
             ValidateComplete(
                 "Materialized relation",
@@ -105,8 +110,12 @@ public sealed class ConsistencyModelBuilder
                 relation.Analysis.DependencyAnalysis,
                 relation.AllowIncompleteDependencies);
             var consumers = _derivedStates.Where(derived =>
-                derived.Inputs.OfType<RelationDerivedInput>()
-                    .Any(input => ReferenceEquals(input.Relation, relation)));
+                derived.Inputs.Any(input => input switch
+                {
+                    RelationDerivedInput direct => ReferenceEquals(direct.Relation, relation),
+                    ProjectedRelationMembershipInput projected => ReferenceEquals(projected.Relation, relation),
+                    _ => false
+                }));
             if (consumers.All(derived => derived.PrefersConservativePropagation) &&
                 !consumers.Any(derived => derived.RequiresExactPropagation))
                 relation.UseConservativePropagation();
@@ -228,8 +237,15 @@ public sealed class ConsistencyModelBuilder
                 dependency.Path.Segments.Any(segment => segment.Member == member))))
             usage |= ConsistencyRuntime.ModelMemberUsageKind.InvariantDependency;
         if (_derivedStates.Any(definition => ReferenceEquals(definition.SourceSet, set) &&
-                definition.Inputs.OfType<ProjectedUpstreamDerivedInput>().Any(input =>
-                    input.SelectorPath.Segments.Any(segment => segment.Member == member))))
+                definition.Inputs.Any(input => input switch
+                {
+                    ProjectedUpstreamDerivedInput projected =>
+                        projected.SelectorPath.Segments.Any(segment => segment.Member == member),
+                    ProjectedRelationMembershipInput membership =>
+                        membership.Left.SelectorPath.Segments.Any(segment => segment.Member == member) ||
+                        membership.Right.SelectorPath.Segments.Any(segment => segment.Member == member),
+                    _ => false
+                })))
             usage |= ConsistencyRuntime.ModelMemberUsageKind.ProjectedSelector;
         return usage;
     }

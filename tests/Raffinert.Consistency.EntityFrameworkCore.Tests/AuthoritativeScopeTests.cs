@@ -119,7 +119,7 @@ public sealed class AuthoritativeScopeTests
         var repairs = 0;
         var model = CreateAllocationModel(out var lines, out var allocations, out var allocated, out var first);
         var second = model.Invariant(lines).From(allocated).Must((_, value) => value <= 20)
-            .ScheduleRepairWith(_ => repairs++);
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime(seed => { seed.Add(lines, [line]); seed.Add(allocations, [allocation]); });
         line.Touch = 1;
 

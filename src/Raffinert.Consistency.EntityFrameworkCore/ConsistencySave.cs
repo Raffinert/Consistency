@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Transactions;
+using System.Diagnostics;
 
 namespace Raffinert.Consistency.EntityFrameworkCore;
 
@@ -33,9 +34,28 @@ public sealed class IncompleteConsistencyScopeException : Exception
 
 public sealed class ConsistencyInvariantViolationException : Exception
 {
-    internal ConsistencyInvariantViolationException(IReadOnlyList<PlannedInvariantEvaluation> violations)
-        : base("One or more enforced consistency invariants would be violated.") => Violations = violations;
+    internal ConsistencyInvariantViolationException(
+        IReadOnlyList<PlannedInvariantEvaluation> violations,
+        IReadOnlyList<RepairRequestInfo> repairRequests,
+        PreparedImpactPlan rejectedPlan)
+        : base("One or more enforced consistency invariants would be violated.")
+    {
+        Violations = violations;
+        RepairRequests = repairRequests;
+        RejectedPlan = rejectedPlan;
+    }
+
     public IReadOnlyList<PlannedInvariantEvaluation> Violations { get; }
+    public IReadOnlyList<RepairRequestInfo> RepairRequests { get; }
+    internal PreparedImpactPlan RejectedPlan { get; }
+    internal EfMutationFingerprint? Fingerprint { get; private set; }
+    internal long BaselineRevision { get; private set; }
+
+    internal void BindRejectedState(EfMutationFingerprint fingerprint, long baselineRevision)
+    {
+        Fingerprint = fingerprint;
+        BaselineRevision = baselineRevision;
+    }
 }
 
 public sealed class ConsistencyMaterializationSourceNotTrackedException : Exception
@@ -208,11 +228,22 @@ internal static class ConsistencyCoordinator
         var admissions = ExternalConsumerDiscovery.Discover(
             context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback,
-            forceMaterialization, materializationSelector);
+        var fingerprint = EfMutationFingerprint.Create(context.ChangeTracker, unit.Mutations);
+        PreparedImpactPlan? plan;
+        MaterializationRollback? materializationRollback;
+        try
+        {
+            plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+                context, runtime, unit, policy, out materializationRollback,
+                forceMaterialization, materializationSelector);
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            error.BindRejectedState(fingerprint, runtime.BaselineRevision);
+            throw;
+        }
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            unit, plan, materializationRollback, fingerprint,
             runtime.BaselineRevision);
     }
 
@@ -239,11 +270,22 @@ internal static class ConsistencyCoordinator
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback,
-            forceMaterialization, materializationSelector);
+        var fingerprint = EfMutationFingerprint.Create(context.ChangeTracker, unit.Mutations);
+        PreparedImpactPlan? plan;
+        MaterializationRollback? materializationRollback;
+        try
+        {
+            plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+                context, runtime, unit, policy, out materializationRollback,
+                forceMaterialization, materializationSelector);
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            error.BindRejectedState(fingerprint, runtime.BaselineRevision);
+            throw;
+        }
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            unit, plan, materializationRollback, fingerprint,
             runtime.BaselineRevision);
     }
 
@@ -252,21 +294,36 @@ internal static class ConsistencyCoordinator
         ConsistencyRuntime runtime,
         ConsistencyEfCoreMappings mappings,
         ConsistencySaveOptions options,
-        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null)
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mappings); ArgumentNullException.ThrowIfNull(options);
         if (context.Database.CurrentTransaction is not null || Transaction.Current is not null)
             throw new ConsistencyUnsupportedTransactionException();
+        var phaseStart = Stopwatch.GetTimestamp();
         context.ChangeTracker.DetectChanges();
+        if (diagnostics is not null)
+            diagnostics.DetectChangesTicks += Stopwatch.GetTimestamp() - phaseStart;
         ConsistencyStoreSideEffectGuard.ThrowIfUnsafe(context, runtime);
         ConsistencyGeneratedValueGuard.RejectForConvenienceSave(
             context, runtime, mappings.UnitOfWorkMappings);
+        phaseStart = Stopwatch.GetTimestamp();
         _ = ConsistencyPersistencePolicyEngine.CaptureAndValidate(context, runtime, mappings, options);
-        var captured = CaptureUnitOfWork(context, mappings, includeProperty);
+        if (diagnostics is not null)
+            diagnostics.PolicyValidationTicks += Stopwatch.GetTimestamp() - phaseStart;
+        var captured = CaptureUnitOfWork(context, mappings, includeProperty, diagnostics);
+        phaseStart = Stopwatch.GetTimestamp();
         var admissions = ExternalConsumerDiscovery.Discover(
-            context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
-        return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+            context, runtime, mappings, captured, options.SaveBehavior, options.Scope, diagnostics);
+        if (diagnostics is not null)
+            diagnostics.ExternalDiscoveryTicks += Stopwatch.GetTimestamp() - phaseStart;
+        phaseStart = Stopwatch.GetTimestamp();
+        var fingerprint = EfMutationFingerprint.Create(
+            context.ChangeTracker, Combine(captured, admissions).Mutations);
+        if (diagnostics is not null)
+            diagnostics.FingerprintConstructionTicks += Stopwatch.GetTimestamp() - phaseStart;
+        return fingerprint;
     }
 
     internal static ConsistencyUnitOfWork CaptureCurrentUnitOfWork(
@@ -278,6 +335,19 @@ internal static class ConsistencyCoordinator
         ArgumentNullException.ThrowIfNull(mappings);
         context.ChangeTracker.DetectChanges();
         return CaptureUnitOfWork(context, mappings, includeProperty);
+    }
+
+    internal static EfMutationFingerprint CaptureTrackedStateFingerprint(
+        DbContext context,
+        ConsistencyEfCoreMappings mappings,
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(mappings);
+        context.ChangeTracker.DetectChanges();
+        return EfMutationFingerprint.Create(
+            context.ChangeTracker,
+            CaptureUnitOfWork(context, mappings, includeProperty).Mutations);
     }
 
     public static async Task<EfMutationFingerprint> CaptureFingerprintAsync(
@@ -301,18 +371,20 @@ internal static class ConsistencyCoordinator
         var admissions = await ExternalConsumerDiscovery.DiscoverAsync(
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
-        return EfMutationFingerprint.Create(Combine(captured, admissions).Mutations);
+        return EfMutationFingerprint.Create(
+            context.ChangeTracker, Combine(captured, admissions).Mutations);
     }
 
     private static ConsistencyUnitOfWork CaptureUnitOfWork(
         DbContext context,
         ConsistencyEfCoreMappings mappings,
-        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty)
+        Func<EntityEntry, Microsoft.EntityFrameworkCore.Metadata.IProperty, bool>? includeProperty,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         return includeProperty is null
             ? ChangeTrackerAdapter.CaptureUnitOfWork(context.ChangeTracker, mappings.UnitOfWorkMappings)
             : ChangeTrackerAdapter.CaptureUnitOfWork(
-                context.ChangeTracker, mappings.UnitOfWorkMappings, includeProperty);
+                context.ChangeTracker, mappings.UnitOfWorkMappings, includeProperty, diagnostics);
     }
 
     private static ConsistencyUnitOfWork Combine(

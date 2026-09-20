@@ -55,6 +55,17 @@ internal static class ConsistencyScopeRequirementCompiler
                         relation.Relation.RightSet,
                         ScopeRequirementReason.RelationTargetCoverage));
                     break;
+                case ProjectedRelationMembershipInput membership:
+                    requirements.Add(new ScopeRequirement(
+                        membership.Relation.LeftSet,
+                        ScopeRequirementReason.RelationSourceCoverage));
+                    requirements.Add(new ScopeRequirement(
+                        membership.Relation.RightSet,
+                        ScopeRequirementReason.RelationTargetCoverage));
+                    requirements.Add(new ScopeRequirement(
+                        definition.SourceSet,
+                        ScopeRequirementReason.ProjectedConsumerCoverage));
+                    break;
                 case UpstreamDerivedInput upstream:
                     AddDerived(upstream.Upstream, requirements, visited);
                     if (upstream.IsProjected)

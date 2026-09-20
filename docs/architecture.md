@@ -52,8 +52,8 @@ validate + normalize
     -> prepare against runtime version
     -> commit object/navigation/relation state
     -> propagate derived/invariant impacts
-    -> return structured requests
-    -> dispatch optional application callbacks
+    -> return structured repair requests
+    -> dispatch explicitly configured immediate policy actions
 ```
 
 Domain objects must already contain their new values. The runtime owns indexes and cached dependency
@@ -98,9 +98,14 @@ the logical cache current. Targeted `Materialize` synchronizes one descriptor, w
 then writes mirrors on that object. Equal assignments are skipped and prior writes are physically restored if
 a later setter fails; logical caches are retained for retry. Materialization never dispatches repair.
 
-Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or represented as a
-repair request. `ApplyDetailed` exposes requests as data for an outbox/queue. In-process callbacks run
-only through explicit post-commit dispatch.
+Invariant state merges impacts from all upstream derived values and can be marked, evaluated immediately, or
+represented as a structured repair request. `RepairWhenViolated()` is policy metadata: a request is created only
+after evaluation proves the predicate false. Every affected repair-enabled invariant source is evaluated while
+producing the operation or binding-plan result, so predicate inputs may become `Fresh` even when propagation
+classified them as `Dirty` or `Invalid`. Repair-disabled invariants remain lazy unless their reaction or a host
+policy explicitly requests evaluation. `ApplyDetailed` exposes requests as data for an outbox/application
+workflow. Immediate policy actions, when configured, run only through explicit post-commit dispatch; compiled
+invariants do not capture repair callbacks.
 
 ## EF Core boundary
 
@@ -138,6 +143,25 @@ installation.
 returns a binding `PreparedImpactPlan`. `plan.Result` is the exact detailed result associated with its retained
 forward patch. A later `Commit(plan)` installs that patch without rerunning semantic model code. This is the
 required contract for same-database atomic outbox work whose rows depend on exact result parity.
+
+The allocation dogfood also contains an internal experimental proposed-state query view for a rejected EF plan:
+
+```text
+Committed Runtime
+      |
+      +-- Prepare mutation --> Proposed-State View
+      |                         |
+      |                         +-- Evaluate
+      |                         +-- Related
+      |                         +-- invariant truth
+      |
+      +-- unchanged until durable commit
+```
+
+The view uses the prepared plan's final lifecycle overlay and proposed CLR values with isolated query caches. It
+does not install the rejected plan, dispatch repair, or expose persistence/workflow APIs. Runtime advancement or
+tracked-state drift invalidates it; the dogfood obtains a fresh view after each application repair mutation. This
+prototype is documented as experimental and is not a stable public API.
 
 When `PlannedInvariantEvaluationMode.Affected` is requested, affected invariant predicates are evaluated
 while the reversible planned final state is installed. Their evaluation records and resulting cache state

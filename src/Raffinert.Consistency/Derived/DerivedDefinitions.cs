@@ -16,7 +16,7 @@ internal interface IDerivedDefinition
     bool PrefersConservativePropagation { get; }
     bool AllowIncompleteDependencies { get; set; }
     IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived);
     IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate);
 }
@@ -33,12 +33,35 @@ internal sealed record ProjectedUpstreamDerivedInput(
     IDerivedDefinition Upstream,
     LambdaExpression SelectorExpression,
     Func<object, object?> CompiledSelector,
-    DependencyPath SelectorPath) : UpstreamDerivedInput(Upstream)
+    DependencyPath SelectorPath) : UpstreamDerivedInput(Upstream), IProjectedSelectorInput
 {
     public override bool IsProjected => true;
     public IObjectSetDefinition UpstreamSet => Upstream.SourceSet;
+    public IObjectSetDefinition TargetSet => UpstreamSet;
     public override object? Project(object source) => CompiledSelector(source);
 }
+
+internal interface IProjectedSelectorInput
+{
+    IObjectSetDefinition TargetSet { get; }
+    LambdaExpression SelectorExpression { get; }
+    DependencyPath SelectorPath { get; }
+    object? Project(object source);
+}
+
+internal sealed record ProjectedRelationEndpoint(
+    IObjectSetDefinition TargetSet,
+    LambdaExpression SelectorExpression,
+    Func<object, object?> CompiledSelector,
+    DependencyPath SelectorPath) : IProjectedSelectorInput
+{
+    public object? Project(object source) => CompiledSelector(source);
+}
+
+internal sealed record ProjectedRelationMembershipInput(
+    IRelationDefinition Relation,
+    ProjectedRelationEndpoint Left,
+    ProjectedRelationEndpoint Right) : DerivedInput;
 
 internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     ObjectSetDefinition<TSource> sourceSet,
@@ -72,9 +95,10 @@ internal sealed class DerivedDefinition<TSource, TItem, TValue>(
     public bool PrefersConservativePropagation { get; } = preferConservativePropagation;
     public bool AllowIncompleteDependencies { get; set; }
 
-    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
-        new DerivedRuntimeState<TSource, TItem, TValue>(this, (RelationRuntimeState<TSource, TItem>)relations[RelationDefinition]);
+        new DerivedRuntimeState<TSource, TItem, TValue>(this,
+            (IRelationQueryState<TSource, TItem>)relations[RelationDefinition]);
 
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
         new InvariantDefinition<TSource, TValue>(
@@ -104,7 +128,7 @@ internal sealed class SourceDerivedDefinition<TSource, TValue>(
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, computation);
 
@@ -134,12 +158,58 @@ internal sealed class ComposedDerivedDefinition<TSource, TUpstream, TValue>(
     public bool RequiresExactPropagation => false;
     public bool PrefersConservativePropagation => false;
     public bool AllowIncompleteDependencies { get; set; }
-    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this,
             source => computation(source, (TUpstream)resolveDerived(upstream).GetValue(source)!));
     public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
         new InvariantDefinition<TSource, TValue>(this, predicate, (Func<TSource, TValue, bool>)compiledPredicate);
+}
+
+internal sealed class ProjectedRelationMembershipDefinition<TSource, TLeft, TRight>(
+    ObjectSetDefinition<TSource> sourceSet,
+    RelationDefinition<TLeft, TRight> relation,
+    Expression<Func<TSource, TLeft>> leftSelectorExpression,
+    Func<TSource, TLeft> leftSelector,
+    Expression<Func<TSource, TRight>> rightSelectorExpression,
+    Func<TSource, TRight> rightSelector,
+    ProjectedRelationMembershipInput input,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
+    where TSource : class
+    where TLeft : class
+    where TRight : class
+{
+    private static readonly Expression<Func<TSource, bool>> DiagnosticExpression = _ => false;
+
+    public string? DefinitionKey { get; set; }
+    public IObjectSetDefinition SourceSet => sourceSet;
+    public IReadOnlyList<DerivedInput> Inputs { get; } = [input];
+    public LambdaExpression ComputationExpression => DiagnosticExpression;
+    public ExpressionDependencyAnalysis Analysis { get; } = Combine(
+        ExpressionDependencyAnalyzer.AnalyzeSourceDerived(leftSelectorExpression),
+        ExpressionDependencyAnalyzer.AnalyzeSourceDerived(rightSelectorExpression));
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
+    public string ComputationPlanName => "ProjectedRelationMembershipLookup";
+    public bool RequiresExactPropagation => true;
+    public bool PrefersConservativePropagation => false;
+    public bool AllowIncompleteDependencies { get; set; }
+
+    public IDerivedRuntimeState CreateState(
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
+        Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
+        new SourceDerivedRuntimeState<TSource, bool>(this, source =>
+            relations[relation].IsRelated(leftSelector(source), rightSelector(source)));
+
+    public IInvariantDefinition CreateInvariant(LambdaExpression predicate, Delegate compiledPredicate) =>
+        new InvariantDefinition<TSource, bool>(this, predicate, (Func<TSource, bool, bool>)compiledPredicate);
+
+    private static ExpressionDependencyAnalysis Combine(
+        ExpressionDependencyAnalysis first,
+        ExpressionDependencyAnalysis second) => new(
+        first.Dependencies.Concat(second.Dependencies).Distinct().ToArray(),
+        first.Flags | second.Flags,
+        true,
+        first.LinqSemantics | second.LinqSemantics);
 }
 
 internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSource, TUpstream, TValue>(
@@ -169,7 +239,7 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, source => computation(
             source,
@@ -232,7 +302,7 @@ internal sealed class ProjectedComposedDerivedDefinition<TSource, TUpstreamSourc
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, source =>
         {
@@ -291,7 +361,7 @@ internal sealed class ComposedDerivedDefinition<TSource, TFirst, TSecond, TValue
     public bool RequiresExactPropagation => false;
     public bool PrefersConservativePropagation => false;
     public bool AllowIncompleteDependencies { get; set; }
-    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+    public IDerivedRuntimeState CreateState(IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, source => computation(
             source,
@@ -332,7 +402,7 @@ internal sealed class MixedProjectedComposedDerivedDefinition<
     public bool AllowIncompleteDependencies { get; set; }
 
     public IDerivedRuntimeState CreateState(
-        IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+        IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
         Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
         new SourceDerivedRuntimeState<TSource, TValue>(this, source => computation(
             source,

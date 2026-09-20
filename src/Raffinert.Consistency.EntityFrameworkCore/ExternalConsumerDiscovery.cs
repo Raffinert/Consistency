@@ -15,13 +15,16 @@ internal static class ExternalConsumerDiscovery
         ConsistencyEfCoreMappings mappings,
         ConsistencyUnitOfWork unit,
         ConsistencySaveBehavior saveBehavior,
-        ConsistencyScope? scope = null)
+        ConsistencyScope? scope = null,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         var requests = BuildRequests(runtime, mappings, unit.Mutations, saveBehavior, scope);
         if (requests.Count == 0) return [];
         var admissions = new List<RuntimeMutation>();
         foreach (var request in requests)
         {
+            if (diagnostics is not null)
+                diagnostics.ExternalDiscoveryResolverInvocations++;
             var registration = mappings.ConsumerResolvers.SingleOrDefault(value =>
                 ReferenceEquals(value.RootSet, request.RootSet) && value.Navigation == request.Navigation);
             if (registration is null)
@@ -29,6 +32,8 @@ internal static class ExternalConsumerDiscovery
                     new ConsistencyScopeGap(request.RootSet.Id, request.RootSet.DefinitionKey,
                         request.RootSet.ObjectType, ConsistencyScopeRequirementKind.NavigationConsumerCoverage)]);
             var roots = registration.Query(context, request.Targets).ToArray();
+            if (diagnostics is not null)
+                diagnostics.ExternalDiscoveryRows += roots.Length;
             Collect(context, runtime, mappings, request with { EfNavigation = registration.EfNavigation }, roots,
                 admissions, saveBehavior);
         }

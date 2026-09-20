@@ -161,7 +161,7 @@ public sealed class DerivedDagTests
         var received = model.Derived(lines).Select(line => line.Received);
         var invariant = model.Invariant(lines).From(received).From(ordered)
             .Must((line, receivedValue, orderedValue) => receivedValue <= orderedValue)
-            .ScheduleRepairWith(repairs.Add);
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var line = new Line { Id = Guid.NewGuid(), Ordered = 10m, Received = 2m };
         runtime.Add(lines, line);
@@ -174,10 +174,10 @@ public sealed class DerivedDagTests
             Change.Property(lines, line, value => value.Ordered, 10m, 1m),
             Change.Property(lines, line, value => value.Received, 2m, 3m)));
 
-        Assert.Equal(InvariantEvaluationState.Invalid, runtime.GetState(invariant, line));
+        Assert.Equal(InvariantEvaluationState.Violated, runtime.GetState(invariant, line));
         Assert.Single(application.Result.RepairRequests);
         application.Dispatch.Invoke();
-        Assert.Equal([line], repairs);
+        Assert.Empty(repairs);
     }
 
     [Fact]

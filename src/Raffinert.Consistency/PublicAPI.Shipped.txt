@@ -44,11 +44,15 @@ Raffinert.Consistency.RelationDependencyCause.DefinitionKey.get -> string?
 Raffinert.Consistency.RelationDependencyCause.DefinitionKey.init -> void
 Raffinert.Consistency.RelationDependencyCause.Kind.get -> Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationDependencyCause.Kind.init -> void
+Raffinert.Consistency.RelationDependencyCause.LeftSelectorPath.get -> string?
+Raffinert.Consistency.RelationDependencyCause.LeftSelectorPath.init -> void
 Raffinert.Consistency.RelationDependencyCause.OriginIds.get -> System.Collections.Generic.IReadOnlyList<int>!
 Raffinert.Consistency.RelationDependencyCause.OriginIds.init -> void
 Raffinert.Consistency.RelationDependencyCause.RelationDependencyCause(int RelationId, Raffinert.Consistency.RelationImpactCauseKind Kind, Raffinert.Consistency.ImpactCausePrecision CausePrecision) -> void
 Raffinert.Consistency.RelationDependencyCause.RelationId.get -> int
 Raffinert.Consistency.RelationDependencyCause.RelationId.init -> void
+Raffinert.Consistency.RelationDependencyCause.RightSelectorPath.get -> string?
+Raffinert.Consistency.RelationDependencyCause.RightSelectorPath.init -> void
 Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationImpactCauseKind.ConservativeCandidate = 3 -> Raffinert.Consistency.RelationImpactCauseKind
 Raffinert.Consistency.RelationImpactCauseKind.MembershipAdded = 0 -> Raffinert.Consistency.RelationImpactCauseKind
@@ -147,6 +151,14 @@ Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.MembershipAdded(Raffin
 Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.MembershipRemoved(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
 Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.SourceMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Consistency.DependencySeverity>! classify) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
 Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource>.SourceChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.DerivedRelationImpactPolicyBuilder() -> void
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.ItemChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.ItemMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TItem!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Consistency.DependencySeverity>! classify) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.MembershipAdded(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.MembershipRemoved(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.SourceChanged(Raffinert.Consistency.DependencySeverity severity) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource, TItem>.SourceMemberChanged<TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TValue>!>! member, System.Func<TValue, TValue, Raffinert.Consistency.DependencySeverity>! classify) -> Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!
 Raffinert.Consistency.DerivedLinqSemantics
 Raffinert.Consistency.DerivedLinqSemantics.Item = 2 -> Raffinert.Consistency.DerivedLinqSemantics
 Raffinert.Consistency.DerivedLinqSemantics.Membership = 1 -> Raffinert.Consistency.DerivedLinqSemantics
@@ -184,6 +196,10 @@ Raffinert.Consistency.DerivedModelDiagnostics.SourceObjectSetId.get -> int
 Raffinert.Consistency.DerivedModelDiagnostics.SourceObjectSetId.init -> void
 Raffinert.Consistency.DerivedModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Consistency.DependencySeverity
 Raffinert.Consistency.DerivedModelDiagnostics.SourceChangedSeverity.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.ItemMemberRuleCount.get -> int
+Raffinert.Consistency.DerivedModelDiagnostics.ItemMemberRuleCount.init -> void
+Raffinert.Consistency.DerivedModelDiagnostics.ItemMemberRuleNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Raffinert.Consistency.DerivedModelDiagnostics.ItemMemberRuleNames.init -> void
 Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleCount.get -> int
 Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleCount.init -> void
 Raffinert.Consistency.DerivedModelDiagnostics.SourceMemberRuleNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -202,7 +218,7 @@ Raffinert.Consistency.DerivedMutationImpact.Sources.get -> System.Collections.Ge
 Raffinert.Consistency.DerivedMutationImpact.Sources.init -> void
 Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>
 Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.PreferConservativePropagation() -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
-Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Consistency.DerivedImpactPolicyBuilder<TSource!>!>! configure) -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedRelationBuilder<TSource, TItem>.Impact(System.Action<Raffinert.Consistency.DerivedRelationImpactPolicyBuilder<TSource!, TItem!>!>! configure) -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
 Raffinert.Consistency.DerivedValueState
 Raffinert.Consistency.DerivedValueState.Dirty = 1 -> Raffinert.Consistency.DerivedValueState
 Raffinert.Consistency.DerivedValueState.Fresh = 0 -> Raffinert.Consistency.DerivedValueState
@@ -258,7 +274,7 @@ Raffinert.Consistency.Invariant<TSource>.AllowIncompleteDependencies() -> Raffin
 Raffinert.Consistency.Invariant<TSource>.DefinitionKey.get -> string?
 Raffinert.Consistency.Invariant<TSource>.Named(string! definitionKey) -> Raffinert.Consistency.Invariant<TSource!>!
 Raffinert.Consistency.Invariant<TSource>.ReactWith(Raffinert.Consistency.InvariantReaction reaction) -> Raffinert.Consistency.Invariant<TSource!>!
-Raffinert.Consistency.Invariant<TSource>.ScheduleRepairWith(System.Action<TSource!>! scheduler) -> Raffinert.Consistency.Invariant<TSource!>!
+Raffinert.Consistency.Invariant<TSource>.RepairWhenViolated() -> Raffinert.Consistency.Invariant<TSource!>!
 Raffinert.Consistency.InvariantBuilder<TSource>
 Raffinert.Consistency.InvariantEvaluationState
 Raffinert.Consistency.InvariantEvaluationState.Dirty = 3 -> Raffinert.Consistency.InvariantEvaluationState
@@ -282,6 +298,8 @@ Raffinert.Consistency.InvariantModelDiagnostics.Predicate.get -> string!
 Raffinert.Consistency.InvariantModelDiagnostics.Predicate.init -> void
 Raffinert.Consistency.InvariantModelDiagnostics.Reaction.get -> Raffinert.Consistency.InvariantReaction
 Raffinert.Consistency.InvariantModelDiagnostics.Reaction.init -> void
+Raffinert.Consistency.InvariantModelDiagnostics.RepairPolicy.get -> Raffinert.Consistency.InvariantRepairPolicy
+Raffinert.Consistency.InvariantModelDiagnostics.RepairPolicy.init -> void
 Raffinert.Consistency.InvariantModelDiagnostics.SourceObjectSetId.get -> int
 Raffinert.Consistency.InvariantModelDiagnostics.SourceObjectSetId.init -> void
 Raffinert.Consistency.InvariantModelDiagnostics.UpstreamDerivedIds.get -> System.Collections.Generic.IReadOnlyList<int>!
@@ -306,7 +324,9 @@ Raffinert.Consistency.InvariantReactionCause.Reaction.init -> void
 Raffinert.Consistency.InvariantReaction.EvaluateImmediately = 0 -> Raffinert.Consistency.InvariantReaction
 Raffinert.Consistency.InvariantReaction.MarkDirty = 1 -> Raffinert.Consistency.InvariantReaction
 Raffinert.Consistency.InvariantReaction.MarkInvalid = 2 -> Raffinert.Consistency.InvariantReaction
-Raffinert.Consistency.InvariantReaction.ScheduleRepair = 3 -> Raffinert.Consistency.InvariantReaction
+Raffinert.Consistency.InvariantRepairPolicy
+Raffinert.Consistency.InvariantRepairPolicy.None = 0 -> Raffinert.Consistency.InvariantRepairPolicy
+Raffinert.Consistency.InvariantRepairPolicy.WhenViolated = 1 -> Raffinert.Consistency.InvariantRepairPolicy
 Raffinert.Consistency.InvariantValueBuilder<TSource, TValue>
 Raffinert.Consistency.InvariantValueBuilder<TSource, TValue>.Must(System.Linq.Expressions.Expression<System.Func<TSource!, TValue, bool>!>! predicate) -> Raffinert.Consistency.Invariant<TSource!>!
 Raffinert.Consistency.InvariantValueBuilder<TSource, TFirst, TSecond>
@@ -659,6 +679,7 @@ Raffinert.Consistency.PreparedImpactPlan.InvariantEvaluations.get -> System.Coll
 Raffinert.Consistency.ConsistencyRuntime.PlanDetailed(Raffinert.Consistency.PreparedMutation! prepared, Raffinert.Consistency.RuntimeImpactDetailLevel detailLevel, Raffinert.Consistency.PlannedInvariantEvaluationMode invariantEvaluationMode) -> Raffinert.Consistency.PreparedImpactPlan!
 Raffinert.Consistency.DerivedBuilder<TSource>.DependsOn<TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TFirst>!>! first, System.Linq.Expressions.Expression<System.Func<TSource!, TSecond>!>! second) -> Raffinert.Consistency.DerivedBuilder<TSource!>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TItem>(Raffinert.Consistency.Relation<TSource!, TItem!>! relation) -> Raffinert.Consistency.DerivedRelationBuilder<TSource!, TItem!>!
+Raffinert.Consistency.DerivedBuilder<TSource>.FromMembership<TLeft, TRight>(Raffinert.Consistency.Relation<TLeft!, TRight!>! relation, System.Linq.Expressions.Expression<System.Func<TSource!, TLeft!>!>! leftSelector, System.Linq.Expressions.Expression<System.Func<TSource!, TRight!>!>! rightSelector) -> Raffinert.Consistency.Derived<TSource!, bool>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TUpstreamSource, TValue>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TValue>! upstream) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TValue>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TUpstreamSource, TFirst, TSecond>(System.Linq.Expressions.Expression<System.Func<TSource!, TUpstreamSource!>!>! selector, Raffinert.Consistency.Derived<TUpstreamSource!, TFirst>! first, Raffinert.Consistency.Derived<TUpstreamSource!, TSecond>! second) -> Raffinert.Consistency.ProjectedDerivedUpstreamBuilder<TSource!, TUpstreamSource!, TFirst, TSecond>!
 Raffinert.Consistency.DerivedBuilder<TSource>.From<TValue>(Raffinert.Consistency.Derived<TSource!, TValue>! upstream) -> Raffinert.Consistency.DerivedUpstreamBuilder<TSource!, TValue>!
@@ -696,6 +717,7 @@ Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyKind.DerivedValue = 1 -> Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyKind.DirectMember = 0 -> Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyKind.ProjectedDerivedValue = 2 -> Raffinert.Consistency.DerivedDependencyKind
+Raffinert.Consistency.DerivedDependencyKind.ProjectedRelationMembership = 4 -> Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyKind.RelationValue = 3 -> Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyModelDiagnostics
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.DerivedDependencyModelDiagnostics(Raffinert.Consistency.DerivedDependencyKind Kind, string? Path, int? UpstreamDerivedId, int? RelationId, bool HasSourceMemberClassifier, Raffinert.Consistency.DependencySeverity SourceChangedSeverity, Raffinert.Consistency.DependencySeverity MembershipAddedSeverity, Raffinert.Consistency.DependencySeverity MembershipRemovedSeverity, Raffinert.Consistency.DependencySeverity ItemChangedSeverity) -> void
@@ -705,12 +727,16 @@ Raffinert.Consistency.DerivedDependencyModelDiagnostics.ItemChangedSeverity.get 
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.ItemChangedSeverity.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.Kind.get -> Raffinert.Consistency.DerivedDependencyKind
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.Kind.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.LeftSelectorPath.get -> string?
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.LeftSelectorPath.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipAddedSeverity.get -> Raffinert.Consistency.DependencySeverity
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipAddedSeverity.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipRemovedSeverity.get -> Raffinert.Consistency.DependencySeverity
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.MembershipRemovedSeverity.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.Path.get -> string?
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.Path.init -> void
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.RightSelectorPath.get -> string?
+Raffinert.Consistency.DerivedDependencyModelDiagnostics.RightSelectorPath.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.RelationId.get -> int?
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.RelationId.init -> void
 Raffinert.Consistency.DerivedDependencyModelDiagnostics.SourceChangedSeverity.get -> Raffinert.Consistency.DependencySeverity

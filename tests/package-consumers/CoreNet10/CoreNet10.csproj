@@ -5,6 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Raffinert.Consistency" Version="0.2.0-rc.2" />
+    <PackageReference Include="Raffinert.Consistency" Version="$(Version)" />
   </ItemGroup>
 </Project>

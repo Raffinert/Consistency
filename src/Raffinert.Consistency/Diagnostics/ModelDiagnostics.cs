@@ -35,7 +35,8 @@ public enum DerivedDependencyKind
     DirectMember,
     DerivedValue,
     ProjectedDerivedValue,
-    RelationValue
+    RelationValue,
+    ProjectedRelationMembership
 }
 
 public sealed record DerivedDependencyModelDiagnostics(
@@ -47,7 +48,11 @@ public sealed record DerivedDependencyModelDiagnostics(
     DependencySeverity SourceChangedSeverity,
     DependencySeverity MembershipAddedSeverity,
     DependencySeverity MembershipRemovedSeverity,
-    DependencySeverity ItemChangedSeverity);
+    DependencySeverity ItemChangedSeverity)
+{
+    public string? LeftSelectorPath { get; init; }
+    public string? RightSelectorPath { get; init; }
+}
 
 public sealed record MaterializationModelDiagnostics(
     int SourceObjectSetId,
@@ -106,6 +111,8 @@ public sealed record DerivedModelDiagnostics(
     public bool HasConditionalSourcePolicy { get; init; }
     public int SourceMemberRuleCount { get; init; }
     public IReadOnlyList<string> SourceMemberRuleNames { get; init; } = [];
+    public int ItemMemberRuleCount { get; init; }
+    public IReadOnlyList<string> ItemMemberRuleNames { get; init; } = [];
     public IReadOnlyList<DerivedDependencyModelDiagnostics> SemanticDependencies { get; init; } = [];
 }
 
@@ -120,6 +127,7 @@ public sealed record InvariantModelDiagnostics(
     InvariantReaction Reaction)
 {
     public string? DefinitionKey { get; init; }
+    public InvariantRepairPolicy RepairPolicy { get; init; }
 }
 
 public sealed record CompiledModelDiagnostics(

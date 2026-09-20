@@ -49,11 +49,11 @@ public sealed class EndToEndDomainTests
         var impact = Assert.Single(Assert.Single(update.DerivedImpacts).Sources);
         Assert.Same(firstLine, impact.Source);
         Assert.Equal(DependencySeverity.Invalid, impact.Severity);
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Fulfilled, firstLine));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Fulfilled, firstLine));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Fulfilled, otherLine));
         Assert.Single(update.RepairRequests);
         application.Dispatch.Invoke();
-        Assert.Equal([firstLine], repairs);
+        Assert.Empty(repairs);
         Assert.Equal(6m, runtime.Evaluate(scenario.Fulfilled, firstLine));
         Assert.False(runtime.Evaluate(scenario.QuantityInvariant, firstLine));
 
@@ -62,7 +62,7 @@ public sealed class EndToEndDomainTests
             scenario.Fulfillments, fulfillment, value => value.Cancelled, false, true));
 
         Assert.Empty(runtime.Related(scenario.Matches, firstLine));
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Fulfilled, firstLine));
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Fulfilled, firstLine));
         Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Fulfilled, otherLine));
     }
 
@@ -99,8 +99,8 @@ public sealed class EndToEndDomainTests
         fulfillment.Quantity = 6m;
         context.SaveChangesAndApply(runtime, mappings);
 
-        Assert.Equal(DerivedValueState.Invalid, runtime.GetState(scenario.Fulfilled, line));
-        Assert.Equal([line], repairs);
+        Assert.Equal(DerivedValueState.Fresh, runtime.GetState(scenario.Fulfilled, line));
+        Assert.Empty(repairs);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class EndToEndDomainTests
             .Sum(fulfillment => fulfillment.Quantity);
         var invariant = model.Invariant(lines).From(received)
             .Must((line, quantity) => quantity <= line.OrderedQuantity)
-            .ScheduleRepairWith(repairs.Add);
+            .RepairWhenViolated();
         return new Scenario(model.Build(), lines, fulfillments, matches, received, invariant);
     }
 

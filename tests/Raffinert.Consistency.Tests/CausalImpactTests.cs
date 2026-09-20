@@ -395,7 +395,7 @@ public sealed class CausalImpactTests
             RuntimeImpactDetailLevel.Causal).Result;
 
         Assert.Contains(result.InvariantImpacts.Single().Sources.Single().Causes,
-            cause => cause is InvariantReactionCause { Reaction: InvariantReaction.ScheduleRepair });
+            cause => cause is UpstreamDerivedCause);
     }
 
     [Fact]
@@ -426,7 +426,7 @@ public sealed class CausalImpactTests
         var validity = model.Derived(set).From(capacity)
             .Select((source, available) => available >= source.Reserved).Named("validity");
         model.Invariant(set).From(validity).Must((_, valid) => valid).Named("link-invariant")
-            .ScheduleRepairWith(_ => { });
+            .RepairWhenViolated();
         var runtime = model.Build().CreateRuntime();
         var source = new Source { Quantity = 10, Reserved = 9, Code = "A" };
         runtime.Add(set, source);

@@ -14,7 +14,7 @@ internal interface IDerivedComputationPlan<TSource, TItem, TValue>
         TSource source,
         RelationImpact? relationImpact,
         IReadOnlyList<PropertyChange> changes,
-        RelationRuntimeState<TSource, TItem> relationState,
+        IRelationQueryState<TSource, TItem> relationState,
         out TValue updated);
 }
 
@@ -86,7 +86,7 @@ internal static class DerivedComputationPlanner
         public string DisplayName => "IncrementalCount";
 
         public bool TryUpdate(int current, TSource source, RelationImpact? relationImpact,
-            IReadOnlyList<PropertyChange> changes, RelationRuntimeState<TSource, TItem> relationState,
+            IReadOnlyList<PropertyChange> changes, IRelationQueryState<TSource, TItem> relationState,
             out int updated)
         {
             updated = relationState.RelatedCount(source);
@@ -100,7 +100,7 @@ internal static class DerivedComputationPlanner
         public string DisplayName => "IncrementalLongCount";
 
         public bool TryUpdate(long current, TSource source, RelationImpact? relationImpact,
-            IReadOnlyList<PropertyChange> changes, RelationRuntimeState<TSource, TItem> relationState,
+            IReadOnlyList<PropertyChange> changes, IRelationQueryState<TSource, TItem> relationState,
             out long updated)
         {
             updated = relationState.RelatedCount(source);
@@ -114,7 +114,7 @@ internal static class DerivedComputationPlanner
         public string DisplayName => "IncrementalAny";
 
         public bool TryUpdate(bool current, TSource source, RelationImpact? relationImpact,
-            IReadOnlyList<PropertyChange> changes, RelationRuntimeState<TSource, TItem> relationState,
+            IReadOnlyList<PropertyChange> changes, IRelationQueryState<TSource, TItem> relationState,
             out bool updated)
         {
             updated = relationState.RelatedCount(source) != 0;
@@ -132,7 +132,7 @@ internal static class DerivedComputationPlanner
         public string DisplayName => $"IncrementalSum({typeof(TItem).Name}.{member.Name})";
 
         public bool TryUpdate(TValue current, TSource source, RelationImpact? relationImpact,
-            IReadOnlyList<PropertyChange> changes, RelationRuntimeState<TSource, TItem> relationState,
+            IReadOnlyList<PropertyChange> changes, IRelationQueryState<TSource, TItem> relationState,
             out TValue updated)
         {
             updated = current;

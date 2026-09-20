@@ -37,6 +37,33 @@ internal sealed class ObjectSetRuntime
             : new EntryState(instance, false, null))
         .ToArray();
 
+    public bool ContainsWithEntriesState(object? snapshot, object instance)
+    {
+        if (snapshot is not EntryState[] entries)
+            return Contains(instance);
+        var entry = entries.LastOrDefault(value => ReferenceEquals(value.Instance, instance));
+        return entry is null ? Contains(instance) : entry.IsRegistered;
+    }
+
+    public IEnumerable<object> InstancesWithEntriesState(object? snapshot)
+    {
+        if (snapshot is not EntryState[] entries)
+            return _instances;
+        var proposed = _instances.ToList();
+        foreach (var entry in entries)
+        {
+            var index = proposed.FindIndex(instance => ReferenceEquals(instance, entry.Instance));
+            if (entry.IsRegistered)
+            {
+                if (index < 0)
+                    proposed.Add(entry.Instance);
+            }
+            else if (index >= 0)
+                proposed.RemoveAt(index);
+        }
+        return proposed;
+    }
+
     public void RestoreEntriesState(object snapshot)
     {
         foreach (var state in (EntryState[])snapshot)

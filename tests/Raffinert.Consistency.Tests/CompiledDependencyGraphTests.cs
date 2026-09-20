@@ -242,7 +242,7 @@ public sealed class CompiledDependencyGraphTests
         var join = model.Derived(sources).From(left).From(right)
             .Select((_, first, second) => first + second).Named("join");
         model.Invariant(sources).From(join).Must((_, value) => value < 100)
-            .ScheduleRepairWith(_ => { }).Named("limit");
+            .RepairWhenViolated().Named("limit");
         var source = new Source { Value = 1 };
         var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
         _ = runtime.Evaluate(join, source);
@@ -258,7 +258,7 @@ public sealed class CompiledDependencyGraphTests
             ["left", "right"],
             joinSource.Causes.OfType<UpstreamDerivedCause>()
                 .Select(cause => cause.DefinitionKey).Order(StringComparer.Ordinal));
-        Assert.Single(result.RepairRequests);
+        Assert.Empty(result.RepairRequests);
     }
 
     [Fact]

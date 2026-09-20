@@ -89,8 +89,7 @@ internal sealed class DogfoodContext : ConsistencyModelContext
         AllocationInvariant = Invariant(
             Allocations,
             AllocationValidity,
-            "allocation-validity-invariant",
-            allocation => Repairs.Add(allocation.Id));
+            "allocation-validity-invariant");
     }
 
     public ContextSet<SimpleLine> SimpleLines { get; }

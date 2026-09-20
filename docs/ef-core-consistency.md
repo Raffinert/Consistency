@@ -107,6 +107,67 @@ await db.SaveChangesConsistentlyAsync(
 Only an explicitly `Enforce`d evaluation whose state is `Violated` blocks persistence. `Unknown`, `Dirty`,
 `Invalid`, an unenforced violation, and `ScheduleRepair` policy data do not automatically block SQL.
 
+When an enforced violation rejects the save, `ConsistencyInvariantViolationException.Violations` contains only
+the enforced violated evaluations and `RepairRequests` contains the matching structured requests for those
+evaluations. A violated invariant without `RepairWhenViolated()` still rejects but contributes no repair request.
+The exception is produced from the reversible plan: SQL is not executed, runtime version does not advance, and
+the caller may inspect repair data without installing the rejected plan.
+
+The allocation dogfood demonstrates an internal experimental rejected-plan query flow for application-owned repair.
+The scoped EF session retains the rejected prepared plan and the tracked mutation fingerprint; application code
+can obtain a read-only proposed-state view for `Evaluate`, `Related`, and invariant queries. The view represents
+the final tracked object membership and current proposed CLR values, while the committed runtime remains at its
+durable baseline. Preview detects runtime-plan drift and prepared-mutation drift. The EF rejected-preview integration
+also detects changes visible to the adapter's relevant tracked-state fingerprint, including represented scalar,
+navigation, add, and remove changes. The dependency-free core cannot detect arbitrary POCO mutations that were never
+reported as changes; reading a current CLR value is not a validated snapshot guarantee. After a repair mutation, the
+application obtains a fresh view/re-plans before making further consistency queries. The view does not materialize,
+dispatch, persist, or select a replacement, and it is not a stable public API.
+
+Rejected-preview validation deliberately remains authority-aware. It performs persistence-policy validation and
+external consumer discovery before comparing fingerprints, both when the preview is created and before each read.
+A tracked-state-only fingerprint is not sufficient: a consumer row can appear in the database without changing the
+already tracked graph, yet that row changes the proposed evaluation closure. Final save also repeats authoritative
+validation and discovery; preview validation is not a substitute for the persistence boundary.
+
+Repeating authority discovery before preview reads strengthens stale-state detection, but it does not establish an
+atomic database snapshot or eliminate external races. Another transaction can change authoritative database state
+after validation completes. Final `SaveChanges` planning and enforcement remains the durability boundary that must
+revalidate authoritative consistency requirements.
+
+Tracked navigation capture uses one stable entry snapshot plus lazy, metadata-aware indexes for current and
+original principal keys and foreign keys. It does not issue database queries or lazy-load navigations. This removes
+the former tracked-entry rescan per reference/collection while preserving composite and nullable keys,
+dependent/principal navigation direction, Added/Deleted evidence, ambiguity failures, and collection-reset
+deduplication. In the allocation dogfood, the unchanged 10,000-allocation rejected-preview workload fell from
+8,952.954 ms rejection plus 22,400.720 ms repair reads and 90,287,397,064 allocated bytes to 40.342 ms plus
+96.279 ms and 384,347,784 bytes after seventh-pass capture hardening. The six validations (creation plus five reads)
+are retained because they are now
+practical and provide the strongest stale-state guarantee.
+
+Optional composite foreign keys use EF relationship null semantics: if any component is null, no relationship is
+resolved or indexed. Complete relationship tuples are compared with each principal key property's EF
+`GetKeyValueComparer()`, including structural array equality and explicitly configured comparers for converted key
+types. Policy-aware capture reuses that same tracked snapshot for generated-FK fixup evidence, locating intended
+principals by entity reference without a per-property scan of the change tracker.
+
+Tracked relationship indexes use EF `IEntityType` assignability, not CLR assignability. Shared CLR entity types
+therefore cannot cross-resolve equal keys, while a relationship targeting an EF base type still resolves a valid
+tracked derived entity. Navigation capture preserves original relationship evidence before change detection,
+stabilizes EF fixup once, and then refreshes principal-side one-to-one current values. An FK-only retarget thus
+reports both the dependent reference and the old/new principal references without losing owned-reference or
+replacement evidence.
+
+Original relationship indexes represent the persisted/runtime baseline and therefore exclude `Added` entries.
+An added dependent has no original relationship even when EF exposes an original FK equal to its current FK.
+Mutation fingerprints resolve scalar EF metadata once through a reference-identity entry map, snapshot values with
+the property's effective `ValueComparer`, and use that comparer for later equality. Mutable values with configured
+snapshot semantics cannot silently mutate an already-retained rejected or pending fingerprint.
+
+Relevant tracked scalar, navigation, add, and remove changes make a retained preview stale. Properties outside the
+compiled consistency semantics are filtered out and do not. Arbitrary unreported mutations in dependency-free core
+POCOs remain outside the guarantee because core has no general mutation observer.
+
 The ordering is:
 
 ```text
