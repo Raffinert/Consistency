@@ -205,12 +205,15 @@ public sealed partial class ConsistencyRuntime : IConsistencyRuntime
         _navigation = new NavigationIndexRegistry(sets, relations, derivedStates, invariants, _sets);
         _projections = new ProjectionIndexRegistry(derivedStates, _sets);
         _impactResolver = new ImpactResolver(relations, _relations, _navigation);
+        var relationQueries = _relations.ToDictionary(
+            pair => pair.Key,
+            pair => (IRelationQueryState)pair.Value);
         var mutableDerivedStates = new Dictionary<IDerivedDefinition, IDerivedRuntimeState>();
         foreach (var node in compiledDependencyGraph.Nodes.Where(node => node.Kind == DependencyNodeKind.Derived))
         {
             var definition = (IDerivedDefinition)node.Definition;
             mutableDerivedStates.Add(definition, definition.CreateState(
-                _relations,
+                relationQueries,
                 upstream => mutableDerivedStates[upstream]));
         }
         _derivedStates = mutableDerivedStates;

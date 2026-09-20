@@ -73,6 +73,51 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
         return new RepairProcessingResult(reallocated, unresolved);
     }
 
+    /// <summary>
+    /// Repairs one rejected proposed state. A preview is immutable with respect to its tracked
+    /// mutation fingerprint, so the caller must obtain a new preview after this method changes an
+    /// allocation and before it performs another consistency query.
+    /// </summary>
+    internal RepairProcessingResult ProcessProposedState(
+        ConsistencyPreview preview,
+        IEnumerable<RepairRequestInfo> requests)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(requests);
+        var reallocated = new List<Allocation>();
+        var unresolved = new List<RepairRequirement>();
+        foreach (var requirement in requests.Select(ToRequirement))
+        {
+            switch (requirement.Kind)
+            {
+                case RepairRequirementKind.SupplyCapacity:
+                    if (preview.Evaluate(model.CapacityInvariant, requirement.Supply!))
+                        continue;
+                    foreach (var allocation in preview.Related(model.SupplyAllocations, requirement.Supply!))
+                        if (TryReallocate(allocation, preview))
+                        {
+                            reallocated.Add(allocation);
+                            return new RepairProcessingResult(reallocated, unresolved);
+                        }
+                    unresolved.Add(requirement);
+                    break;
+                case RepairRequirementKind.AllocationCompatibility:
+                    if (preview.Evaluate(model.CompatibilityInvariant, requirement.Allocation!))
+                        continue;
+                    if (TryReallocate(requirement.Allocation!, preview))
+                    {
+                        reallocated.Add(requirement.Allocation!);
+                        return new RepairProcessingResult(reallocated, unresolved);
+                    }
+                    unresolved.Add(requirement);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        return new RepairProcessingResult(reallocated, unresolved);
+    }
+
     private void ProcessSupply(
         RepairRequirement requirement,
         ConsistencyRuntime runtime,
@@ -141,6 +186,21 @@ public sealed class ReallocateDemand(AllocationConsistencyModel model)
             RuntimeImpactDetailLevel.Causal);
         foreach (var request in application.Result.RepairRequests)
             requirements.Enqueue(ToRequirement(request));
+        return true;
+    }
+
+    private bool TryReallocate(Allocation allocation, ConsistencyPreview preview)
+    {
+        var replacement = preview.Related(model.CandidateSupplies, allocation.Demand)
+            .Where(supply => supply.Id != allocation.SupplyId)
+            .OrderBy(supply => supply.Id)
+            .FirstOrDefault(supply =>
+                preview.Evaluate(model.RemainingCapacity, supply) >= allocation.Quantity);
+        if (replacement is null)
+            return false;
+
+        allocation.SupplyId = replacement.Id;
+        allocation.Supply = replacement;
         return true;
     }
 

@@ -18,7 +18,9 @@ dotnet run --project experiments/Raffinert.Consistency.AllocationDogfood/Raffine
 
 The executable covers the core runtime and SQLite-backed EF integration. EF scenarios resolve one scoped
 `IConsistencyRuntime`, load the host-asserted complete consistency scope, mutate normal tracked entities, and
-use ordinary `SaveChangesAsync`. `Materialize` is called only when a mirror is read before save.
+use ordinary `SaveChangesAsync`. `Materialize` is called only when a mirror is read before save. The executable
+also reports the fourth-pass proposed-state preview benchmark and exercises stale-preview invalidation after a
+rejected save.
 
 The scope assertion is important: tracked does not mean complete. The host remains responsible for loading
 the declared closed world (or configuring supported consumer discovery) before it claims

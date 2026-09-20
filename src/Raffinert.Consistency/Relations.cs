@@ -95,6 +95,9 @@ internal interface IRelationDefinition
     void RequireExactPropagation();
     void UseConservativePropagation();
     IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets);
+    IRelationQueryState CreatePreviewState(
+        Func<IObjectSetDefinition, IEnumerable<object>> instances,
+        Func<IObjectSetDefinition, object, bool> contains);
 }
 
 internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
@@ -148,4 +151,9 @@ internal sealed class RelationDefinition<TLeft, TRight> : IRelationDefinition
 
     public IRelationRuntimeState CreateState(IReadOnlyDictionary<IObjectSetDefinition, ObjectSetRuntime> sets) =>
         new RelationRuntimeState<TLeft, TRight>(this, sets[Left], sets[Right]);
+
+    public IRelationQueryState CreatePreviewState(
+        Func<IObjectSetDefinition, IEnumerable<object>> instances,
+        Func<IObjectSetDefinition, object, bool> contains) =>
+        new PreviewRelationState<TLeft, TRight>(this, instances, contains);
 }

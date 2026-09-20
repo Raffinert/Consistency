@@ -666,9 +666,15 @@ internal sealed class RuntimePolicyActions
         object source,
         DependencyImpactKind reason)
     {
-        if (_repairRequests.Any(request =>
-                ReferenceEquals(request.Invariant, invariant) && ReferenceEquals(request.Source, source)))
+        var index = _repairRequests.FindIndex(request =>
+            ReferenceEquals(request.Invariant, invariant) && ReferenceEquals(request.Source, source));
+        if (index >= 0)
+        {
+            if (reason == DependencyImpactKind.Invalid &&
+                _repairRequests[index].Reason != DependencyImpactKind.Invalid)
+                _repairRequests[index] = _repairRequests[index] with { Reason = DependencyImpactKind.Invalid };
             return;
+        }
         _repairRequests.Add(new RepairRequest(invariant, source, reason));
     }
 

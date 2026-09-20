@@ -65,7 +65,9 @@ internal static class Scenarios
         (nameof(EfScenarios.PartialTrackedGraph_IsNotTreatedAsAuthoritativelyComplete),
             EfScenarios.PartialTrackedGraph_IsNotTreatedAsAuthoritativelyComplete),
         (nameof(EfScenarios.EfRejectedSave_CanBeRepairedAndRetried),
-            EfScenarios.EfRejectedSave_CanBeRepairedAndRetried)
+            EfScenarios.EfRejectedSave_CanBeRepairedAndRetried),
+        (nameof(EfScenarios.EfRejectedPreview_InvalidatesAfterTrackedChange),
+            EfScenarios.EfRejectedPreview_InvalidatesAfterTrackedChange)
     ];
 
     public static async Task RunAsync()
@@ -80,6 +82,7 @@ internal static class Scenarios
             await scenario.Run();
             Console.WriteLine($"PASS {scenario.Name}");
         }
+        ProposedStateBenchmark.Run();
         Console.WriteLine($"Allocation dogfood scenarios passed: {Core.Length + Ef.Length}.");
     }
 

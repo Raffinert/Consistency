@@ -109,7 +109,7 @@ public sealed class CompiledDependencyGraphCycleTests
             Inputs = upstreams.Select(upstream => (DerivedInput)new UpstreamDerivedInput(upstream)).ToArray();
 
         public IDerivedRuntimeState CreateState(
-            IReadOnlyDictionary<IRelationDefinition, IRelationRuntimeState> relations,
+            IReadOnlyDictionary<IRelationDefinition, IRelationQueryState> relations,
             Func<IDerivedDefinition, IDerivedRuntimeState> resolveDerived) =>
             throw new NotSupportedException();
 

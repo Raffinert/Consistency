@@ -1,4 +1,4 @@
-# Allocation consistency dogfood third-pass findings
+# Allocation consistency dogfood fourth-pass findings
 
 ## Fixed by framework changes
 
@@ -39,13 +39,79 @@ explicit policy requests evaluation, such as EF enforcement or `EvaluateImmediat
   identity into a domain-specific repair requirement before choosing a replacement.
 - Core POCO callers must report mutations explicitly, while EF callers rely on tracked changes and save-time
   translation. The distinction is honest but requires two integration habits.
-- A repair after an EF-rejected plan must not treat that plan as committed runtime state. This dogfood seeds an
-  application-owned runtime from the complete current tracked graph, applies application repair there, and lets
-  the ordinary EF retry plan the final tracked mutation set against the unchanged scoped runtime baseline.
+- The full-runtime reseed remains as a correctness/performance baseline, but the rejected-save scenario now uses
+  the experimental proposed-state view. The application must obtain a fresh view after each repair mutation.
 - The compact projected-membership declaration is clear for this case, but larger models still need explicit
   names and diagnostics to make cross-object ownership easy to follow.
 - Causal traces identify definitions, members, relation pairs, and sources. They do not yet include the evaluated
   business operands that explain a numeric failure in domain terms.
+
+## Repair reason semantics
+
+`RepairRequestInfo.Reason` is the severity propagated by the current operation, not a projection of the
+invariant's previous cached state. An unevaluated invariant therefore reports `Invalid` for an invalid incoming
+impact and `Dirty` for a dirty incoming impact. Multiple causes for one invariant/source pair merge with
+`Invalid` dominating `Dirty`; request deduplication remains scoped to one operation.
+
+## Proposed-state repair gap
+
+The EF tracked graph already contains proposed CLR values when Raffinert plans a save. If an enforced invariant
+rejects that plan, the committed runtime intentionally remains at the durable baseline, but application repair
+still needs relation, derived-value, and invariant queries against the proposed tracked state. The current
+baseline solution creates a second runtime and seeds it from every object in `DbSet.Local` before running the
+repair query. That is correct for this complete tracked graph, but it repeats O(graph) object admission and index
+construction. The fourth-pass experiment compares that baseline with a read-only proposed-state view backed by
+the rejected prepared plan. The full-runtime reseed remains in place as the baseline comparison path.
+
+## Proposed-state experiment result
+
+The internal preview reuses the prepared plan's final object-set overlay and current proposed CLR values. It builds
+isolated derived/invariant query caches and evaluates relations against the final proposed object membership and
+relation predicates. It does not install the forward patch into the committed runtime, rebuild all relation indexes,
+dispatch policy work, materialize mirrors, or own a repair workflow. Runtime version, committed relation/index
+state, and committed derived/invariant state remain unchanged. Runtime advancement, prepared-domain drift, or a
+relevant EF tracked mutation invalidates the view deterministically.
+
+The rejected EF flow is now:
+
+```text
+tracked mutation
+  -> prepare binding plan
+  -> enforced invariant rejection
+  -> scoped session retains rejected plan + mutation fingerprint
+  -> application obtains proposed-state view
+  -> application selects and mutates one replacement
+  -> fresh preview/re-plan on the next attempt
+  -> SQL success
+  -> committed runtime plan installation and dispatch
+```
+
+The application still owns candidate selection, ordering, unresolved behavior, and convergence. The baseline
+`ProcessCurrentGraph(...)` full reseed path remains for comparison and future fallback testing.
+
+### Benchmark result
+
+Five measured iterations after one warm-up produced these representative medians on the local development
+machine. Setup is the time to create a query context; query is the first remaining-capacity query.
+
+| graph size | full reseed setup/query | preview setup/query | full allocated bytes | preview allocated bytes |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 0.503 / 0.025 ms | 0.016 / 0.026 ms | 455,256 | 6,000 |
+| 1,000 | 4.148 / 0.069 ms | 0.016 / 0.078 ms | 4,126,144 | 13,200 |
+| 10,000 | 37.890 / 0.363 ms | 0.025 / 0.651 ms | 39,923,760 | 85,200 |
+
+Preview creation and allocations are materially smaller and nearly independent of graph size. Its first relation
+query is slightly slower at 10,000 because the prototype scans proposed candidates rather than maintaining a
+second index. This is sufficient evidence to keep the experiment, but not to graduate a public API before query
+workload and relation-overlay semantics are broadened.
+
+## API decision: KEEP EXPERIMENTAL
+
+The proposed-state view removes full graph reseeding from the rejected-save dogfood path, reuses prepared-plan
+validation and lifecycle evidence, and has explicit isolation and staleness tests. It remains internal/experimental:
+the prototype intentionally has only `Evaluate`, `Related`, and state reads; it has no materialization, dispatch,
+persistence, transaction, or workflow behavior. A future public API should be designed only after measuring real
+repair query workloads and deciding whether indexed relation overlays are needed.
 
 ## Fundamental limitations
 

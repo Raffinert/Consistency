@@ -81,7 +81,7 @@ internal interface IInvariantRuntimeState : ISourceLifecycleParticipant
         IEnumerable<object> sources,
         DependencyImpactKind impact);
     void EvaluatePolicy(object source);
-    bool EvaluateValue(object source, RuntimePolicyActions? policyActions = null);
+    bool EvaluateValue(object source);
     InvariantEvaluationState GetValueState(object source);
 }
 
@@ -149,19 +149,7 @@ internal sealed class InvariantRuntimeState<TSource>(
     }
 
     public void EvaluatePolicy(object source) => Evaluate((TSource)source);
-    public bool EvaluateValue(object source, RuntimePolicyActions? policyActions = null)
-    {
-        var previous = GetState((TSource)source);
-        var valid = Evaluate((TSource)source);
-        if (!valid && definition.RepairPolicy == InvariantRepairPolicy.WhenViolated)
-        {
-            var reason = previous == InvariantEvaluationState.Invalid
-                ? DependencyImpactKind.Invalid
-                : DependencyImpactKind.Dirty;
-            policyActions?.AddRepairRequest(definition, source, reason);
-        }
-        return valid;
-    }
+    public bool EvaluateValue(object source) => Evaluate((TSource)source);
     public InvariantEvaluationState GetValueState(object source) => GetState((TSource)source);
 
     public void OnSourceAdded(object source) => _states.Remove((TSource)source);

@@ -6,7 +6,20 @@ using Raffinert.Consistency.Expressions;
 
 namespace Raffinert.Consistency;
 
-internal interface IRelationRuntimeState
+internal interface IRelationQueryState
+{
+    bool IsRelated(object left, object right);
+}
+
+internal interface IRelationQueryState<TLeft, TRight> : IRelationQueryState
+    where TLeft : class where TRight : class
+{
+    IReadOnlyList<TRight> Related(TLeft left);
+    int RelatedCount(TLeft left);
+    bool IsRelated(TLeft left, TRight right);
+}
+
+internal interface IRelationRuntimeState : IRelationQueryState
 {
     IObjectSetDefinition LeftSet { get; }
     IObjectSetDefinition RightSet { get; }
@@ -34,10 +47,10 @@ internal interface IRelationRuntimeState
     RelationDelta RefreshMembership(IEnumerable<object> lefts, IEnumerable<object> rights);
     IReadOnlyCollection<object> GetLeftsForRights(IEnumerable<object> rights);
     IReadOnlyCollection<object> GetPotentialLeftsForRights(IEnumerable<object> rights);
-    bool IsRelated(object left, object right);
 }
 
-internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeState
+internal sealed class RelationRuntimeState<TLeft, TRight> :
+    IRelationRuntimeState, IRelationQueryState<TLeft, TRight>
     where TLeft : class where TRight : class
 {
     private readonly RelationDefinition<TLeft, TRight> _definition;
@@ -265,7 +278,7 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
     public bool IsRelated(TLeft left, TRight right) =>
         _rightsByLeft.TryGetValue(left, out var rights) && rights.Contains(right);
 
-    bool IRelationRuntimeState.IsRelated(object left, object right) =>
+    bool IRelationQueryState.IsRelated(object left, object right) =>
         IsRelated((TLeft)left, (TRight)right);
 
     public bool IsReverseRelated(TLeft left, TRight right) =>
@@ -616,6 +629,38 @@ internal sealed class RelationRuntimeState<TLeft, TRight> : IRelationRuntimeStat
         IReadOnlyDictionary<TRight, Entry<HashSet<TLeft>>> LeftsByRight,
         long PredicateEvaluationCount);
 
+}
+
+internal sealed class PreviewRelationState<TLeft, TRight>(
+    RelationDefinition<TLeft, TRight> definition,
+    Func<IObjectSetDefinition, IEnumerable<object>> instances,
+    Func<IObjectSetDefinition, object, bool> contains) : IRelationQueryState<TLeft, TRight>
+    where TLeft : class where TRight : class
+{
+    public IReadOnlyList<TRight> Related(TLeft left)
+    {
+        Ensure(definition.Left, left, "left");
+        return instances(definition.Right)
+            .Cast<TRight>()
+            .Where(right => definition.Predicate(left, right))
+            .ToArray();
+    }
+
+    public int RelatedCount(TLeft left) => Related(left).Count;
+
+    public bool IsRelated(TLeft left, TRight right) =>
+        contains(definition.Left, left) && contains(definition.Right, right) &&
+        definition.Predicate(left, right);
+
+    bool IRelationQueryState.IsRelated(object left, object right) =>
+        IsRelated((TLeft)left, (TRight)right);
+
+    private void Ensure(IObjectSetDefinition set, object instance, string parameter)
+    {
+        if (!contains(set, instance))
+            throw new ArgumentException(
+                $"The {parameter} instance is not registered in the proposed object set.", parameter);
+    }
 }
 
 internal readonly struct CompositeKey : IEquatable<CompositeKey>

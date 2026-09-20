@@ -364,6 +364,54 @@ public sealed partial class ConsistencyRuntime
             _dependencyGraph.GetCapturedStateEntryCount(patch.Dependencies));
     }
 
+    internal ConsistencyPreview CreatePreview(PreparedImpactPlan plan, Action? externalValidation = null)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ValidatePreviewPlan(plan);
+        var patch = (RuntimeForwardPatch)plan.ForwardPatch;
+
+        object? SetPatch(IObjectSetDefinition set) =>
+            patch.Sets.TryGetValue(set, out var state) ? state : null;
+        bool Contains(IObjectSetDefinition set, object instance) =>
+            _sets[set].ContainsWithEntriesState(SetPatch(set), instance);
+        IEnumerable<object> Instances(IObjectSetDefinition set) =>
+            _sets[set].InstancesWithEntriesState(SetPatch(set));
+
+        var relationQueries = _relations.Keys.ToDictionary(
+            definition => definition,
+            definition => definition.CreatePreviewState(Instances, Contains));
+        var derivedStates = new Dictionary<IDerivedDefinition, IDerivedRuntimeState>();
+        foreach (var definition in _derivedStates.Keys)
+            derivedStates.Add(definition, definition.CreateState(
+                relationQueries,
+                upstream => derivedStates[upstream]));
+        var invariantStates = _invariants.Keys.ToDictionary(
+            definition => definition,
+            definition => definition.CreateState(derivedStates));
+
+        return new ConsistencyPreview(
+            () =>
+            {
+                ValidatePreviewPlan(plan);
+                externalValidation?.Invoke();
+            },
+            Contains,
+            relationQueries,
+            derivedStates,
+            invariantStates);
+    }
+
+    private void ValidatePreviewPlan(PreparedImpactPlan plan)
+    {
+        if (!ReferenceEquals(plan.Runtime, this))
+            throw new ArgumentException("The impact plan belongs to a different runtime.", nameof(plan));
+        if (plan.IsCommitted)
+            throw new InvalidOperationException("The proposed-state view is stale because its plan was committed.");
+        ValidatePreparedMutation(plan.Prepared);
+        plan.Prepared.ValidateDomainState(_sets);
+        ValidateProjectedFinalState(plan.Prepared);
+    }
+
     /// <summary>Dispatches a committed mutation's post-commit policy callbacks.</summary>
     public void Dispatch(PreparedMutation prepared)
     {
@@ -502,56 +550,37 @@ public sealed partial class ConsistencyRuntime
         // otherwise repair-enabled invariants evaluate eagerly to prove violation, while immediate reaction
         // remains an explicit post-commit action for repair-disabled invariants.
         var evaluations = new List<(PlannedInvariantEvaluation Value, int Encounter)>();
-        var seen = new Dictionary<IInvariantDefinition, HashSet<object>>();
+        var selected = new List<(IInvariantDefinition Definition, object Source,
+            DependencyImpactKind Reason, int Encounter)>();
+        var selectedIndexes = new Dictionary<IInvariantDefinition, Dictionary<object, int>>();
         var encounter = 0;
         foreach (var impact in propagation.InvariantImpacts)
-        {
-            if (!seen.TryGetValue(impact.Definition, out var sources))
-                seen.Add(impact.Definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
             foreach (var source in impact.Sources)
-            {
-                if (!sources.Add(source) || !_sets[impact.Definition.SourceSet].Contains(source))
-                    continue;
-                var state = _invariants[impact.Definition];
-                if (!evaluateAll && impact.Definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
-                {
-                    if (impact.Definition.Reaction == InvariantReaction.EvaluateImmediately)
-                        policyActions.AddImmediateEvaluation(state, source);
-                    continue;
-                }
-                state.EvaluateValue(source, policyActions);
-                evaluations.Add((new PlannedInvariantEvaluation(
-                    _invariantIds[impact.Definition], source, state.GetValueState(source))
-                {
-                    DefinitionKey = impact.Definition.DefinitionKey,
-                    SourceIdentity = CreateSourceIdentity(impact.Definition.SourceSet, source)
-                }, encounter++));
-            }
-        }
+                Add(impact.Definition, source, impact.Severity);
         foreach (var added in lifecycleMutations.OfType<ObjectAdded>())
-        {
             foreach (var definition in _invariants.Keys.Where(definition =>
                 ReferenceEquals(definition.SourceSet, added.Set)))
+                Add(definition, added.Instance, DependencyImpactKind.Dirty);
+
+        foreach (var item in selected.OrderBy(value => _invariantIds[value.Definition])
+                     .ThenBy(value => value.Encounter))
+        {
+            var state = _invariants[item.Definition];
+            if (!evaluateAll && item.Definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
             {
-                if (!seen.TryGetValue(definition, out var sources))
-                    seen.Add(definition, sources = new HashSet<object>(ReferenceEqualityComparer.Instance));
-                if (!sources.Add(added.Instance))
-                    continue;
-                var state = _invariants[definition];
-                if (!evaluateAll && definition.RepairPolicy != InvariantRepairPolicy.WhenViolated)
-                {
-                    if (definition.Reaction == InvariantReaction.EvaluateImmediately)
-                        policyActions.AddImmediateEvaluation(state, added.Instance);
-                    continue;
-                }
-                state.EvaluateValue(added.Instance, policyActions);
-                evaluations.Add((new PlannedInvariantEvaluation(
-                    _invariantIds[definition], added.Instance, state.GetValueState(added.Instance))
-                {
-                    DefinitionKey = definition.DefinitionKey,
-                    SourceIdentity = CreateSourceIdentity(definition.SourceSet, added.Instance)
-                }, encounter++));
+                if (item.Definition.Reaction == InvariantReaction.EvaluateImmediately)
+                    policyActions.AddImmediateEvaluation(state, item.Source);
+                continue;
             }
+            var valid = state.EvaluateValue(item.Source);
+            if (!valid && item.Definition.RepairPolicy == InvariantRepairPolicy.WhenViolated)
+                policyActions.AddRepairRequest(item.Definition, item.Source, item.Reason);
+            evaluations.Add((new PlannedInvariantEvaluation(
+                _invariantIds[item.Definition], item.Source, state.GetValueState(item.Source))
+            {
+                DefinitionKey = item.Definition.DefinitionKey,
+                SourceIdentity = CreateSourceIdentity(item.Definition.SourceSet, item.Source)
+            }, item.Encounter));
         }
         return evaluations
             .OrderBy(value => value.Value.InvariantId)
@@ -559,6 +588,28 @@ public sealed partial class ConsistencyRuntime
             .ThenBy(value => value.Encounter)
             .Select(value => value.Value)
             .ToArray();
+
+        void Add(IInvariantDefinition definition, object source, DependencyImpactKind reason)
+        {
+            if (!_sets[definition.SourceSet].Contains(source))
+                return;
+            if (!selectedIndexes.TryGetValue(definition, out var sources))
+                selectedIndexes.Add(definition,
+                    sources = new Dictionary<object, int>(ReferenceEqualityComparer.Instance));
+            if (sources.TryGetValue(source, out var index))
+            {
+                if (reason == DependencyImpactKind.Invalid &&
+                    selected[index].Reason != DependencyImpactKind.Invalid)
+                {
+                    var current = selected[index];
+                    selected[index] = (current.Definition, current.Source,
+                        DependencyImpactKind.Invalid, current.Encounter);
+                }
+                return;
+            }
+            sources.Add(source, selected.Count);
+            selected.Add((definition, source, reason, encounter++));
+        }
     }
 
     private void ValidateProjectedFinalState(PreparedMutation prepared)

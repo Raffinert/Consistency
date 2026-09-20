@@ -514,6 +514,128 @@ public sealed partial class DerivedStateTests
     }
 
     [Fact]
+    public void Unevaluated_repair_invariant_preserves_invalid_operation_reason()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var length = model.Derived(sources)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Select(value => value.Code.Length);
+        var invariant = model.Invariant(sources).From(length)
+            .Must((_, value) => value > 0)
+            .RepairWhenViolated();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
+
+        source.Code = "";
+        var application = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            sources, source, value => value.Code, "A", "")));
+
+        Assert.Equal(DependencySeverity.Invalid,
+            Assert.Single(application.Result.RepairRequests).Reason);
+    }
+
+    [Fact]
+    public void Unevaluated_repair_invariant_preserves_dirty_operation_reason()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var length = model.Derived(sources)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Dirty))
+            .Select(value => value.Code.Length);
+        var invariant = model.Invariant(sources).From(length)
+            .Must((_, value) => value > 0)
+            .RepairWhenViolated();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        Assert.Equal(InvariantEvaluationState.Unknown, runtime.GetState(invariant, source));
+
+        source.Code = "";
+        var application = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            sources, source, value => value.Code, "A", "")));
+
+        Assert.Equal(DependencySeverity.Dirty,
+            Assert.Single(application.Result.RepairRequests).Reason);
+    }
+
+    [Fact]
+    public void Previously_valid_repair_invariant_uses_current_invalid_operation_reason()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var length = model.Derived(sources)
+            .Impact(policy => policy.SourceChanged(DependencySeverity.Invalid))
+            .Select(value => value.Code.Length);
+        var invariant = model.Invariant(sources).From(length)
+            .Must((_, value) => value > 0)
+            .RepairWhenViolated();
+        var source = new CodeHolder { Id = Guid.NewGuid(), Code = "A" };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+        Assert.True(runtime.Evaluate(invariant, source));
+
+        source.Code = "";
+        var application = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            sources, source, value => value.Code, "A", "")));
+
+        Assert.Equal(DependencySeverity.Invalid,
+            Assert.Single(application.Result.RepairRequests).Reason);
+    }
+
+    [Fact]
+    public void Repair_request_merges_dirty_and_invalid_causes_with_invalid_dominance()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var score = model.Derived(sources)
+            .Impact(policy => policy
+                .SourceMemberChanged(value => value.Code, (_, _) => DependencySeverity.Dirty)
+                .SourceMemberChanged(value => value.Enabled, (_, _) => DependencySeverity.Invalid))
+            .Select(value => value.Code.Length + (value.Enabled ? 1 : 0));
+        var invariant = model.Invariant(sources).From(score)
+            .Must((_, value) => value == 0)
+            .RepairWhenViolated();
+        var source = new CodeHolder { Id = Guid.NewGuid() };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+
+        source.Code = "A";
+        source.Enabled = true;
+        var application = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(sources, source, value => value.Code, "", "A"),
+            Change.Property(sources, source, value => value.Enabled, false, true)));
+
+        Assert.Equal(DependencySeverity.Invalid,
+            Assert.Single(application.Result.RepairRequests).Reason);
+    }
+
+    [Fact]
+    public void Repair_request_deduplication_is_operation_scoped()
+    {
+        var model = new ConsistencyModelBuilder();
+        var sources = model.Objects<CodeHolder>().Key(value => value.Id);
+        var score = model.Derived(sources)
+            .Select(value => value.Code.Length + (value.Enabled ? 1 : 0));
+        model.Invariant(sources).From(score)
+            .Must((_, value) => value == 0)
+            .RepairWhenViolated();
+        var source = new CodeHolder { Id = Guid.NewGuid() };
+        var runtime = model.Build().CreateRuntime(seed => seed.Add(sources, [source]));
+
+        source.Code = "A";
+        source.Enabled = true;
+        var first = runtime.ApplyDetailed(MutationSet.Create(
+            Change.Property(sources, source, value => value.Code, "", "A"),
+            Change.Property(sources, source, value => value.Enabled, false, true)));
+
+        source.Code = "AA";
+        var second = runtime.ApplyDetailed(MutationSet.Create(Change.Property(
+            sources, source, value => value.Code, "A", "AA")));
+
+        Assert.Single(first.Result.RepairRequests);
+        Assert.Single(second.Result.RepairRequests);
+    }
+
+    [Fact]
     public void Repair_disabled_affected_invariant_retains_lazy_dirty_state()
     {
         var model = new ConsistencyModelBuilder();

@@ -113,6 +113,15 @@ evaluations. A violated invariant without `RepairWhenViolated()` still rejects b
 The exception is produced from the reversible plan: SQL is not executed, runtime version does not advance, and
 the caller may inspect repair data without installing the rejected plan.
 
+The allocation dogfood demonstrates an internal experimental rejected-plan query flow for application-owned repair.
+The scoped EF session retains the rejected prepared plan and the tracked mutation fingerprint; application code
+can obtain a read-only proposed-state view for `Evaluate`, `Related`, and invariant queries. The view represents
+the final tracked object membership and current proposed CLR values, while the committed runtime remains at its
+durable baseline. If the runtime baseline or relevant tracked state changes, the view becomes stale and must not be
+used. After a repair mutation, the application obtains a fresh view/re-plans before making further consistency
+queries. The view does not materialize, dispatch, persist, or select a replacement, and it is not a stable public
+API.
+
 The ordering is:
 
 ```text

@@ -35,15 +35,26 @@ public sealed class ConsistencyInvariantViolationException : Exception
 {
     internal ConsistencyInvariantViolationException(
         IReadOnlyList<PlannedInvariantEvaluation> violations,
-        IReadOnlyList<RepairRequestInfo> repairRequests)
+        IReadOnlyList<RepairRequestInfo> repairRequests,
+        PreparedImpactPlan rejectedPlan)
         : base("One or more enforced consistency invariants would be violated.")
     {
         Violations = violations;
         RepairRequests = repairRequests;
+        RejectedPlan = rejectedPlan;
     }
 
     public IReadOnlyList<PlannedInvariantEvaluation> Violations { get; }
     public IReadOnlyList<RepairRequestInfo> RepairRequests { get; }
+    internal PreparedImpactPlan RejectedPlan { get; }
+    internal EfMutationFingerprint? Fingerprint { get; private set; }
+    internal long BaselineRevision { get; private set; }
+
+    internal void BindRejectedState(EfMutationFingerprint fingerprint, long baselineRevision)
+    {
+        Fingerprint = fingerprint;
+        BaselineRevision = baselineRevision;
+    }
 }
 
 public sealed class ConsistencyMaterializationSourceNotTrackedException : Exception
@@ -216,11 +227,22 @@ internal static class ConsistencyCoordinator
         var admissions = ExternalConsumerDiscovery.Discover(
             context, runtime, mappings, captured, options.SaveBehavior, options.Scope);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback,
-            forceMaterialization, materializationSelector);
+        var fingerprint = EfMutationFingerprint.Create(unit.Mutations);
+        PreparedImpactPlan? plan;
+        MaterializationRollback? materializationRollback;
+        try
+        {
+            plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+                context, runtime, unit, policy, out materializationRollback,
+                forceMaterialization, materializationSelector);
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            error.BindRejectedState(fingerprint, runtime.BaselineRevision);
+            throw;
+        }
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            unit, plan, materializationRollback, fingerprint,
             runtime.BaselineRevision);
     }
 
@@ -247,11 +269,22 @@ internal static class ConsistencyCoordinator
             context, runtime, mappings, captured, cancellationToken, options.SaveBehavior, options.Scope)
             .ConfigureAwait(false);
         var unit = Combine(captured, admissions);
-        var plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
-            context, runtime, unit, policy, out var materializationRollback,
-            forceMaterialization, materializationSelector);
+        var fingerprint = EfMutationFingerprint.Create(unit.Mutations);
+        PreparedImpactPlan? plan;
+        MaterializationRollback? materializationRollback;
+        try
+        {
+            plan = ConsistencyPersistencePolicyEngine.PrepareAndPlan(
+                context, runtime, unit, policy, out materializationRollback,
+                forceMaterialization, materializationSelector);
+        }
+        catch (ConsistencyInvariantViolationException error)
+        {
+            error.BindRejectedState(fingerprint, runtime.BaselineRevision);
+            throw;
+        }
         return new PendingConsistencySave(
-            unit, plan, materializationRollback, EfMutationFingerprint.Create(unit.Mutations),
+            unit, plan, materializationRollback, fingerprint,
             runtime.BaselineRevision);
     }
 

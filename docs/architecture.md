@@ -144,6 +144,25 @@ returns a binding `PreparedImpactPlan`. `plan.Result` is the exact detailed resu
 forward patch. A later `Commit(plan)` installs that patch without rerunning semantic model code. This is the
 required contract for same-database atomic outbox work whose rows depend on exact result parity.
 
+The allocation dogfood also contains an internal experimental proposed-state query view for a rejected EF plan:
+
+```text
+Committed Runtime
+      |
+      +-- Prepare mutation --> Proposed-State View
+      |                         |
+      |                         +-- Evaluate
+      |                         +-- Related
+      |                         +-- invariant truth
+      |
+      +-- unchanged until durable commit
+```
+
+The view uses the prepared plan's final lifecycle overlay and proposed CLR values with isolated query caches. It
+does not install the rejected plan, dispatch repair, or expose persistence/workflow APIs. Runtime advancement or
+tracked-state drift invalidates it; the dogfood obtains a fresh view after each application repair mutation. This
+prototype is documented as experimental and is not a stable public API.
+
 When `PlannedInvariantEvaluationMode.Affected` is requested, affected invariant predicates are evaluated
 while the reversible planned final state is installed. Their evaluation records and resulting cache state
 are captured in the same forward patch. `HasInvariantViolations` can gate external durability, and

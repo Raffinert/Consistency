@@ -159,30 +159,49 @@ internal static class EfScenarios
         var allocation = await db.Allocations
             .Include(value => value.Demand).Include(value => value.Supply)
             .SingleAsync(value => value.Id == 1);
+        var session = scope.ServiceProvider
+            .GetRequiredService<ConsistencyEfCoreSession<AllocationDbContext>>();
         supply.ChangeCapacity(6m);
         var version = runtime.Version;
-        var error = await ScenarioAssert.ThrowsAsync<ConsistencyInvariantViolationException>(
-            () => db.SaveChangesAsync(),
+        ConsistencyInvariantViolationException? error = null;
+        RepairProcessingResult? repair = null;
+        var saved = false;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                await db.SaveChangesAsync();
+                saved = true;
+                break;
+            }
+            catch (ConsistencyInvariantViolationException rejected)
+            {
+                error = rejected;
+                var request = rejected.RepairRequests.Single();
+                ScenarioAssert.True(request.DefinitionKey == "supply-capacity-valid",
+                    "The rejected save must expose the enforced repair-enabled invariant request.");
+                ScenarioAssert.Same(supply, request.Source,
+                    "The repair request must retain the tracked affected supply.");
+                ScenarioAssert.Equal(version, runtime.Version,
+                    "Inspecting repair data must not install the rejected runtime plan.");
+                using var preview = session.CreateRejectedPreview(rejected);
+                repair = new ReallocateDemand(fixture.Model).ProcessProposedState(
+                    preview, rejected.RepairRequests);
+                if (repair.Reallocated.Count == 0)
+                    break;
+            }
+        }
+        ScenarioAssert.True(error is not null,
             "The initial rich-domain mutation must be rejected before persistence.");
-
-        var request = error.RepairRequests.Single();
-        ScenarioAssert.True(request.DefinitionKey == "supply-capacity-valid",
-            "The rejected save must expose the enforced repair-enabled invariant request.");
-        ScenarioAssert.Same(supply, request.Source,
-            "The repair request must retain the tracked affected supply.");
-        ScenarioAssert.Equal(version, runtime.Version,
-            "Inspecting repair data must not install the rejected runtime plan.");
-        var repair = new ReallocateDemand(fixture.Model).ProcessCurrentGraph(
-            error.RepairRequests,
-            db.Demands.Local,
-            db.Supplies.Local,
-            db.Allocations.Local,
-            db.Fulfillments.Local);
-        ScenarioAssert.Same(allocation, repair.Reallocated.Single(),
+        ScenarioAssert.True(repair is not null,
+            "The rejected proposed state must be available to application repair.");
+        var completedRepair = repair!;
+        ScenarioAssert.True(saved,
+            "The repaired tracked graph must succeed on a subsequent save attempt.");
+        ScenarioAssert.Same(allocation, completedRepair.Reallocated.Single(),
             "Application-owned repair must move the allocation identified from structured repair data.");
-        ScenarioAssert.Equal(0, repair.Unresolved.Count,
+        ScenarioAssert.Equal(0, completedRepair.Unresolved.Count,
             "The tracked current graph has a deterministic replacement supply.");
-        await db.SaveChangesAsync();
 
         await using var verification = fixture.CreateContext();
         var persistedAllocation = await verification.Allocations.AsNoTracking()
@@ -194,6 +213,31 @@ internal static class EfScenarios
             "The repaired original supply must retain only its fulfillment load.");
         ScenarioAssert.Equal(15m, supplies[1].RemainingCapacity,
             "The replacement supply must include the moved allocation.");
+    }
+
+    public static async Task EfRejectedPreview_InvalidatesAfterTrackedChange()
+    {
+        await using var fixture = await EfFixture.CreateAsync();
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        var (db, runtime) = await LoadCompleteGraphAsync(scope.ServiceProvider);
+        var session = scope.ServiceProvider
+            .GetRequiredService<ConsistencyEfCoreSession<AllocationDbContext>>();
+        var supply = await db.Supplies.SingleAsync(value => value.Id == 1);
+        supply.ChangeCapacity(6m);
+        var error = await ScenarioAssert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => db.SaveChangesAsync(),
+            "The proposed-state preview test requires an enforced rejected save.");
+        using var preview = session.CreateRejectedPreview(error);
+        supply.Capacity = 5m;
+
+        var stale = ScenarioAssert.Throws<InvalidOperationException>(
+            () => preview.Evaluate(fixture.Model.RemainingCapacity, supply),
+            "A proposed-state view must reject relevant tracked changes after rejection.");
+        ScenarioAssert.True(stale.Message.Contains("stale", StringComparison.OrdinalIgnoreCase) ||
+            stale.Message.Contains("drifted", StringComparison.OrdinalIgnoreCase),
+            "The rejected proposed-state view must report deterministic staleness.");
+        ScenarioAssert.Equal(0L, runtime.Version,
+            "Invalidating a rejected preview must not install its runtime plan.");
     }
 
     private static async Task<(AllocationDbContext Db, ConsistencyRuntime Runtime)> LoadCompleteGraphAsync(

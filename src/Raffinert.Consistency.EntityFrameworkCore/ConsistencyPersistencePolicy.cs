@@ -61,7 +61,8 @@ internal static class ConsistencyPersistencePolicyEngine
                     ReferenceEquals(violation.Source, request.Source))).ToArray();
                 throw new ConsistencyInvariantViolationException(
                     Array.AsReadOnly(violations),
-                    Array.AsReadOnly(repairRequests));
+                    Array.AsReadOnly(repairRequests),
+                    plan);
             }
             if (forceMaterialization || policy.SaveBehavior == ConsistencySaveBehavior.RecalculateAndValidate)
                 materializationRollback = ApplyMaterializations(

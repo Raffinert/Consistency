@@ -118,7 +118,7 @@ internal interface IDerivedRuntimeState : ISourceLifecycleParticipant
 
 internal sealed class DerivedRuntimeState<TSource, TItem, TValue>(
     DerivedDefinition<TSource, TItem, TValue> definition,
-    RelationRuntimeState<TSource, TItem> relationState) : IDerivedRuntimeState
+    IRelationQueryState<TSource, TItem> relationState) : IDerivedRuntimeState
     where TSource : class
     where TItem : class
 {
