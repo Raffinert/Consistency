@@ -1,10 +1,8 @@
 # Raffinert.Consistency
 
-**Declarative consistency for ordinary .NET objects.**
+**Raffinert.Consistency is an incremental semantic dependency engine for .NET object graphs.**
 
-When one value changes, other calculated values, invariants, and relationships may become stale or invalid.
-Raffinert.Consistency lets you declare those dependencies once instead of maintaining the same consistency
-logic across setters, handlers, services, and persistence code.
+Declare what depends on what. When your object graph changes, Raffinert determines what became stale, what must be recalculated, what is no longer valid, and what must happen before the change can safely be persisted.
 
 ```csharp
 var unitRate = model.Derived(associations)
