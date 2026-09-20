@@ -1089,6 +1089,43 @@ public sealed class ExternalConsumerDiscoveryTests
         Assert.Equal(1, runtime.Version);
     }
 
+    [Fact]
+    public void Tracked_state_fingerprint_cannot_observe_new_external_consumer_authority()
+    {
+        using var fixture = DiscoveryFixture.Create();
+        using var context = fixture.CreateContext();
+        var known = context.Associations.Include(x => x.Source).Include(x => x.Target)
+            .Single(x => x.Id == 1);
+        var calls = new Counter();
+        var (runtime, mappings, _) = fixture.CreateModel(known, calls);
+        known.Source.UnitValue = 120m;
+        var trackedBefore = ConsistencyCoordinator.CaptureTrackedStateFingerprint(context, mappings);
+
+        using (var writer = fixture.CreateContext())
+        {
+            writer.Add(new DiscoveryAssociation
+            {
+                Id = 4,
+                SourceId = known.SourceId,
+                TargetId = known.TargetId,
+                UnitRate = 12m
+            });
+            writer.SaveChanges();
+        }
+
+        var trackedAfter = ConsistencyCoordinator.CaptureTrackedStateFingerprint(context, mappings);
+        var diagnostics = new EfFingerprintDiagnostics();
+        var authoritative = ConsistencyCoordinator.CaptureFingerprint(
+            context, runtime, mappings, new ConsistencySaveOptions(), diagnostics: diagnostics);
+
+        Assert.True(trackedBefore.Equals(trackedAfter));
+        Assert.False(trackedAfter.Equals(authoritative));
+        var discovered = context.Associations.Local.Single(value => value.Id == 4);
+        Assert.False(runtime.IsRegistered(fixture.Associations.Definition, discovered));
+        Assert.True(diagnostics.ExternalDiscoveryResolverInvocations > 0);
+        Assert.True(diagnostics.ExternalDiscoveryRows > 0);
+    }
+
     private static (ConsistencyRuntime Runtime, ConsistencyEfCoreMappings Mappings,
         ObjectSet<DiscoveryAssociation> Associations, ObjectSet<DiscoveryTarget> Targets)
         CreateRelationScopeScenario()

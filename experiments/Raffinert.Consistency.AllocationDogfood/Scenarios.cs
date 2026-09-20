@@ -87,6 +87,7 @@ internal static class Scenarios
             Console.WriteLine($"PASS {scenario.Name}");
         }
         ProposedStateBenchmark.Run();
+        EfMutationCaptureBenchmark.Run();
         RejectedEfPreviewBenchmark.Run();
         Console.WriteLine($"Allocation dogfood scenarios passed: {Core.Length + Ef.Length}.");
     }

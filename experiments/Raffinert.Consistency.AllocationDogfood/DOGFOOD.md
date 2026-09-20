@@ -1,4 +1,4 @@
-# Allocation consistency dogfood fifth-pass findings
+# Allocation consistency dogfood sixth-pass findings
 
 ## Fixed by framework changes
 
@@ -124,23 +124,40 @@ The EF benchmark uses an ordinary rejected `SaveChanges`, obtains the retained-p
 session, and runs the same five-read repair-decision workload. Values below are medians from five Release iterations
 after warm-up on this development machine; allocated bytes cover rejection/preview creation plus the query.
 
+The fifth-pass implementation exposed a super-linear tracked-navigation capture path: reference resolution
+re-enumerated every tracked entry for every tracked reference, and collection detection repeated another global
+scan. A focused one-fingerprint benchmark made that cost explicit. The sixth pass snapshots tracked entries once
+and lazily builds metadata-aware current/original principal-key and foreign-key indexes.
+
+| tracked entries | old capture | indexed capture | old allocated bytes | indexed allocated bytes | old reference candidate checks | indexed reference lookups |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 4.238 ms | 1.399 ms | 3,531,104 | 647,376 | 41,200 | 400 |
+| 1,000 | 54.220 ms | 12.155 ms | 264,984,704 | 5,708,976 | 4,012,000 | 4,000 |
+| 10,000 | 4,238.213 ms | 27.471 ms | 25,686,713,664 | 53,924,256 | 400,120,000 | 40,000 |
+
+The unchanged rejected-save workload now measures:
+
 | allocations | rejection + preview | repair query | allocated bytes | preview reads | fingerprint validations |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 7.370 ms | 17.174 ms | 16,647,776 | 5 | 6 |
-| 1,000 | 74.113 ms | 183.987 ms | 965,276,368 | 5 | 6 |
-| 10,000 | 9,652.541 ms | 23,744.168 ms | 90,287,394,824 | 5 | 6 |
+| 100 | 0.865 ms | 1.398 ms | 4,421,704 | 5 | 6 |
+| 1,000 | 3.920 ms | 11.483 ms | 38,342,008 | 5 | 6 |
+| 10,000 | 37.030 ms | 76.410 ms | 377,748,072 | 5 | 6 |
+
+For comparison, the pre-optimization run on the same machine was 7.899/18.309 ms and 16,647,776 bytes at
+100; 78.069/172.954 ms and 965,278,448 bytes at 1,000; and 8,952.954/22,400.720 ms and
+90,287,397,064 bytes at 10,000. Those figures are historical evidence, not current performance.
 
 Each decision validates once while creating the preview and once before each of its five reads. Repeated full EF
-fingerprinting, including change detection and coverage capture, dominates this graph shape and erases the core
-preview setup advantage. Relation scanning remains visible in the core query numbers but is not the dominant EF
-cost here.
+fingerprinting still provides the strongest stale-state guarantee, but indexed capture makes the six validations
+practical at 10,000 allocations. Relation scanning remains visible in the core query numbers.
 
-## EF validation: NEEDS SEPARATE DESIGN
+## EF validation: CURRENT VALIDATION COUNT IS NOW ACCEPTABLE
 
-The measurement justifies optimization, but snapshot-tracked POCO changes do not provide a reliable cheap session
-revision. Validating only at preview creation or trusting an unobservable caller mutation boundary would weaken
-stale-state detection. This pass therefore keeps the safe per-read fingerprint validation. A future design needs an
-explicit validated query scope or another mutation-observation contract before this cost can be removed safely.
+The implementation keeps one validation at preview creation and one before every read. A tracked-state-only
+prototype was rejected for preview validation: a new database consumer can appear while the tracked mutation
+fingerprint remains unchanged, but authoritative discovery changes the admitted evaluation closure and the full
+fingerprint. External consumer discovery therefore remains part of every preview validation, and final save still
+revalidates persistence authority. No validation lease or weaker mutation-observation contract was introduced.
 
 ## Multi-step repair: PROVEN
 
@@ -169,8 +186,9 @@ repair query workloads and deciding whether indexed relation overlays are needed
 - Replacement ranking, convergence policy, and unresolved-repair workflow remain application concerns. Core
   consistency does not become a workflow engine.
 - Preview relation queries scan proposed candidates rather than maintaining a second index.
-- Safe EF previews retain one expensive tracked-state fingerprint per read; the benchmark shows this needs a
-  separate design rather than an unsafe cache.
+- Safe EF previews retain one authoritative fingerprint per read. Indexed tracked-graph capture makes the measured
+  six-validation repair decision practical, but discovery and change detection still scale with the authoritative
+  work required by the host configuration.
 - Persistence can enforce the configured invariant and preserve runtime/SQL transaction boundaries, but it
   cannot infer untracked SQL-side effects outside the adapter's supported evidence model.
 

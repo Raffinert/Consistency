@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -338,12 +339,16 @@ public static class ChangeTrackerAdapter
     internal static ConsistencyUnitOfWork CaptureUnitOfWork(
         ChangeTracker changeTracker,
         ConsistencyUnitOfWorkMappings mappings,
-        Func<EntityEntry, IProperty, bool> includeProperty)
+        Func<EntityEntry, IProperty, bool> includeProperty,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(changeTracker);
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(includeProperty);
-        var navigationChanges = CaptureNavigationChanges(changeTracker, mappings);
+        var navigationStart = Stopwatch.GetTimestamp();
+        var navigationChanges = CaptureNavigationChanges(changeTracker, mappings, diagnostics);
+        if (diagnostics is not null)
+            diagnostics.NavigationCaptureTicks += Stopwatch.GetTimestamp() - navigationStart;
         changeTracker.DetectChanges();
         var additions = new List<RuntimeMutation>();
         var removals = new List<RuntimeMutation>();
@@ -359,7 +364,14 @@ public static class ChangeTrackerAdapter
             }
         }
 
+        var scalarStart = Stopwatch.GetTimestamp();
         var propertyChanges = ReadModifiedProperties(changeTracker, mappings, includeProperty);
+        if (diagnostics is not null)
+        {
+            diagnostics.ScalarCaptureTicks += Stopwatch.GetTimestamp() - scalarStart;
+            diagnostics.CapturedPropertyMutations += propertyChanges.Count;
+            diagnostics.CapturedNavigationMutations += navigationChanges.Count;
+        }
         var mutations = additions
             .Concat(propertyChanges)
             .Concat(navigationChanges)
@@ -448,13 +460,16 @@ public static class ChangeTrackerAdapter
     }
 
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChanges(
-        ChangeTracker changeTracker, ConsistencyUnitOfWorkMappings? mappings)
+        ChangeTracker changeTracker,
+        ConsistencyUnitOfWorkMappings? mappings,
+        EfFingerprintDiagnostics? diagnostics = null)
     {
         var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
         changeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            return CaptureNavigationChangesCore(changeTracker, mappings);
+            return CaptureNavigationChangesCore(
+                TrackedGraphSnapshot.Create(changeTracker, diagnostics), mappings, diagnostics);
         }
         finally
         {
@@ -463,21 +478,25 @@ public static class ChangeTrackerAdapter
     }
 
     private static IReadOnlyList<RuntimeMutation> CaptureNavigationChangesCore(
-        ChangeTracker changeTracker, ConsistencyUnitOfWorkMappings? mappings)
+        TrackedGraphSnapshot snapshot,
+        ConsistencyUnitOfWorkMappings? mappings,
+        EfFingerprintDiagnostics? diagnostics)
     {
         var changes = new List<RuntimeMutation>();
         var resets = new Dictionary<(object Owner, MemberInfo Member),
             ConsistencyUnitOfWorkMappings.IEntitySetMapping?>(ReferenceMemberPairComparer.Instance);
-        foreach (var owner in changeTracker.Entries())
+        foreach (var owner in snapshot.Entries)
         {
             var mapping = mappings?.Resolve(owner);
             foreach (var reference in owner.References)
             {
                 if (reference.Metadata is not INavigation navigation) continue;
+                if (diagnostics is not null)
+                    diagnostics.ReferenceNavigationsVisited++;
                 var member = GetMember(navigation);
                 if (member is null) continue;
-                var oldValue = ResolveReference(changeTracker, owner, navigation, original: true);
-                var newValue = ResolveReference(changeTracker, owner, navigation, original: false);
+                var oldValue = ResolveReference(snapshot, owner, navigation, original: true);
+                var newValue = ResolveReference(snapshot, owner, navigation, original: false);
                 if (!ReferenceEquals(oldValue, newValue))
                     changes.Add(mapping is null
                         ? Change.Property(owner.Entity, member, oldValue, newValue)
@@ -485,9 +504,12 @@ public static class ChangeTrackerAdapter
             }
             foreach (var collection in owner.Collections)
             {
+                if (diagnostics is not null)
+                    diagnostics.CollectionNavigationsVisited++;
                 var member = GetMember(collection.Metadata);
                 if (member is null) continue;
-                if (collection.IsModified || CollectionRelationshipChanged(changeTracker, owner, collection.Metadata))
+                if (collection.IsModified || CollectionRelationshipChanged(
+                        snapshot, owner, collection.Metadata, diagnostics))
                     resets.TryAdd((owner.Entity, member), mapping);
             }
         }
@@ -497,41 +519,41 @@ public static class ChangeTrackerAdapter
         return changes;
     }
 
-    private static object? ResolveReference(ChangeTracker tracker, EntityEntry owner,
-        INavigation navigation, bool original)
+    private static object? ResolveReference(
+        TrackedGraphSnapshot snapshot,
+        EntityEntry owner,
+        INavigation navigation,
+        bool original)
     {
         var foreignKey = navigation.ForeignKey;
         if (navigation.IsOnDependent)
         {
             var values = foreignKey.Properties.Select(p => Value(owner, p, original)).ToArray();
             if (values.All(x => x is null)) return null;
-            return ResolveUnique(tracker, navigation.TargetEntityType, foreignKey.PrincipalKey.Properties, values,
-                original, navigation.Name);
+            var principals = snapshot.FindPrincipals(
+                navigation.TargetEntityType, foreignKey.PrincipalKey, values, original);
+            return ResolveUnique(principals, original, navigation.Name);
         }
 
         if (!original)
             return owner.Reference(navigation.Name).CurrentValue;
 
         var ownerValues = foreignKey.PrincipalKey.Properties.Select(p => Value(owner, p, original)).ToArray();
-        var matches = ResolveMatches(tracker, navigation.TargetEntityType, foreignKey.Properties, ownerValues, original);
-        if (matches.Length <= 1) return matches.SingleOrDefault();
+        var matches = snapshot.FindDependents(
+            navigation.TargetEntityType, foreignKey, ownerValues, original);
+        if (matches.Count <= 1) return matches.SingleOrDefault()?.Entity;
         throw new InvalidOperationException(
             $"The {(original ? "original" : "current")} value for reference '{navigation.Name}' is not tracked unambiguously.");
     }
 
-    private static object ResolveUnique(ChangeTracker tracker, IEntityType target,
-        IReadOnlyList<IProperty> properties, object?[] values, bool original, string navigationName)
+    private static object ResolveUnique(
+        IReadOnlyList<EntityEntry> matches,
+        bool original,
+        string navigationName)
     {
-        var matches = ResolveMatches(tracker, target, properties, values, original);
-        return matches.Length == 1 ? matches[0] : throw new InvalidOperationException(
+        return matches.Count == 1 ? matches[0].Entity : throw new InvalidOperationException(
             $"The {(original ? "original" : "current")} value for reference '{navigationName}' is not tracked unambiguously.");
     }
-
-    private static object[] ResolveMatches(ChangeTracker tracker, IEntityType target,
-        IReadOnlyList<IProperty> properties, object?[] values, bool original) => tracker.Entries()
-        .Where(candidate => target.ClrType.IsInstanceOfType(candidate.Entity))
-        .Where(candidate => properties.Select(p => Value(candidate, p, original)).SequenceEqual(values))
-        .Select(candidate => candidate.Entity).ToArray();
 
     private static object? Value(EntityEntry entry, IProperty property, bool original) =>
         original ? entry.Property(property.Name).OriginalValue : entry.Property(property.Name).CurrentValue;
@@ -562,15 +584,23 @@ public static class ChangeTrackerAdapter
             : null;
     }
 
-    private static bool CollectionRelationshipChanged(ChangeTracker tracker, EntityEntry owner,
-        Microsoft.EntityFrameworkCore.Metadata.IPropertyBase propertyBase)
+    private static bool CollectionRelationshipChanged(TrackedGraphSnapshot snapshot, EntityEntry owner,
+        Microsoft.EntityFrameworkCore.Metadata.IPropertyBase propertyBase,
+        EfFingerprintDiagnostics? diagnostics)
     {
         if (propertyBase is not INavigation navigation) return false;
         var foreignKey = navigation.ForeignKey;
         var ownerCurrent = foreignKey.PrincipalKey.Properties.Select(p => Value(owner, p, false)).ToArray();
         var ownerOriginal = foreignKey.PrincipalKey.Properties.Select(p => Value(owner, p, true)).ToArray();
-        return tracker.Entries().Where(e => navigation.TargetEntityType.ClrType.IsInstanceOfType(e.Entity)).Any(e =>
+        var candidates = snapshot.FindDependents(
+                navigation.TargetEntityType, foreignKey, ownerCurrent, original: false, collectionLookup: true)
+            .Concat(snapshot.FindDependents(
+                navigation.TargetEntityType, foreignKey, ownerOriginal, original: true, collectionLookup: true))
+            .DistinctBy(entry => entry.Entity, ReferenceEqualityComparer.Instance);
+        return candidates.Any(e =>
         {
+            if (diagnostics is not null)
+                diagnostics.CollectionCandidateChecks++;
             var current = foreignKey.Properties.Select(p => Value(e, p, false)).ToArray();
             var original = foreignKey.Properties.Select(p => Value(e, p, true)).ToArray();
             return (e.State == EntityState.Added && current.SequenceEqual(ownerCurrent)) ||

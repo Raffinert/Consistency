@@ -124,6 +124,25 @@ reported as changes; reading a current CLR value is not a validated snapshot gua
 application obtains a fresh view/re-plans before making further consistency queries. The view does not materialize,
 dispatch, persist, or select a replacement, and it is not a stable public API.
 
+Rejected-preview validation deliberately remains authority-aware. It performs persistence-policy validation and
+external consumer discovery before comparing fingerprints, both when the preview is created and before each read.
+A tracked-state-only fingerprint is not sufficient: a consumer row can appear in the database without changing the
+already tracked graph, yet that row changes the proposed evaluation closure. Final save also repeats authoritative
+validation and discovery; preview validation is not a substitute for the persistence boundary.
+
+Tracked navigation capture uses one stable entry snapshot plus lazy, metadata-aware indexes for current and
+original principal keys and foreign keys. It does not issue database queries or lazy-load navigations. This removes
+the former tracked-entry rescan per reference/collection while preserving composite and nullable keys,
+dependent/principal navigation direction, Added/Deleted evidence, ambiguity failures, and collection-reset
+deduplication. In the allocation dogfood, the unchanged 10,000-allocation rejected-preview workload fell from
+8,952.954 ms rejection plus 22,400.720 ms repair reads and 90,287,397,064 allocated bytes to 37.030 ms plus
+76.410 ms and 377,748,072 bytes. The six validations (creation plus five reads) are retained because they are now
+practical and provide the strongest stale-state guarantee.
+
+Relevant tracked scalar, navigation, add, and remove changes make a retained preview stale. Properties outside the
+compiled consistency semantics are filtered out and do not. Arbitrary unreported mutations in dependency-free core
+POCOs remain outside the guarantee because core has no general mutation observer.
+
 The ordering is:
 
 ```text

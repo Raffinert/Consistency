@@ -2,7 +2,10 @@ using Raffinert.Consistency.AllocationDogfood;
 
 try
 {
-    await Scenarios.RunAsync();
+    if (args.Contains("--capture-benchmark-only", StringComparer.Ordinal))
+        EfMutationCaptureBenchmark.Run();
+    else
+        await Scenarios.RunAsync();
 }
 catch (Exception exception)
 {

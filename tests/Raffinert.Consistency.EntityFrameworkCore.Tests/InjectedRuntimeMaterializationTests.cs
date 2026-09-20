@@ -763,6 +763,86 @@ public sealed class InjectedRuntimeMaterializationTests
     }
 
     [Fact]
+    public async Task Rejected_preview_becomes_stale_after_navigation_retarget()
+    {
+        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var session = scope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        var replacement = await context.Items.SingleAsync(value => value.Id == 3);
+        link.Left.Value = -1m;
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+        using var preview = session.CreateRejectedPreview(error);
+
+        link.Left = replacement;
+        link.LeftId = replacement.Id;
+
+        Assert.Throws<InvalidOperationException>(() => preview.Evaluate(fixture.Ratio, link));
+    }
+
+    [Fact]
+    public async Task Rejected_preview_becomes_stale_after_tracked_addition()
+    {
+        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var session = scope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Left.Value = -1m;
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+        using var preview = session.CreateRejectedPreview(error);
+
+        context.Add(new Link { Id = 99, Left = link.Left, Right = link.Right, Ratio = 1m });
+
+        Assert.Throws<InvalidOperationException>(() => preview.Evaluate(fixture.Ratio, link));
+    }
+
+    [Fact]
+    public async Task Rejected_preview_becomes_stale_after_tracked_removal()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            enforceRatioInvariant: true, includeSecondLink: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var session = scope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+        var links = await context.Links.Include(value => value.Left).Include(value => value.Right)
+            .OrderBy(value => value.Id).ToArrayAsync();
+        links[0].Left.Value = -1m;
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+        using var preview = session.CreateRejectedPreview(error);
+
+        context.Remove(links[1]);
+
+        Assert.Throws<InvalidOperationException>(() => preview.Evaluate(fixture.Ratio, links[0]));
+    }
+
+    [Fact]
+    public async Task Rejected_preview_ignores_property_outside_consistency_semantics()
+    {
+        await using var fixture = await Fixture.CreateAsync(enforceRatioInvariant: true);
+        await using var scope = fixture.Provider.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<ConsistencyRuntime>();
+        var context = scope.ServiceProvider.GetRequiredService<LinkContext>();
+        var session = scope.ServiceProvider.GetRequiredService<ConsistencyEfCoreSession<LinkContext>>();
+        var link = await context.Links.Include(value => value.Left).Include(value => value.Right).SingleAsync();
+        link.Left.Value = -1m;
+        var error = await Assert.ThrowsAsync<ConsistencyInvariantViolationException>(
+            () => context.SaveChangesAsync());
+        using var preview = session.CreateRejectedPreview(error);
+
+        link.Comment = "irrelevant after rejection";
+
+        Assert.Equal(-0.1m, preview.Evaluate(fixture.Ratio, link));
+    }
+
+    [Fact]
     public async Task Enforced_non_repair_invariant_rejects_without_repair_request()
     {
         await using var fixture = await Fixture.CreateAsync(

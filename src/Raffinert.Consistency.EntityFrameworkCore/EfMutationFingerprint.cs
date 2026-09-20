@@ -8,6 +8,8 @@ internal sealed class EfMutationFingerprint
 
     private EfMutationFingerprint(IReadOnlyList<EfMutationEvidence> mutations) => _mutations = mutations;
 
+    internal int Count => _mutations.Count;
+
     public static EfMutationFingerprint Create(IReadOnlyList<RuntimeMutation> mutations) =>
         new(mutations.Select(EfMutationEvidence.Create).ToArray());
 
