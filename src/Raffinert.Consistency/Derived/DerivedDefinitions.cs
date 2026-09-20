@@ -173,14 +173,12 @@ internal sealed class ProjectedRelationMembershipDefinition<TSource, TLeft, TRig
     Func<TSource, TLeft> leftSelector,
     Expression<Func<TSource, TRight>> rightSelectorExpression,
     Func<TSource, TRight> rightSelector,
-    ProjectedRelationMembershipInput input) : IDerivedDefinition
+    ProjectedRelationMembershipInput input,
+    DerivedImpactPolicy impactPolicy) : IDerivedDefinition
     where TSource : class
     where TLeft : class
     where TRight : class
 {
-    private static readonly DerivedImpactPolicy DefaultImpact = new(
-        DependencySeverity.Dirty, DependencySeverity.Dirty, DependencySeverity.Dirty,
-        DependencySeverity.Dirty, false, []);
     private static readonly Expression<Func<TSource, bool>> DiagnosticExpression = _ => false;
 
     public string? DefinitionKey { get; set; }
@@ -190,7 +188,7 @@ internal sealed class ProjectedRelationMembershipDefinition<TSource, TLeft, TRig
     public ExpressionDependencyAnalysis Analysis { get; } = Combine(
         ExpressionDependencyAnalyzer.AnalyzeSourceDerived(leftSelectorExpression),
         ExpressionDependencyAnalyzer.AnalyzeSourceDerived(rightSelectorExpression));
-    public DerivedImpactPolicy ImpactPolicy => DefaultImpact;
+    public DerivedImpactPolicy ImpactPolicy { get; } = impactPolicy;
     public string ComputationPlanName => "ProjectedRelationMembershipLookup";
     public bool RequiresExactPropagation => true;
     public bool PrefersConservativePropagation => false;
