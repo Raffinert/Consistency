@@ -483,3 +483,45 @@ consistent save boundary
 ```
 
 Keep parity tests until affected roots, logical calculations, persisted outcomes, and unloaded-consumer behavior are proven equivalent.
+
+---
+
+## Recipe 19 — rejected save and repair convergence
+
+When an enforced invariant rejects persistence, distinguish durable/committed state from the still-mutated tracked graph:
+
+```text
+committed runtime + database
+          │
+          │ attempted tracked mutation
+          ▼
+     proposed state
+          │
+          ▼
+   invariant violation
+          │
+          ▼
+      SQL rejected
+```
+
+Repair code may need to query the proposed world to choose a valid replacement. The allocation dogfood contains an internal/experimental retained-plan preview that can query `Evaluate`, relations, and invariants without installing the rejected plan into committed runtime state.
+
+Do **not** treat that preview as public consumer API. Production consumer code should not depend on internal preview types unless the task explicitly promotes the experiment into supported API.
+
+The convergence model is:
+
+```text
+SaveChanges
+    ↓ rejected
+inspect structured repair requirement
+    ↓
+query proposed state when supported
+    ↓
+apply one repair mutation
+    ↓
+SaveChanges again
+    ↓
+repeat until valid or application policy stops
+```
+
+After a repair mutation, the old proposed-state view is stale. A fresh save attempt must create a fresh plan/view. The committed runtime remains unchanged until SQL succeeds.
