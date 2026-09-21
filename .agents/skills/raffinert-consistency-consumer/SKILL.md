@@ -1,6 +1,6 @@
 ---
 name: raffinert-consistency-consumer
-description: Use Raffinert.Consistency correctly in .NET applications. Apply when designing or implementing object sets, relations, derived values, invariants, materialization, EF Core mappings, authoritative scope, consumer discovery, runtime evaluation, or consistent save boundaries.
+description: Use Raffinert.Consistency correctly in .NET applications. Apply when designing or implementing semantic dependency graphs, object sets, relations, derived values, invariants, repair, materialization, EF Core mappings, authoritative scope, consumer discovery, runtime evaluation, or consistent save boundaries.
 ---
 
 # Raffinert.Consistency coding skill
@@ -14,7 +14,11 @@ Raffinert.Consistency
 Raffinert.Consistency.EntityFrameworkCore
 ```
 
-The goal is to model business consistency as an explicit dependency graph around ordinary .NET objects instead of relying on mutation paths to remember manual recalculation.
+**Raffinert.Consistency is an incremental semantic dependency engine for .NET object graphs.**
+
+Declare what depends on what. When the object graph changes, Raffinert determines what became stale, what must be recalculated, what is no longer valid, and what must happen before the change can safely be persisted.
+
+The goal is to model business consistency as an explicit dependency graph around ordinary .NET objects instead of relying on every mutation path to remember manual recalculation, invalidation, reverse-consumer lookup, validation, or repair orchestration.
 
 All examples are domain-neutral. Rename types and members to match the application's ubiquitous language.
 
@@ -22,7 +26,29 @@ All examples are domain-neutral. Rename types and members to match the applicati
 
 # 1. Mental model
 
-Treat Raffinert.Consistency as a deferred transactional reactive consistency graph.
+Think in terms of **semantic consequences of change**, not event handlers or setter side effects.
+
+```text
+ordinary POCO mutation
+    ↓
+mutation evidence / EF ChangeTracker
+    ↓
+semantic dependency graph
+    ↓
+relations / derived values / aggregates
+    ↓
+Dirty / Invalid propagation
+    ↓
+logical evaluation as needed
+    ↓
+invariant / repair requirements
+    ↓
+optional physical materialization
+    ↓
+SQL durability
+    ↓
+runtime-plan installation and dispatch
+```
 
 Keep these concepts distinct:
 
@@ -36,38 +62,21 @@ MaterializeTo(...) = declare an optional physical mirror/sink
 Evaluate(...)      = obtain the current logical value without synchronizing the mirror
 Materialize(...)   = synchronize physical representation
 Invariant          = required truth
-Repair             = consequence handling
+Repair             = consequence handling after violation is proven
 ```
 
-The key boundary is:
+The key boundaries are:
 
 ```text
 logical derived value != materialized property
+committed runtime state != proposed tracked state
+materialization != repair
+EF ChangeTracker tells what changed; Raffinert models what that change means
 ```
 
 A materialized property is an output representation. Downstream graph nodes should consume the logical derived handle.
 
-Typical flow:
-
-```text
-POCO mutation
-    ↓
-mutation evidence / EF ChangeTracker
-    ↓
-declared dependency graph
-    ↓
-Dirty / Invalid propagation
-    ↓
-logical evaluation as needed
-    ↓
-invariant / repair policy
-    ↓
-optional mirror materialization
-    ↓
-SQL durability
-    ↓
-runtime-plan installation and dispatch
-```
+Do not describe Raffinert primarily as a validation library, rules engine, reactive UI framework, or ORM extension. Validation, repair, and EF integration are consumers/boundaries around the semantic dependency graph.
 
 ---
 
@@ -86,7 +95,8 @@ Identify:
 9. whether reverse consumers or relation members can be unloaded;
 10. raw SQL, bulk operations, triggers, cascades, jobs, or other writers that may bypass tracked mutation evidence;
 11. transaction/outbox/generated-value requirements;
-12. runtime lifetime and serialization boundary.
+12. runtime lifetime and serialization boundary;
+13. whether application-owned repair needs to reason about the rejected proposed state.
 
 Write the dependency chain first.
 
@@ -97,6 +107,8 @@ SourceItem.Value ──┐
                   ├──> CombinedValue ──> NormalizedValue ──> invariant
 TargetItem.Value ──┘
 ```
+
+Prefer a graph that expresses domain semantics once over duplicated mutation-path orchestration.
 
 ---
 
@@ -266,7 +278,7 @@ Dirty   = stale but allowed to remain until evaluation according to the configur
 Invalid = stale state must not be relied upon before successful evaluation/repair
 ```
 
-Choose severity from correctness semantics, not only performance preference.
+Severity is semantic information about the consequence of a change, not merely a cache/performance hint. Choose it from correctness semantics.
 
 ---
 
@@ -291,6 +303,24 @@ Keep repair policy separate from pure derived computation and from physical mate
 
 ```text
 Materialize != Repair
+```
+
+Repair is application-owned consequence handling. Raffinert should provide structured evidence about what is violated and why; domain-specific replacement selection, ordering, and convergence policy remain application concerns.
+
+A repair mutation creates a new proposed state. Do not assume one repair step always converges:
+
+```text
+proposed state
+    ↓
+violation
+    ↓
+repair decision
+    ↓
+mutation
+    ↓
+new proposed state
+    ↓
+re-evaluate until valid or application policy stops
 ```
 
 ---
@@ -518,7 +548,48 @@ The default recalculation-and-validation flow evaluates required logical state, 
 
 ---
 
-# 14. Manual transaction / generated values / outbox
+# 14. Rejected saves and proposed-state repair
+
+Allocation dogfooding established an important distinction:
+
+```text
+committed runtime / durable database state
+                !=
+current tracked proposed state after a rejected save
+```
+
+An enforced invariant rejection is produced from a reversible plan: SQL is not executed and committed runtime state must remain unchanged. Application-owned repair may nevertheless need to answer questions against the proposed world, for example which replacement candidate is valid if the current tracked changes were applied.
+
+The repository currently contains an **internal/experimental proposed-state preview** for this purpose. It can evaluate logical values, relations, and invariants against retained rejected-plan overlays without installing that rejected plan into committed runtime state.
+
+Consumer guidance:
+
+- do not rebuild a second complete runtime merely to query the rejected proposed state when the retained-plan preview is available internally;
+- do not treat the experimental preview as stable public consumer API;
+- do not document or generate production code against internal preview types unless the task explicitly concerns that experiment;
+- a preview is tied to the rejected plan and tracked mutation fingerprint and must fail closed when stale;
+- after application code performs a repair mutation, obtain/rebuild a fresh plan/preview rather than continuing to trust the old view;
+- multi-step repair convergence is an application workflow, not an implicit one-shot framework guarantee.
+
+Conceptually:
+
+```text
+rejected plan
+    ↓
+read-only proposed-state query
+    ↓
+application chooses repair
+    ↓
+tracked mutation
+    ↓
+fresh SaveChanges planning
+    ↓
+repeat if another violation remains
+```
+
+---
+
+# 15. Manual transaction / generated values / outbox
 
 When the application owns the transaction:
 
@@ -552,7 +623,7 @@ Never install runtime state before database durability.
 
 ---
 
-# 15. Invisible database mutations
+# 16. Invisible database mutations
 
 Search for paths that can change modeled state outside tracked EF mutations:
 
@@ -570,7 +641,7 @@ Define an explicit strategy: exact mutation publication, reconciliation, runtime
 
 ---
 
-# 16. Required tests
+# 17. Required tests
 
 At minimum cover the scenarios relevant to the graph:
 
@@ -583,19 +654,23 @@ Evaluate without mirror write
 targeted Materialize
 object Materialize
 invariant enforcement
-repair dispatch behavior
+structured repair requirements
 unloaded direct-reference consumer discovery
 retargeting
 Validate vs recalculation-and-validation
 SQL/planning failure semantics
+committed runtime remains unchanged after rejected save
+repair convergence when more than one mutation/save attempt is required
 fresh-DbContext verification of persisted mirrors
 ```
+
+If testing the internal proposed-state experiment, additionally prove that stale previews fail closed after tracked mutation/baseline changes and that querying a preview does not install rejected state into the committed runtime.
 
 Prefer verifying persisted results from a separate `DbContext`.
 
 ---
 
-# 17. Review output
+# 18. Review output
 
 Summarize an integration in this form:
 
@@ -620,6 +695,9 @@ Coverage strategy
 
 Save boundary
     <convenience or manual unit of work>
+
+Repair/convergence
+    <blocking invariant, structured repair, proposed-state needs>
 
 Runtime ownership
     <lifetime + synchronization>
