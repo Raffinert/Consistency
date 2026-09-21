@@ -1,6 +1,6 @@
 # Raffinert.Consistency consumer verification checklist
 
-Use this checklist when reviewing integration code. A configuration can compile and still be incorrect if dependency tracking, materialization, authoritative coverage, runtime ownership, or persistence ordering is wrong.
+Use this checklist when reviewing integration code. A configuration can compile and still be incorrect if dependency tracking, materialization, authoritative coverage, runtime ownership, repair convergence, or persistence ordering is wrong.
 
 ---
 
@@ -21,7 +21,7 @@ Verify:
 [ ] External state is not presented as if Raffinert tracks it automatically.
 [ ] Materialized mirror properties are not graph inputs.
 [ ] Invariant semantics match the business rule.
-[ ] Dirty vs Invalid severity is deliberate.
+[ ] Dirty vs Invalid severity is deliberate semantic policy.
 ```
 
 Red flags:
@@ -152,7 +152,7 @@ If application code directly reads a mirror, identify the boundary that guarante
 
 ---
 
-## 6. Invariant correctness
+## 6. Invariant and repair correctness
 
 ```csharp
 model.Invariant(set)
@@ -167,7 +167,11 @@ Verify:
 [ ] Enforce is configured only when violation must block persistence.
 [ ] Repair/reaction policy is explicit where required.
 [ ] Materialization and repair remain separate operations.
+[ ] Repair data identifies the current propagated severity/reason rather than stale initial impact.
+[ ] Domain-specific replacement choice and convergence policy remain application-owned.
 ```
+
+Do not assume a repair is one-shot. A repair mutation can expose another violation and require another save/re-plan cycle.
 
 ---
 
@@ -377,7 +381,38 @@ Dispatch
 
 ---
 
-## 12. Runtime lifetime and concurrency
+## 12. Rejected save and proposed-state correctness
+
+For an enforced invariant rejection, verify the separation:
+
+```text
+committed runtime/durable state != rejected proposed tracked state
+```
+
+Required behavior:
+
+```text
+[ ] SQL is not executed for the rejected consistency plan.
+[ ] Runtime version/baseline is not advanced by rejection.
+[ ] Rejected plan does not rebase committed relation/navigation/projection indexes.
+[ ] Structured repair data can be inspected without installing rejected state.
+[ ] A repair mutation is followed by fresh planning; the old proposed-state view is not reused.
+[ ] Multi-step repair convergence is tested when one repair can expose another violation.
+```
+
+The repository currently has an internal/experimental retained-plan `ConsistencyPreview`. If code or tests use it, additionally verify:
+
+```text
+[ ] Preview remains read-only with respect to committed runtime state.
+[ ] Evaluate/Related/invariant queries reflect final proposed membership/current CLR values.
+[ ] Preview rejects stale runtime version, baseline revision, or tracked mutation fingerprint.
+[ ] Preview-local caches cannot leak into committed runtime caches.
+[ ] Application code does not depend on internal preview API as if it were stable public API.
+```
+
+---
+
+## 13. Runtime lifetime and concurrency
 
 Raffinert runtime is mutable and not thread-safe.
 
@@ -393,7 +428,7 @@ Verify:
 
 ---
 
-## 13. Invisible database mutations
+## 14. Invisible database mutations
 
 Search for:
 
@@ -420,7 +455,7 @@ explicit exclusion from the consistency boundary
 
 ---
 
-## 14. Required tests
+## 15. Required tests
 
 ### Logical value flow
 
@@ -473,6 +508,17 @@ explicit exclusion from the consistency boundary
 [ ] enforced violation blocks persistence
 ```
 
+### Repair and convergence
+
+```text
+[ ] repair reason/severity reflects the current propagated impact
+[ ] rejected save leaves committed runtime unchanged
+[ ] proposed-state repair query sees the pending world when the internal experiment is used
+[ ] repair mutation makes the old preview stale
+[ ] a fresh save/re-plan is used after each repair mutation
+[ ] two-step convergence succeeds when one repair is insufficient
+```
+
 ### Failure
 
 ```text
@@ -484,7 +530,7 @@ explicit exclusion from the consistency boundary
 
 ---
 
-## 15. Independent persisted-state verification
+## 16. Independent persisted-state verification
 
 Prefer a fresh `DbContext` after a successful integration operation:
 
@@ -502,7 +548,7 @@ This proves database state rather than only the already-tracked object.
 
 ---
 
-## 16. Replacing manual maintenance orchestration
+## 17. Replacing manual maintenance orchestration
 
 When a declarative graph replaces manual recalculation code, require parity evidence for:
 
@@ -519,7 +565,7 @@ Remove duplicate manual orchestration only after parity is demonstrated.
 
 ---
 
-## 17. Final reviewer output
+## 18. Final reviewer output
 
 Summarize:
 
@@ -544,6 +590,9 @@ Coverage strategy
 
 Save boundary
     <convenience or manual unit of work>
+
+Repair/convergence
+    <repair requirements, proposed-state needs, convergence policy>
 
 Runtime ownership
     <lifetime + synchronization>
