@@ -2,7 +2,7 @@ namespace Raffinert.Consistency.AllocationDogfood;
 
 internal static class Scenarios
 {
-    private static readonly (string Name, Func<Task> Run)[] Core =
+    private static readonly (string Name, Action Run)[] Core =
     [
         Sync(nameof(CoreScenarios.CandidateSupply_IsFound_WhenResourceAndDateMatch),
             CoreScenarios.CandidateSupply_IsFound_WhenResourceAndDateMatch),
@@ -78,7 +78,7 @@ internal static class Scenarios
     {
         foreach (var scenario in Core)
         {
-            await scenario.Run();
+            scenario.Run();
             Console.WriteLine($"PASS {scenario.Name}");
         }
         foreach (var scenario in Ef)
@@ -92,11 +92,5 @@ internal static class Scenarios
         Console.WriteLine($"Allocation dogfood scenarios passed: {Core.Length + Ef.Length}.");
     }
 
-    private static (string Name, Func<Task> Run) Sync(string name, Action action) =>
-        (name, () =>
-        {
-            action();
-            return Task.CompletedTask;
-        }
-    );
+    private static (string Name, Action Run) Sync(string name, Action action) => (name, action);
 }
