@@ -20,8 +20,6 @@ Declare what depends on what. When the object graph changes, Raffinert determine
 
 The goal is to model business consistency as an explicit dependency graph around ordinary .NET objects instead of relying on every mutation path to remember manual recalculation, invalidation, reverse-consumer lookup, validation, or repair orchestration.
 
-All examples are domain-neutral. Rename types and members to match the application's ubiquitous language.
-
 ---
 
 # 1. Mental model
